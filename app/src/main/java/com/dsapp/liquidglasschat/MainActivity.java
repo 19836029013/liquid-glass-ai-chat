@@ -2,19 +2,13 @@ package com.dsapp.liquidglasschat;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.DownloadManager;
 import android.content.Intent;
-import android.content.BroadcastReceiver;
-import android.content.Context;
-import android.content.IntentFilter;
 import android.content.SharedPreferences;
-import android.database.Cursor;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.net.http.SslError;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
@@ -32,11 +26,15 @@ import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
+import androidx.core.content.FileProvider;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -62,9 +60,6 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ValueCallback<Uri[]> fileChooserCallback;
-    private long updaterDownloadId = -1L;
-    private String updaterExpectedSha256 = "";
-    private BroadcastReceiver updaterReceiver = null;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -489,115 +484,77 @@ public class MainActivity extends Activity {
                     sendUpdateState("permission", 0, "请允许安装未知应用，然后再次点击立即更新");
                     return;
                 }
-                updaterExpectedSha256 = sha256 == null ? "" : sha256.trim().toLowerCase();
-                String fileName = "app-update-" + (version == null || version.isEmpty() ? "latest" : version) + ".apk";
-                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url))
-                        .setTitle("正在更新")
-                        .setDescription("正在下载 " + (version == null ? "" : version))
-                        .setMimeType("application/vnd.android.package-archive")
-                        .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
-                        .setDestinationInExternalFilesDir(this, Environment.DIRECTORY_DOWNLOADS, fileName);
-                DownloadManager manager = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                updaterDownloadId = manager.enqueue(request);
-                registerUpdaterReceiver(manager);
-                sendUpdateState("downloading", 5, "正在下载安装包");
-                pollUpdaterProgress(manager);
             } catch (Exception e) {
                 sendUpdateState("error", 0, "更新启动失败：" + friendlyError(e));
+                return;
             }
+            downloadAndInstall(url, version, sha256);
         });
     }
 
-    private void registerUpdaterReceiver(final DownloadManager manager) {
-        if (updaterReceiver != null) {
+    private void downloadAndInstall(final String url, final String version, final String sha256) {
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            File target = null;
             try {
-                unregisterReceiver(updaterReceiver);
-            } catch (Exception ignored) {
-            }
-        }
-        updaterReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if (intent.getLongExtra(DownloadManager.EXTRA_DOWNLOAD_ID, -1L) != updaterDownloadId) return;
-                try {
-                    Uri uri = manager.getUriForDownloadedFile(updaterDownloadId);
-                    if (uri == null) {
-                        sendUpdateState("error", 0, "下载安装包失败");
-                        return;
+                sendUpdateState("downloading", 5, "正在连接下载服务器");
+                conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setInstanceFollowRedirects(true);
+                conn.setConnectTimeout(20000);
+                conn.setReadTimeout(60000);
+                conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android)");
+                conn.connect();
+                int code = conn.getResponseCode();
+                if (code >= 400) {
+                    sendUpdateState("error", 0, "下载失败：HTTP " + code);
+                    return;
+                }
+                long total = conn.getContentLengthLong();
+                File dir = new File(getCacheDir(), "updates");
+                if (!dir.exists() && !dir.mkdirs()) {
+                    sendUpdateState("error", 0, "无法创建下载目录");
+                    return;
+                }
+                target = new File(dir, "app-update-" + (version == null || version.isEmpty() ? "latest" : version) + ".apk");
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                long done = 0;
+                try (InputStream in = conn.getInputStream(); FileOutputStream out = new FileOutputStream(target)) {
+                    byte[] buffer = new byte[64 * 1024];
+                    int n;
+                    long lastReport = 0;
+                    while ((n = in.read(buffer)) > 0) {
+                        out.write(buffer, 0, n);
+                        digest.update(buffer, 0, n);
+                        done += n;
+                        if (total > 0 && done - lastReport > Math.max(total / 100, 64 * 1024)) {
+                            int pct = 5 + (int) Math.round(85.0 * done / total);
+                            sendUpdateState("downloading", Math.min(pct, 90), "正在下载安装包 " + pct + "%");
+                            lastReport = done;
+                        }
                     }
-                    if (!updaterExpectedSha256.isEmpty() && !verifySha256(uri, updaterExpectedSha256)) {
+                }
+                if (sha256 != null && !sha256.trim().isEmpty()) {
+                    StringBuilder sb = new StringBuilder();
+                    for (byte b : digest.digest()) {
+                        sb.append(String.format("%02x", b));
+                    }
+                    if (!sb.toString().equalsIgnoreCase(sha256.trim())) {
                         sendUpdateState("error", 0, "安装包 SHA-256 校验失败");
                         return;
                     }
-                    sendUpdateState("installing", 92, "正在打开系统安装器");
-                    Intent open = new Intent(Intent.ACTION_VIEW);
-                    open.setDataAndType(uri, "application/vnd.android.package-archive");
-                    open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    startActivity(open);
-                } catch (Exception e) {
-                    sendUpdateState("error", 0, "无法打开安装器：" + friendlyError(e));
-                } finally {
-                    try {
-                        unregisterReceiver(this);
-                    } catch (Exception ignored) {
-                    }
                 }
-            }
-        };
-        IntentFilter filter = new IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE);
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(updaterReceiver, filter, Context.RECEIVER_NOT_EXPORTED);
-        } else {
-            registerReceiver(updaterReceiver, filter);
-        }
-    }
-
-    private void pollUpdaterProgress(final DownloadManager manager) {
-        new Thread(() -> {
-            try {
-                while (updaterDownloadId != -1L) {
-                    DownloadManager.Query q = new DownloadManager.Query();
-                    q.setFilterById(updaterDownloadId);
-                    Cursor c = manager.query(q);
-                    if (c != null && c.moveToFirst()) {
-                        int status = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS));
-                        long total = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_TOTAL_SIZE_BYTES));
-                        long done = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_BYTES_DOWNLOADED_SO_FAR));
-                        if (status == DownloadManager.STATUS_RUNNING && total > 0) {
-                            int pct = 5 + (int) Math.round(85.0 * done / total);
-                            sendUpdateState("downloading", Math.min(pct, 90), "正在下载安装包 " + pct + "%");
-                        } else if (status == DownloadManager.STATUS_SUCCESSFUL || status == DownloadManager.STATUS_FAILED) {
-                            c.close();
-                            break;
-                        }
-                        c.close();
-                    }
-                    Thread.sleep(600);
-                }
-            } catch (Exception ignored) {
+                Uri fileUri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", target);
+                sendUpdateState("installing", 92, "正在打开系统安装器");
+                Intent open = new Intent(Intent.ACTION_VIEW);
+                open.setDataAndType(fileUri, "application/vnd.android.package-archive");
+                open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                startActivity(open);
+            } catch (Exception e) {
+                sendUpdateState("error", 0, "下载失败：" + friendlyError(e));
+            } finally {
+                if (conn != null) conn.disconnect();
             }
         }).start();
-    }
-
-    private boolean verifySha256(Uri uri, String expected) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            InputStream input = getContentResolver().openInputStream(uri);
-            if (input == null) return false;
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            while ((read = input.read(buffer)) > 0) {
-                digest.update(buffer, 0, read);
-            }
-            input.close();
-            StringBuilder sb = new StringBuilder();
-            for (byte b : digest.digest()) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString().equalsIgnoreCase(expected);
-        } catch (Exception e) {
-            return false;
-        }
     }
 
     private void sendUpdateState(String state, int progress, String message) {

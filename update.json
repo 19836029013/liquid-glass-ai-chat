@@ -1,10 +1,11 @@
 {
-  "version": "2.4.0",
-  "notes": "正式改名“鲸鱼娘”；v7：设置页查询模型、默认模型下拉选择、打开设置时隐藏底层界面、发送按钮固定圆形。",
+  "version": "2.4.1",
+  "notes": "修复下载慢：改为应用内下载（走 VPN/应用网络），默认使用国内加速镜像，失败自动切换官方线路。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "cde9fe8645092e3e9b11f1348e2e0334b12515f043fe627b0ca0c8c81418136c"
+      "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
+      "sha256": "a4986c5f2eb3c36f80de4548296e1b342fdc642b992ecf02915cc96b4ff82e56"
     }
   }
 }

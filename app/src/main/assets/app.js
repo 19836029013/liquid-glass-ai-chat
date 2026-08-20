@@ -760,10 +760,11 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.4.0';
+const APP_CURRENT_VERSION='2.4.1';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
+let updateRetryDone=false;
 function detectUpdatePlatform(){
   const ua=navigator.userAgent||'';
   if(/Android/i.test(ua))return 'android';
@@ -813,6 +814,7 @@ function loadCurrentVersion(){
   const manifestUrl=(localStorage.getItem('app.updateManifestUrl')||'').trim()||DEFAULT_UPDATE_MANIFEST;
   $('#updateState').textContent=manifestUrl?'可检查在线更新':'未配置更新源';
   availableUpdate=null;
+  updateRetryDone=false;
   setUpdateProgress(null);
   setUpdateButton({label:'检查更新'});
 }
@@ -844,14 +846,16 @@ async function checkForUpdates(){
     $('#currentVersionText').textContent=`当前版本 ${APP_CURRENT_VERSION}`;
     if(compareVersions(remote,APP_CURRENT_VERSION)>0){
       const downloadUrl=String(android.url||'').trim();
+      const mirrorUrl=String(android.mirror_url||'').trim();
       const storeUrl=String(ios.store_url||'').trim();
       const webUrl=String(web.web_url||'').trim();
-      if(!downloadUrl&&!storeUrl&&!webUrl)throw new Error('该版本没有配置更新地址');
+      if(!downloadUrl&&!mirrorUrl&&!storeUrl&&!webUrl)throw new Error('该版本没有配置更新地址');
       availableUpdate={
         platform,
         latest_version:remote,
         notes,
         download_url:downloadUrl,
+        mirror_url:mirrorUrl,
         store_url:storeUrl,
         web_url:webUrl,
         sha256:String(android.sha256||'').trim(),
@@ -893,7 +897,7 @@ async function startUpdate(){
   }
   const info=availableUpdate;
   const platform=info.platform||detectUpdatePlatform();
-  const url=info.download_url||info.store_url||info.web_url;
+  const url=info.mirror_url||info.download_url||info.store_url||info.web_url;
   if(!url){
     showToast('该版本没有配置更新地址');
     return;
@@ -950,6 +954,13 @@ window.addEventListener('native-update-state',event=>{
     updateBusy=false;
     setUpdateButton({label:'继续更新',mode:'update'});
   }else if(detail.state==='error'){
+    if(availableUpdate&&!updateRetryDone&&availableUpdate.mirror_url&&availableUpdate.download_url){
+      updateRetryDone=true;
+      setUpdateButton({label:'正在切换线路…',mode:'update',loading:true});
+      $('#updateState').textContent='当前线路较慢，已自动切换官方线路';
+      window.AndroidUpdater.installApk(String(availableUpdate.download_url),String(availableUpdate.latest_version||''),String(availableUpdate.sha256||''));
+      return;
+    }
     updateBusy=false;
     setUpdateButton({label:'重新更新',mode:'update'});
     showToast(detail.message||'更新失败');
