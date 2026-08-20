@@ -488,6 +488,9 @@ function queryModels(cfg){
   });
 }
 function handleEvent(name,data){
+  if(typeof data==='string'){
+    try{data=JSON.parse(data)}catch(e){data={}}
+  }
   if(name==='models'&&pendingQuery){
     const p=pendingQuery;pendingQuery=null;
     if(data&&data.ok)p.resolve(data);else p.reject(new Error((data&&data.message)||'模型查询失败'));
@@ -516,7 +519,9 @@ function handleEvent(name,data){
     return;
   }
   if(pendingStream&&pendingStream.handlers&&pendingStream.handlers[name]){
-    try{pendingStream.handlers[name](data)}catch(e){}
+    let payload=data;
+    if(name==='delta'||name==='reasoning')payload=(data&&data.text)||'';
+    try{pendingStream.handlers[name](payload)}catch(e){}
   }
 }
 window.AndroidEvents={onEvent:handleEvent};
@@ -869,7 +874,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.5';
+const APP_CURRENT_VERSION='2.5.6';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

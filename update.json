@@ -1,11 +1,11 @@
 {
-  "version": "2.5.5",
-  "notes": "查询模型结果改为必弹提示（失败也弹 Toast），并加固本地存储异常，避免按钮无反应。",
+  "version": "2.5.6",
+  "notes": "核心修复：原生桥接事件 JSON 未解析导致查询模型/测试连接/思考摘要全部失效，现已修复，查询模型可正常使用。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "341033afc071062db70ccf7fe31eebd5c4521c75456724d340d8f01b122223e"
+      "sha256": "f2f265f069ad52d064bdcf0026d916dfc0b09c56363d93f78ece48045d9ec5d0"
     }
   }
 }
