@@ -475,6 +475,65 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void doQueryModels(final String requestJson) {
+        new Thread(() -> {
+            HttpURLConnection conn = null;
+            try {
+                JSONObject req = new JSONObject(requestJson);
+                String base = req.optString("base_url", "").replaceAll("/+$", "");
+                String key = req.optString("api_key", "");
+                if (base.isEmpty() || key.isEmpty()) {
+                    postEvent("models", resultObj("ok", false, "message", "请先填写 API 地址和 Key"));
+                    return;
+                }
+                JSONArray modelIds = new JSONArray();
+                String[] candidates = {base + "/models", base + "/v1/models"};
+                for (String cand : candidates) {
+                    try {
+                        conn = (HttpURLConnection) new URL(cand).openConnection();
+                        conn.setRequestMethod("GET");
+                        conn.setRequestProperty("Authorization", "Bearer " + key);
+                        conn.setConnectTimeout(15000);
+                        conn.setReadTimeout(15000);
+                        int code = conn.getResponseCode();
+                        if (code >= 200 && code < 300) {
+                            JSONObject obj = new JSONObject(readFully(conn.getInputStream()));
+                            JSONArray data = obj.optJSONArray("data");
+                            if (data != null) {
+                                for (int i = 0; i < data.length(); i++) {
+                                    JSONObject mo = data.optJSONObject(i);
+                                    String mid = mo != null ? mo.optString("id", "").trim() : String.valueOf(data.opt(i)).trim();
+                                    if (!mid.isEmpty()) modelIds.put(mid);
+                                }
+                                if (modelIds.length() > 0) break;
+                            }
+                        }
+                    } catch (Exception ignored) {
+                    } finally {
+                        if (conn != null) {
+                            conn.disconnect();
+                            conn = null;
+                        }
+                    }
+                }
+                if (modelIds.length() == 0) {
+                    postEvent("models", resultObj("ok", false, "message", "接口没有返回可用模型"));
+                    return;
+                }
+                JSONObject out = resultObj("ok", true, "message", "找到 " + modelIds.length() + " 个模型");
+                try {
+                    out.put("models", modelIds);
+                } catch (JSONException ignored) {
+                }
+                postEvent("models", out);
+            } catch (Exception e) {
+                postEvent("models", resultObj("ok", false, "message", friendlyError(e)));
+            } finally {
+                if (conn != null) conn.disconnect();
+            }
+        }).start();
+    }
+
     private void updaterInstallApk(final String url, final String version, final String sha256) {
         runOnUiThread(() -> {
             try {
@@ -614,6 +673,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void testApi(String requestJson) {
             doTestApi(requestJson);
+        }
+
+        @JavascriptInterface
+        public void queryModels(String requestJson) {
+            doQueryModels(requestJson);
         }
 
         @JavascriptInterface

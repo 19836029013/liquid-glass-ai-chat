@@ -70,11 +70,30 @@ function normalizeModelList(value){
   const seen=new Set(),out=[];
   for(const item of raw){
     const id=String(item||'').trim();
-    if(!id||seen.has(id))continue;
+    if(!id||seen.has(id)||looksLikeApiKey(id))continue;
     seen.add(id);out.push(id);
   }
   return out.slice(0,200);
 }
+function looksLikeApiKey(value){
+  const s=String(value||'').trim().toLowerCase();
+  return s.startsWith('sk-')||s.startsWith('bearer ')||/^key[-_:]/.test(s);
+}
+(function migrateBrokenModelState(){
+  const raw=loadJSON('ai.clientApi',null);
+  if(!raw)return;
+  const apiKey=String(raw.api_key||'').trim();
+  const model=String(raw.model||'').trim();
+  if(model&&(model===apiKey||looksLikeApiKey(model))){
+    raw.model='';
+    raw.models=normalizeModelList(raw.models||[]);
+    saveClientApi(raw);
+    localStorage.removeItem('ai.modelId');
+    localStorage.setItem('ai.modelSource','local');
+    state.modelId='';
+    state.modelSource='local';
+  }
+})();
 
 /* Streaming transport normalizer: buffers split JSON wrappers like {"text":"你"} and emits pure text. */
 class StreamingTextNormalizer{
@@ -184,16 +203,22 @@ function readClientApi(){
   return local?{...local,models:normalizeModelList(local.models||[])}:null;
 }
 function getClientApi(){
+  const clean=getStoredClientApiRaw();
+  return clean&&clean.base_url&&clean.api_key&&clean.model?clean:null;
+}
+function getStoredClientApiRaw(){
   const cfg=readClientApi();
   if(!cfg)return null;
-  const clean={
+  const apiKey=String(cfg.api_key||'').trim();
+  let model=String(cfg.model||'').trim();
+  if(!model||model===apiKey||looksLikeApiKey(model))model='';
+  return {
     base_url:String(cfg.base_url||'').trim().replace(/\/+$/,''),
-    api_key:String(cfg.api_key||'').trim(),
-    model:String(cfg.model||'').trim(),
+    api_key:apiKey,
+    model,
     reasoning_parameter:String(cfg.reasoning_parameter||'').trim(),
     models:normalizeModelList(cfg.models||[]),
   };
-  return clean.base_url&&clean.api_key&&clean.model?clean:null;
 }
 function saveClientApi(cfg){
   saveJSON('ai.clientApi',cfg);
@@ -204,7 +229,7 @@ function saveClientApi(cfg){
   }catch(e){}
 }
 function clientModelIds(){
-  const cfg=getClientApi();if(!cfg)return [];
+  const cfg=getStoredClientApiRaw();if(!cfg)return [];
   return normalizeModelList([cfg.model,...(cfg.models||[])]);
 }
 function isConfigured(){return !!getClientApi()}
@@ -380,7 +405,7 @@ $('#reasoningSelect').addEventListener('click',e=>{e.stopPropagation();const o=!
 document.addEventListener('click',()=>closePopovers());
 
 /* ---------- streaming (native bridge first, fetch fallback) ---------- */
-let pendingStream=null,pendingComplete=null,pendingTest=null;
+let pendingStream=null,pendingComplete=null,pendingTest=null,pendingQuery=null;
 function apiUrl(cfg){return (cfg.base_url||'https://api.deepseek.com').replace(/\/+$/,'')+'/chat/completions'}
 function extractContent(v){
   if(typeof v==='string')return v;
@@ -425,7 +450,22 @@ function testApi(cfg){
     fetchTest(cfg).then(resolve,reject);
   });
 }
+function queryModels(cfg){
+  return new Promise((resolve,reject)=>{
+    if(bridge&&bridge.queryModels){
+      pendingQuery={resolve,reject};
+      bridge.queryModels(JSON.stringify({base_url:cfg.base_url,api_key:cfg.api_key}));
+      return;
+    }
+    fetchQueryModels(cfg).then(resolve,reject);
+  });
+}
 function handleEvent(name,data){
+  if(name==='models'&&pendingQuery){
+    const p=pendingQuery;pendingQuery=null;
+    if(data&&data.ok)p.resolve(data);else p.reject(new Error((data&&data.message)||'模型查询失败'));
+    return;
+  }
   if(name==='test'&&pendingTest){
     const p=pendingTest;pendingTest=null;
     if(data&&data.ok)p.resolve(data);else p.reject(new Error((data&&data.message)||'连接失败'));
@@ -453,6 +493,23 @@ function handleEvent(name,data){
   }
 }
 window.AndroidEvents={onEvent:handleEvent};
+
+async function fetchQueryModels(cfg){
+  const base=(cfg.base_url||'').replace(/\/+$/,'');
+  let models=[];
+  for(const path of ['/models','/v1/models']){
+    try{
+      const r=await fetch(base+path,{headers:{'Authorization':'Bearer '+cfg.api_key}});
+      if(r.ok){
+        const j=await r.json();
+        models=normalizeModelList((j.data||[]).map(m=>m&&m.id?m.id:m));
+        if(models.length)break;
+      }
+    }catch(e){}
+  }
+  if(!models.length)throw new Error('接口没有返回可用模型');
+  return {ok:true,models,message:`找到 ${models.length} 个模型`};
+}
 
 async function fetchStream(cfg,messages,handlers){
   const res=await fetch(apiUrl(cfg),{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.api_key},body:JSON.stringify(buildPayload(cfg,messages))});
@@ -643,31 +700,33 @@ function shareText(text){
 function populateApiModelSelect(selectedValue='',sourceModels=null){
   const select=$('#apiModel');
   if(!select)return;
-  const currentCfg=getClientApi();
-  const models=normalizeModelList(sourceModels||currentCfg?.models||[]);
-  const current=selectedValue||select.value||currentCfg?.model||'';
-  const all=normalizeModelList([current,...models]);
+  const cfg=getStoredClientApiRaw();
+  const models=normalizeModelList(sourceModels??cfg?.models??[]);
+  let selected=String(selectedValue||cfg?.model||'').trim();
+  if(looksLikeApiKey(selected)||!models.includes(selected))selected=models[0]||'';
   select.innerHTML='';
-  if(!all.length){
+  if(!models.length){
     const option=document.createElement('option');
     option.value='';
     option.textContent='先查询模型';
     option.disabled=true;
     option.selected=true;
     select.appendChild(option);
+    select.disabled=true;
     return;
   }
-  all.forEach(id=>{
+  models.forEach(id=>{
     const option=document.createElement('option');
     option.value=id;
     option.textContent=id;
-    if(id===current)option.selected=true;
+    option.selected=id===selected;
     select.appendChild(option);
   });
-  if(!all.includes(current))select.value=all[0];
+  select.disabled=false;
+  select.value=selected||models[0];
 }
 function fillSettings(){
-  const cfg=getClientApi()||{base_url:'https://api.deepseek.com',api_key:'',model:'deepseek-chat',reasoning_parameter:'',models:[]};
+  const cfg=getStoredClientApiRaw()||{base_url:'https://api.deepseek.com',api_key:'',model:'',reasoning_parameter:'',models:[]};
   $('#apiBaseUrl').value=cfg.base_url||'';$('#apiKey').value=cfg.api_key||'';$('#apiReasoningParam').value=cfg.reasoning_parameter||'';
   populateApiModelSelect(cfg.model,cfg.models);
   const manifestInput=$('#apiUpdateManifest');
@@ -689,7 +748,38 @@ $('#sidebarSettings').addEventListener('click',()=>{closeSidebar();openSettings(
 $('#bannerSettings').addEventListener('click',()=>openSettings('api'));
 $('#settingsClose').addEventListener('click',closeSettings);
 $('#settingsBack')?.addEventListener('click',closeSettings);
-$('#fetchModelsButton')?.addEventListener('click',()=>$('#testApiButton')?.click());
+$('#fetchModelsButton')?.addEventListener('click',async()=>{
+  const status=$('#apiStatus');
+  const base_url=$('#apiBaseUrl').value.trim().replace(/\/+$/,'');
+  const api_key=$('#apiKey').value.trim();
+  if(!/^https?:\/\//i.test(base_url)){status.textContent='请先填写正确的 API 地址';status.className='settings-status error';return}
+  if(!api_key){status.textContent='请先填写 API Key';status.className='settings-status error';return}
+  const button=$('#fetchModelsButton');
+  button.disabled=true;
+  button.textContent='查询中…';
+  status.textContent='正在读取模型列表…';status.className='settings-status';
+  try{
+    const res=await queryModels({base_url,api_key});
+    const models=normalizeModelList(res.models||[]);
+    if(!models.length)throw new Error('接口没有返回可用模型');
+    $('#apiModels').value=models.join('\n');
+    populateApiModelSelect('',models);
+    status.textContent=`查询成功 · 找到 ${models.length} 个模型`;
+    status.className='settings-status ok';
+    showToast(`找到 ${models.length} 个模型`);
+  }catch(e){
+    populateApiModelSelect('',[]);
+    status.textContent=e.message||'模型查询失败';
+    status.className='settings-status error';
+  }finally{
+    button.disabled=false;
+    button.textContent='查询模型';
+  }
+});
+$('#apiModels')?.addEventListener('input',()=>{
+  const models=normalizeModelList($('#apiModels').value);
+  populateApiModelSelect($('#apiModel')?.value||'',models);
+});
 settingsBackdrop.addEventListener('click',e=>{if(e.target===settingsBackdrop)closeSettings()});
 $$('.settings-tab').forEach(b=>b.addEventListener('click',()=>switchSettingsTab(b.dataset.tab)));
 $('#toggleKey').addEventListener('click',()=>{
@@ -702,7 +792,7 @@ function settingsFormValue(){return {base_url:$('#apiBaseUrl').value.trim().repl
 function validateCfg(cfg){
   if(!/^https?:\/\//i.test(cfg.base_url))return 'API 地址格式不正确';
   if(!cfg.api_key)return '请填写 API Key';
-  if(!cfg.model)return '请填写模型名';
+  if(!cfg.model||looksLikeApiKey(cfg.model))return '请先查询并选择一个模型';
   return '';
 }
 $('#saveApiButton').addEventListener('click',()=>{
@@ -710,6 +800,7 @@ $('#saveApiButton').addEventListener('click',()=>{
   cfg.model=$('#apiModel')?.value||cfg.model;
   const err=validateCfg(cfg),status=$('#apiStatus');
   if(err){status.textContent=err;status.className='settings-status error';return}
+  if(!cfg.models.includes(cfg.model))cfg.models=normalizeModelList([cfg.model,...cfg.models]);
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)localStorage.setItem('app.updateManifestUrl',manifestInput.value.trim());
   saveClientApi(cfg);state.clientApi=cfg;
@@ -717,50 +808,25 @@ $('#saveApiButton').addEventListener('click',()=>{
   localStorage.setItem('ai.modelId',cfg.model);localStorage.setItem('ai.modelSource','local');
   rebuildModelMenu();updateApiBanner();
   apiBanner.hidden=true;apiBanner.classList.add('force-hidden');
-  showToast('API 设置已保存');
-  setTimeout(closeSettings,220);
-  (async()=>{
-    try{
-      const requestCfg={base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,reasoning_parameter:cfg.reasoning_parameter||''};
-      const res=await testApi(requestCfg);
-      const detected=normalizeModelList(res.models||[]);
-      if(!detected.length)return;
-      const latest=getClientApi();
-      if(!latest)return;
-      latest.models=normalizeModelList([...(latest.models||[]),...detected]);
-      latest.model=latest.model||detected[0]||latest.model;
-      saveClientApi(latest);
-      state.clientApi=latest;
-      populateApiModelSelect(latest.model,latest.models);
-      rebuildModelMenu();
-      showToast(`已同步 ${detected.length} 个可用模型`);
-    }catch(e){}
-  })();
+  status.textContent=`已保存 · 默认模型 ${cfg.model}`;status.className='settings-status ok';
+  showToast('API 与模型设置已保存');
+  setTimeout(closeSettings,260);
 });
 $('#testApiButton').addEventListener('click',async()=>{
   const cfg=settingsFormValue(),err=validateCfg(cfg),status=$('#apiStatus');
   if(err){status.textContent=err;status.className='settings-status error';return}
-  status.textContent='正在测试连接…';status.className='settings-status';$('#testApiButton').disabled=true;
+  status.textContent='正在测试所选模型…';status.className='settings-status';$('#testApiButton').disabled=true;
   try{
-    const res=await testApi(cfg);
-    const models=normalizeModelList(res.models||[]);
-    if(models.length){
-      $('#apiModels').value=models.join('\n');
-      populateApiModelSelect(cfg.model,models);
-      if(!cfg.model||!models.includes(cfg.model))$('#apiModel').value=models[0];
-      status.textContent=`连接成功 · 检测到 ${models.length} 个模型`;
-    }else{
-      populateApiModelSelect(cfg.model,[]);
-      status.textContent='连接成功 · 未读取到模型列表，可手动填写可用模型';
-    }
-    status.className='settings-status ok';
+    await testApi({base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,reasoning_parameter:cfg.reasoning_parameter||''});
+    status.textContent=`连接成功 · ${cfg.model} 可用`;status.className='settings-status ok';
+    showToast('模型测试成功');
   }catch(e){
-    status.textContent=e.message||'连接失败';status.className='settings-status error';
+    status.textContent=e.message||'模型测试失败';status.className='settings-status error';
   }finally{$('#testApiButton').disabled=false}
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.4.1';
+const APP_CURRENT_VERSION='2.5.0';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

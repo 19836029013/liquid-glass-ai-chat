@@ -130,10 +130,10 @@
 
             <label class="settings-row model-select-row">
               <span class="row-label">默认模型</span>
-              <select id="apiModel" aria-label="默认模型"></select>
+              <select id="apiModel" aria-label="默认模型" disabled><option value="">先查询模型</option></select>
               <button id="fetchModelsButton" class="inline-action-button" type="button">查询模型</button>
             </label>
-            <p class="settings-inline-hint">先输入 API 地址和 Key，再点“查询模型”。这里决定新对话默认使用哪个模型；聊天页底部仍可随时切换模型。</p>
+            <p class="settings-inline-hint">填好 API 地址和 Key 后点“查询模型”。成功后这里会列出接口真实返回的全部模型；选择一个作为新聊天默认模型。</p>
 
             <details class="advanced-settings">
               <summary>高级兼容设置</summary>
@@ -156,7 +156,7 @@
           <div class="settings-card-footer">
             <div class="local-key-note">♢ API Key 仅保存在本机设备</div>
             <div class="settings-actions">
-              <button class="settings-pill-button" id="testApiButton">↻&nbsp; 测试连接</button>
+              <button class="settings-pill-button" id="testApiButton">↻&nbsp; 测试当前模型</button>
               <button class="settings-pill-button primary" id="saveApiButton">✓&nbsp; 保存</button>
             </div>
           </div>

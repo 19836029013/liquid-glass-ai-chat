@@ -972,3 +972,23 @@ body.settings-open .chat-list{
     min-height:53px;
   }
 }
+
+
+/* v8 model discovery */
+.model-select-row select:disabled{
+  color:#85919a;
+  opacity:.72;
+}
+
+.model-select-row select:not(:disabled){
+  color:#1d2a33;
+  font-weight:600;
+}
+
+#fetchModelsButton{
+  min-width:78px;
+}
+
+#fetchModelsButton:disabled{
+  opacity:.62;
+}

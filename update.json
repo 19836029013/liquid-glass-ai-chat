@@ -1,11 +1,11 @@
 {
-  "version": "2.4.1",
-  "notes": "修复下载慢：改为应用内下载（走 VPN/应用网络），默认使用国内加速镜像，失败自动切换官方线路。",
+  "version": "2.5.0",
+  "notes": "v8：查询模型与测试连接分离，只需 API 地址和 Key 即可读取 /models 与 /v1/models；自动清理把 Key 当模型的脏数据；查询成功后才解锁默认模型下拉框。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "a4986c5f2eb3c36f80de4548296e1b342fdc642b992ecf02915cc96b4ff82e56"
+      "sha256": "3d05606b2cb6ab0faa5f37295ecb657cce2fa08d8d83d8b7cf114e4ce199f425"
     }
   }
 }
