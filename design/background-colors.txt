@@ -1,0 +1,2 @@
+top-left=#E9EFF6
+bottom-right=#EAF1F9

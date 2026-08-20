@@ -1,0 +1,10 @@
+{
+  "version": "2.2.0",
+  "notes": "支持 App 内一键更新：检查更新后可直接下载安装新版 APK。",
+  "platforms": {
+    "android": {
+      "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
+      "sha256": "8c1169da80549ed38ee8b21ddd256ef4b1725953f00dfddd339fc18e837a8b64"
+    }
+  }
+}

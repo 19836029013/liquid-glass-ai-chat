@@ -1,0 +1,53 @@
+# Liquid Glass AI Chat · Android（独立版）
+
+完全独立的安卓聊天 App：网页资源打包进 APK，手机直接调用 AI 接口（OpenAI 兼容格式），
+聊天记录保存在手机本地，不需要电脑、服务器或局域网。
+
+## 使用
+
+1. 安装 `app-release.apk`。
+2. 首次打开会弹出 AI 设置：
+   - API 地址：例如 `https://api.deepseek.com`（OpenAI 兼容接口都行）
+   - API Key：在对应平台申请
+   - 模型：例如 `deepseek-chat`、`deepseek-reasoner`、`gpt-5.x` 等
+   - 推理参数名（可选）：如中转站需要 `reasoning_effort` 时填写
+3. 之后可在侧栏底部“AI 设置”随时修改。
+
+## 功能
+
+- 流式对话（逐字输出）
+- 深度思考摘要（由模型根据用户问题 + 最终回答生成，不展示隐藏思维链）
+- 对话历史保存在本机（WebView 存储 + SharedPreferences 双保险）
+- 新建对话 / 重新生成 / 创建分支 / 复制 / 分享
+- 模型与思考程度选择（模型按钮独立展开，不再误跳设置）
+- 右上角齿轮进入全屏液态玻璃设置页：检查更新 / AI 设置（含“测试连接”）/ 外观
+- 检查更新：可配置更新清单地址（设置 → 高级兼容设置），发现新版本直接调起浏览器下载
+- v5：检查到新版本后按钮自动变为“立即更新”，App 内下载 APK + SHA-256 校验 + 自动拉起系统安装器
+- v5：全局点击反馈（按压缩放 / 水波纹 / 轻振动 / 成功脉冲 / Loading 转圈）
+- 自定义 JPG / PNG / WebP 背景壁纸（存 IndexedDB）+ 背景遮罩 / 玻璃透明度调节
+- 顶部操作栏固定（菜单 / 新建 / 历史 / 设置）
+- 左侧边缘右滑展开侧栏，侧栏内左滑关闭
+- 去掉硬编码项目与演示聊天，历史只显示真实本地对话
+- 流式内容归一化：兼容字符串、`{text:...}`、content-part 数组，不再显示原始 JSON
+
+## 说明
+
+- API Key 只保存在本机 App 内，不会上传到任何服务器。
+- 更新清单地址可选；留空时“检查更新”会提示安装新版 APK 即可。
+- 更新清单支持平台化格式（`platforms.android.url` / `sha256`），见 `update-manifest.example.json`。
+- 网络请求由原生代码直接发出，不受浏览器跨域限制。
+- 壁纸文件通过系统文件选择器读取，仅保存在本机 IndexedDB。
+- 前端在 `app/src/main/assets/`，可直接用浏览器打开预览界面（浏览器内聊天受 CORS 限制，App 内不受影响）。
+
+## 构建
+
+需要 JDK 17 + Android SDK。
+
+```powershell
+$env:ANDROID_HOME="C:\Users\CHJ19\AppData\Local\Android\Sdk"
+gradlew.bat assembleRelease
+```
+
+输出：
+- `app/build/outputs/apk/release/app-release.apk`（签名正式版，可直接安装）
+- `app/build/outputs/apk/debug/app-debug.apk`（调试版）

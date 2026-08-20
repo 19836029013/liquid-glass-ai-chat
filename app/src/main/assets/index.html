@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#dfe7eb" />
+  <title>AI Chat</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="wallpaperLayer" class="wallpaper-layer" aria-hidden="true"></div>
+  <div id="wallpaperOverlay" class="wallpaper-overlay" aria-hidden="true"></div>
+
+  <div class="app-shell">
+    <aside class="sidebar glass" id="sidebar" aria-hidden="true">
+      <div class="sidebar-head">
+        <span>项目</span>
+        <button class="plain-icon" data-sidebar-close aria-label="关闭侧栏">×</button>
+      </div>
+
+      <button class="side-item add-project" id="addProjectButton"><span class="plus-small">＋</span><span>新建项目</span></button>
+      <div class="empty-projects" id="projectEmptyState">暂无项目</div>
+
+      <div class="side-separator"></div>
+
+      <section id="historySection">
+        <h3>最近聊天</h3>
+        <div class="side-subhead">置顶聊天</div>
+        <div id="pinnedChatList"></div>
+        <div class="side-subhead recent-title">最近</div>
+        <div id="recentChatList"></div>
+      </section>
+
+      <div class="sidebar-bottom">
+        <button class="side-item" id="sidebarSettings"><span>⚙</span><span>设置</span></button>
+      </div>
+    </aside>
+    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+    <nav class="floating-nav" aria-label="聊天操作">
+      <button class="round-glass" id="menuButton" aria-label="打开侧栏">☰</button>
+      <div class="nav-right glass">
+        <button class="nav-icon" id="newChatButton" aria-label="新建对话">＋</button>
+        <button class="nav-icon" id="historyButton" aria-label="历史对话">◷</button>
+        <button class="nav-icon" id="settingsButton" aria-label="设置">⚙</button>
+      </div>
+    </nav>
+
+    <main class="chat-page">
+      <section class="conversation-wrap">
+        <h1 id="greeting">你好，今天想聊点什么？</h1>
+
+        <div class="api-banner" id="apiBanner" hidden>
+          <span>还没有配置 AI 接口</span>
+          <button id="bannerSettings">去设置</button>
+        </div>
+
+        <div id="messages"></div>
+        <div class="bottom-spacer"></div>
+      </section>
+
+      <section class="composer glass" id="composer">
+        <textarea id="promptInput" rows="1" placeholder="用 ChatGPT 工作"></textarea>
+        <div class="composer-row">
+          <button class="select-control" id="modelSelect" aria-label="选择模型">
+            <span class="model-mark">◇</span><span id="modelLabel">选择模型</span><span class="tiny-chevron">⌄</span>
+          </button>
+          <button class="select-control grow" id="reasoningSelect" aria-label="思考程度">
+            <span>✺</span><span id="reasoningLabel">思考程度：标准</span><span class="tiny-chevron">⌄</span>
+          </button>
+          <button class="send-button" id="sendButton" aria-label="发送">↑</button>
+        </div>
+        <div class="popover glass" id="modelPopover"></div>
+        <div class="popover glass reasoning-popover" id="reasoningPopover"></div>
+      </section>
+
+      <div class="toast" id="toast"></div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop settings-screen-backdrop" id="settingsBackdrop" hidden>
+    <section class="settings-screen" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <header class="settings-screen-header">
+        <button class="settings-header-button glass" id="settingsBack" aria-label="返回">←</button>
+        <h2 id="settingsTitle">设置</h2>
+        <button class="settings-header-button glass" id="settingsClose" aria-label="关闭">×</button>
+      </header>
+
+      <div class="settings-screen-scroll">
+        <section class="settings-card glass update-card">
+          <div class="settings-card-icon update-icon">⇧</div>
+          <div class="update-copy">
+            <h3>检查更新</h3>
+            <p id="currentVersionText">当前版本 —</p>
+          </div>
+          <div class="update-state" id="updateState">点击检查最新版本</div>
+          <button class="settings-pill-button update-action-button" id="checkUpdateButton" type="button">
+            <span class="button-icon" aria-hidden="true">↻</span>
+            <span class="button-label">检查更新</span>
+            <span class="settings-chevron">›</span>
+          </button>
+          <div class="update-progress" id="updateProgress" hidden>
+            <div class="update-progress-track">
+              <div class="update-progress-bar" id="updateProgressBar"></div>
+            </div>
+            <span id="updateProgressText">准备更新</span>
+          </div>
+        </section>
+
+        <section class="settings-card glass">
+          <div class="settings-section-title">
+            <div class="settings-card-icon ai-icon">✺</div>
+            <h3>AI 设置</h3>
+          </div>
+
+          <div class="settings-list">
+            <label class="settings-row">
+              <span class="row-label">API 地址</span>
+              <input id="apiBaseUrl" autocomplete="off" placeholder="https://api.deepseek.com" />
+              <span class="settings-chevron">›</span>
+            </label>
+
+            <label class="settings-row api-key-row">
+              <span class="row-label">API Key</span>
+              <input id="apiKey" type="password" autocomplete="off" placeholder="sk-…" />
+              <button id="toggleKey" class="inline-icon-button" type="button" aria-label="显示 API Key">◉</button>
+              <span class="settings-chevron">›</span>
+            </label>
+
+            <label class="settings-row">
+              <span class="row-label">默认模型</span>
+              <input id="apiModel" autocomplete="off" placeholder="deepseek-chat" />
+              <span class="settings-chevron">›</span>
+            </label>
+
+            <details class="advanced-settings">
+              <summary>高级兼容设置</summary>
+              <label class="advanced-row">
+                <span>推理参数名（可选）</span>
+                <input id="apiReasoningParam" autocomplete="off" placeholder="DeepSeek 可留空" />
+              </label>
+              <label class="advanced-row">
+                <span>更新清单地址（可选）</span>
+                <input id="apiUpdateManifest" autocomplete="off" placeholder="https://example.com/update.json" />
+              </label>
+            </details>
+          </div>
+
+          <div class="settings-card-footer">
+            <div class="local-key-note">♢ API Key 仅保存在本机设备</div>
+            <div class="settings-actions">
+              <button class="settings-pill-button" id="testApiButton">↻&nbsp; 测试连接</button>
+              <button class="settings-pill-button primary" id="saveApiButton">✓&nbsp; 保存</button>
+            </div>
+          </div>
+          <div class="settings-status" id="apiStatus"></div>
+        </section>
+
+        <section class="settings-card glass">
+          <div class="settings-section-title">
+            <div class="settings-card-icon appearance-icon">◒</div>
+            <h3>外观</h3>
+          </div>
+
+          <div class="settings-list appearance-list">
+            <div class="settings-row wallpaper-row">
+              <span class="row-label">更换壁纸</span>
+              <div class="wallpaper-preview" id="wallpaperPreview" aria-hidden="true"></div>
+              <label class="settings-pill-button choose-wallpaper">
+                选择图片 <span class="settings-chevron">›</span>
+                <input id="wallpaperInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
+              </label>
+            </div>
+
+            <label class="slider-row">
+              <span class="slider-label">毛玻璃不透明度</span>
+              <input id="glassOpacity" type="range" min="6" max="42" value="12" />
+              <output id="glassOutput">12%</output>
+            </label>
+
+            <label class="slider-row">
+              <span class="slider-label">背景遮罩</span>
+              <input id="wallpaperDim" type="range" min="0" max="55" value="8" />
+              <output id="dimOutput">8%</output>
+            </label>
+          </div>
+
+          <div class="appearance-bottom-row">
+            <p class="appearance-note">壁纸与外观参数仅保存在当前设备。</p>
+            <button class="settings-pill-button" id="resetWallpaper">↻&nbsp; 恢复默认</button>
+          </div>
+        </section>
+
+        <div class="settings-safe-space"></div>
+      </div>
+    </section>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
