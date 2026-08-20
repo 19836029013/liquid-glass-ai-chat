@@ -716,3 +716,161 @@ button[disabled] {
   }
   .tap-ripple,.button-spinner,.success-pulse{animation:none!important}
 }
+
+
+/* =========================================================
+   v6 — readability + compact composer + model catalog
+   ========================================================= */
+.assistant-bubble{
+  color:#101820;
+  background:linear-gradient(145deg,rgba(250,252,253,.58),rgba(241,246,248,.42));
+  border-color:rgba(255,255,255,.70);
+  -webkit-backdrop-filter:blur(38px) saturate(118%);
+  backdrop-filter:blur(38px) saturate(118%);
+  box-shadow:0 16px 42px rgba(37,49,58,.10),inset 0 1px 0 rgba(255,255,255,.62);
+}
+.user-bubble{
+  color:#101820;
+  background:linear-gradient(145deg,rgba(218,242,235,.60),rgba(188,225,215,.43));
+  border-color:rgba(255,255,255,.68);
+  -webkit-backdrop-filter:blur(34px) saturate(122%);
+  backdrop-filter:blur(34px) saturate(122%);
+}
+.assistant-bubble p,.user-bubble p{
+  letter-spacing:-.012em;
+  word-spacing:0;
+  line-height:1.50;
+  text-wrap:pretty;
+}
+.assistant-stack{max-width:79%}
+
+.message-actions{
+  gap:7px 13px;
+  margin-top:12px;
+  color:#33434e;
+  font-weight:540;
+  text-shadow:0 1px 8px rgba(255,255,255,.34);
+}
+.message-actions button{
+  color:#33434e;
+  opacity:.94;
+  font-size:13.5px;
+  letter-spacing:-.01em;
+}
+.message-actions button:active{color:#1f6d5c}
+
+.composer textarea{
+  color:#111a22;
+  background:rgba(250,252,253,.24);
+  -webkit-backdrop-filter:blur(26px) saturate(120%);
+  backdrop-filter:blur(26px) saturate(120%);
+  letter-spacing:-.012em;
+}
+.composer textarea::placeholder{color:#65727b;opacity:.92}
+
+.composer-row{
+  display:grid;
+  grid-template-columns:minmax(0,1.28fr) minmax(0,1fr) 58px;
+  align-items:center;
+  gap:8px;
+}
+.select-control{
+  width:100%;
+  min-width:0;
+  min-height:52px;
+  padding:11px 13px;
+  gap:7px;
+  white-space:nowrap;
+  overflow:hidden;
+  background:linear-gradient(145deg,rgba(250,252,253,.32),rgba(244,248,249,.18));
+  -webkit-backdrop-filter:blur(28px) saturate(120%);
+  backdrop-filter:blur(28px) saturate(120%);
+}
+.select-control:first-child{max-width:none}
+.select-control:first-child #modelLabel{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.reasoning-control{
+  min-width:0!important;
+  justify-content:center;
+  overflow:hidden;
+}
+.reasoning-control .reasoning-caption{color:#34424c;font-size:13px;flex:0 0 auto}
+.reasoning-control .reasoning-value{color:#111a22;font-size:14px;font-weight:650;flex:0 0 auto}
+.reasoning-control .reasoning-mark{font-size:14px}
+.reasoning-control .tiny-chevron{margin-left:1px}
+.send-button{margin-left:0;width:58px;height:58px}
+
+.popover{
+  min-width:230px;
+  max-width:min(82vw,360px);
+  max-height:245px;
+  padding:7px;
+  background:rgba(247,250,251,.76);
+  border-color:rgba(255,255,255,.76);
+  -webkit-backdrop-filter:blur(38px) saturate(120%);
+  backdrop-filter:blur(38px) saturate(120%);
+  box-shadow:0 18px 45px rgba(31,43,51,.16);
+}
+.popover button{
+  min-height:44px;
+  padding:10px 12px;
+  color:#17212a;
+  font-size:14px;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+.popover button+button{border-top:1px solid rgba(62,78,88,.07)}
+.popover button.current-model{
+  color:#246f5f;
+  font-weight:650;
+  background:rgba(119,190,171,.13);
+}
+
+.nav-right{padding:4px;border-radius:29px}
+.nav-right .nav-icon{width:48px;height:48px}
+
+.model-catalog-row textarea{
+  width:100%;
+  min-height:92px;
+  resize:vertical;
+  border:1px solid rgba(74,91,101,.15);
+  border-radius:14px;
+  outline:none;
+  padding:10px 11px;
+  color:#46535d;
+  background:rgba(255,255,255,.13);
+  line-height:1.45;
+  font-size:13px;
+}
+.advanced-hint{
+  margin:0;
+  padding:0 20px 16px;
+  color:#74808a;
+  font-size:12px;
+  line-height:1.55;
+}
+
+@media(max-width:700px){
+  .assistant-stack{max-width:91%}
+  .user-bubble{max-width:84%}
+  .assistant-bubble{font-size:17px;line-height:1.48;padding:18px 19px 15px}
+  .user-bubble{font-size:17px;line-height:1.48;padding:18px 19px 14px}
+  .message-actions{gap:6px 10px;margin-left:2px}
+  .message-actions button{font-size:12.5px;font-weight:570}
+  .composer-row{
+    grid-template-columns:minmax(0,1.22fr) minmax(0,.95fr) 53px;
+    gap:7px;
+  }
+  .select-control{min-height:49px;padding:10px 9px;font-size:12.5px}
+  .reasoning-control .reasoning-caption{font-size:11.5px}
+  .reasoning-control .reasoning-value{font-size:12.5px}
+  .send-button{width:53px;height:53px}
+  .popover{bottom:79px;max-height:230px}
+  .reasoning-popover{left:auto;right:65px;min-width:150px}
+  .advanced-row.model-catalog-row{grid-template-columns:1fr}
+  .advanced-row.model-catalog-row span{margin-bottom:4px}
+}

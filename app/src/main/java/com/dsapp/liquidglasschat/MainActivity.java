@@ -400,6 +400,7 @@ public class MainActivity extends Activity {
                     return;
                 }
                 int count = 0;
+                JSONArray modelIds = new JSONArray();
                 try {
                     conn = (HttpURLConnection) new URL(base + "/models").openConnection();
                     conn.setRequestMethod("GET");
@@ -410,7 +411,19 @@ public class MainActivity extends Activity {
                     if (code >= 200 && code < 300) {
                         JSONObject obj = new JSONObject(readFully(conn.getInputStream()));
                         JSONArray data = obj.optJSONArray("data");
-                        if (data != null) count = data.length();
+                        if (data != null) {
+                            count = data.length();
+                            for (int i = 0; i < data.length(); i++) {
+                                JSONObject mo = data.optJSONObject(i);
+                                if (mo != null) {
+                                    String mid = mo.optString("id", "").trim();
+                                    if (!mid.isEmpty()) modelIds.put(mid);
+                                } else if (data.opt(i) instanceof String) {
+                                    String mid = data.optString(i).trim();
+                                    if (!mid.isEmpty()) modelIds.put(mid);
+                                }
+                            }
+                        }
                     }
                 } catch (Exception ignored) {
                 } finally {
@@ -452,8 +465,13 @@ public class MainActivity extends Activity {
                         return;
                     }
                 }
-                postEvent("test", resultObj("ok", true,
-                        "message", count > 0 ? "连接成功 · 检测到 " + count + " 个模型" : "连接成功"));
+                JSONObject out = resultObj("ok", true,
+                        "message", count > 0 ? "连接成功 · 检测到 " + count + " 个模型" : "连接成功");
+                try {
+                    out.put("models", modelIds);
+                } catch (JSONException ignored) {
+                }
+                postEvent("test", out);
             } catch (Exception e) {
                 postEvent("test", resultObj("ok", false, "message", friendlyError(e)));
             } finally {

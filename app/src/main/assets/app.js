@@ -65,6 +65,107 @@ function normalizeText(value){
   }
   return '';
 }
+function normalizeModelList(value){
+  const raw=Array.isArray(value)?value:String(value||'').split(/[\n,，;；]+/);
+  const seen=new Set(),out=[];
+  for(const item of raw){
+    const id=String(item||'').trim();
+    if(!id||seen.has(id))continue;
+    seen.add(id);out.push(id);
+  }
+  return out.slice(0,200);
+}
+
+/* Streaming transport normalizer: buffers split JSON wrappers like {"text":"你"} and emits pure text. */
+class StreamingTextNormalizer{
+  constructor(){this.buffer='';this.wrapperMode=false}
+  feed(chunk){
+    if(!chunk)return [];
+    if(this.wrapperMode){this.buffer+=chunk;return this.drainWrapper()}
+    if(this.buffer){this.buffer+=chunk;return this.resolveProbe()}
+    const stripped=chunk.replace(/^\s+/,'');
+    if(stripped.startsWith('{')||stripped.startsWith('[')){
+      this.buffer=chunk;
+      return this.resolveProbe();
+    }
+    return [chunk];
+  }
+  resolveProbe(){
+    const stripped=this.buffer.replace(/^\s+/,'');
+    if(/^\{\s*"(?:text|content|output_text)"\s*:/.test(stripped)||/^\[\s*\{\s*"(?:text|content|output_text)"\s*:/.test(stripped)){
+      this.wrapperMode=true;
+      return this.drainWrapper();
+    }
+    const m=/^\{\s*"([^"]+)"\s*:/.exec(stripped);
+    if(m&&!['text','content','output_text'].includes(m[1])){
+      const raw=this.buffer;this.buffer='';return [raw];
+    }
+    if(this.buffer.length>96){
+      const raw=this.buffer;this.buffer='';return [raw];
+    }
+    return [];
+  }
+  drainWrapper(){
+    const out=[];
+    while(this.buffer){
+      const leading=this.buffer.length-this.buffer.replace(/^\s+/,'').length;
+      if(leading){
+        this.buffer=this.buffer.slice(leading);
+        if(!this.buffer)break;
+      }
+      if(!this.buffer.startsWith('{')&&!this.buffer.startsWith('[')){
+        const raw=this.buffer;this.buffer='';this.wrapperMode=false;
+        if(raw)out.push(raw);
+        break;
+      }
+      const end=firstJsonEnd(this.buffer);
+      if(end<0)break;
+      const rawValue=this.buffer.slice(0,end);
+      this.buffer=this.buffer.slice(end);
+      try{
+        const value=JSON.parse(rawValue);
+        const text=normalizeText(value);
+        if(text)out.push(text);
+        else if(rawValue)out.push(rawValue);
+      }catch(e){
+        if(rawValue)out.push(rawValue);
+      }
+    }
+    return out;
+  }
+  finish(){
+    if(!this.buffer)return [];
+    const raw=this.buffer;this.buffer='';
+    try{
+      const text=normalizeText(JSON.parse(raw));
+      if(text)return [text];
+    }catch(e){}
+    return [raw];
+  }
+}
+function firstJsonEnd(s){
+  let i=0;
+  while(i<s.length&&/\s/.test(s[i]))i++;
+  if(s[i]!=='{'&&s[i]!=='[')return -1;
+  const stack=[];let inStr=false,esc=false;
+  for(let j=i;j<s.length;j++){
+    const c=s[j];
+    if(inStr){
+      if(esc)esc=false;
+      else if(c==='\\')esc=true;
+      else if(c==='"')inStr=false;
+      continue;
+    }
+    if(c==='"'){inStr=true;continue}
+    if(c==='{'||c==='[')stack.push(c);
+    else if(c==='}'||c===']'){
+      const open=stack.pop();
+      if((c==='}'&&open!=='{')||(c===']'&&open!=='['))return -1;
+      if(!stack.length)return j+1;
+    }
+  }
+  return -1;
+}
 
 /* ---------- API config (local, mirrored to native storage) ---------- */
 function readClientApi(){
@@ -74,12 +175,13 @@ function readClientApi(){
       if(raw&&raw.trim()){
         const c=JSON.parse(raw);
         if(c.apiBase||c.apiKey||c.model){
-          return {base_url:String(c.apiBase||'').trim().replace(/\/+$/,''),api_key:String(c.apiKey||'').trim(),model:String(c.model||'').trim(),reasoning_parameter:String(c.reasoningParam||'').trim()};
+          return {base_url:String(c.apiBase||'').trim().replace(/\/+$/,''),api_key:String(c.apiKey||'').trim(),model:String(c.model||'').trim(),reasoning_parameter:String(c.reasoningParam||'').trim(),models:normalizeModelList(c.models||[])};
         }
       }
     }
   }catch(e){}
-  return loadJSON('ai.clientApi',null);
+  const local=loadJSON('ai.clientApi',null);
+  return local?{...local,models:normalizeModelList(local.models||[])}:null;
 }
 function getClientApi(){
   const cfg=readClientApi();
@@ -89,6 +191,7 @@ function getClientApi(){
     api_key:String(cfg.api_key||'').trim(),
     model:String(cfg.model||'').trim(),
     reasoning_parameter:String(cfg.reasoning_parameter||'').trim(),
+    models:normalizeModelList(cfg.models||[]),
   };
   return clean.base_url&&clean.api_key&&clean.model?clean:null;
 }
@@ -96,15 +199,13 @@ function saveClientApi(cfg){
   saveJSON('ai.clientApi',cfg);
   try{
     if(bridge&&bridge.saveConfig){
-      bridge.saveConfig(JSON.stringify({apiBase:cfg.base_url,apiKey:cfg.api_key,model:cfg.model,reasoningParam:cfg.reasoning_parameter}));
+      bridge.saveConfig(JSON.stringify({apiBase:cfg.base_url,apiKey:cfg.api_key,model:cfg.model,reasoningParam:cfg.reasoning_parameter,models:normalizeModelList(cfg.models||[])}));
     }
   }catch(e){}
 }
 function clientModelIds(){
   const cfg=getClientApi();if(!cfg)return [];
-  const ids=[cfg.model];
-  if(/deepseek/i.test(cfg.base_url)||/deepseek/i.test(cfg.model))ids.push('deepseek-chat','deepseek-reasoner');
-  return [...new Set(ids.filter(Boolean))];
+  return normalizeModelList([cfg.model,...(cfg.models||[])]);
 }
 function isConfigured(){return !!getClientApi()}
 function updateApiBanner(){
@@ -213,7 +314,6 @@ function closeSidebar(){sidebar.classList.remove('open');sidebar.setAttribute('a
 $('#menuButton').addEventListener('click',openSidebar);
 backdrop.addEventListener('click',closeSidebar);
 $$('[data-sidebar-close]').forEach(b=>b.addEventListener('click',closeSidebar));
-$('#historyButton').addEventListener('click',()=>{openSidebar();setTimeout(()=>$('#historySection').scrollIntoView({block:'start',behavior:'smooth'}),80)});
 $('#newChatButton').addEventListener('click',newChat);
 $('#addProjectButton').addEventListener('click',()=>showToast('项目功能等待后续接入'));
 
@@ -247,13 +347,12 @@ function rebuildModelMenu(){
   const entries=[];
   if(isConfigured()){
     clientModelIds().forEach(id=>entries.push({id,source:'local',available:true,label:id}));
-    const cfg=getClientApi();
-    if(!/deepseek/i.test(cfg.base_url)&&!entries.some(e=>e.id==='gpt-5.6-sol'))entries.push({id:'gpt-5.6-sol',source:'local',available:true,label:'gpt-5.6-sol'});
   }
   const seen=new Set();
   for(const m of entries){
     const key=`${m.source}:${m.id}`;if(seen.has(key))continue;seen.add(key);
-    const b=document.createElement('button');b.textContent=m.label;b.disabled=!m.available;
+    const b=document.createElement('button');b.textContent=m.label;b.title=m.id;b.disabled=!m.available;
+    if(m.id===state.modelId&&m.source===state.modelSource)b.classList.add('current-model');
     b.addEventListener('click',()=>chooseModel(m.id,m.source));modelPopover.appendChild(b);
   }
   if(!entries.length){
@@ -270,9 +369,9 @@ function loadConfig(){
   state.clientApi=getClientApi();
   reasoningPopover.innerHTML='';
   ['简洁','标准','深入','最高'].forEach(level=>{
-    const b=document.createElement('button');b.textContent=level;b.addEventListener('click',()=>{state.reasoningLevel=level;localStorage.setItem('ai.reasoningLevel',level);$('#reasoningLabel').textContent=`思考程度：${level}`;closePopovers()});reasoningPopover.appendChild(b);
+    const b=document.createElement('button');b.textContent=level;b.addEventListener('click',()=>{state.reasoningLevel=level;localStorage.setItem('ai.reasoningLevel',level);$('#reasoningLabel').textContent=level;closePopovers()});reasoningPopover.appendChild(b);
   });
-  $('#reasoningLabel').textContent=`思考程度：${state.reasoningLevel}`;
+  $('#reasoningLabel').textContent=state.reasoningLevel;
   rebuildModelMenu();updateApiBanner();
 }
 function closePopovers(except){[modelPopover,reasoningPopover].forEach(p=>{if(p!==except)p.classList.remove('show')})}
@@ -383,16 +482,19 @@ async function fetchComplete(cfg,messages){
   return msg?extractContent(msg.content):'';
 }
 async function fetchTest(cfg){
-  let models=0;
+  let models=[];
   try{
     const r=await fetch(cfg.base_url.replace(/\/+$/,'')+'/models',{headers:{'Authorization':'Bearer '+cfg.api_key}});
-    if(r.ok){const j=await r.json();models=(j.data||[]).length}
+    if(r.ok){
+      const j=await r.json();
+      models=normalizeModelList((j.data||[]).map(m=>m.id||m));
+    }
   }catch(e){}
-  if(!models){
+  if(!models.length){
     const r=await fetch(apiUrl(cfg),{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.api_key},body:JSON.stringify({model:cfg.model,messages:[{role:'user',content:'ping'}],max_tokens:1,stream:false})});
     if(!r.ok){let msg='请求失败';try{const j=await r.json();msg=(j.error&&(j.error.message||j.error.code))||msg}catch(e){}throw new Error(msg)}
   }
-  return {ok:true,message:models?`连接成功 · 检测到 ${models} 个模型`:'连接成功',models};
+  return {ok:true,message:models.length?`连接成功 · 检测到 ${models.length} 个模型`:'连接成功',models};
 }
 
 /* ---------- chat ---------- */
@@ -418,18 +520,26 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
   const p0=$('.assistant-bubble p',turn);
   if(p0&&existingTurn)p0.classList.add('streaming-caret');
   let finalText='';
+  const normalizer=new StreamingTextNormalizer();
   try{
     await streamChat(cfg,msgs,{
       delta(t){
         finalText+=t;
+        const parts=normalizer.feed(t);
+        if(!parts.length)return;
         const p=$('.assistant-bubble p',turn);
-        if(p)p.insertAdjacentText('beforeend',t);
+        parts.forEach(part=>{if(p)p.insertAdjacentText('beforeend',part)});
         scrollBottom();
       },
       reasoning(){},
       done(){},
     });
   }finally{
+    const rest=normalizer.finish();
+    if(rest.length){
+      const p=$('.assistant-bubble p',turn);
+      rest.forEach(part=>{if(p)p.insertAdjacentText('beforeend',part)});
+    }
     const p=$('.assistant-bubble p',turn);
     if(p)p.classList.remove('streaming-caret');
   }
@@ -531,10 +641,12 @@ function shareText(text){
 
 /* ---------- settings modal ---------- */
 function fillSettings(){
-  const cfg=getClientApi()||{base_url:'https://api.deepseek.com',api_key:'',model:'deepseek-chat',reasoning_parameter:''};
+  const cfg=getClientApi()||{base_url:'https://api.deepseek.com',api_key:'',model:'deepseek-chat',reasoning_parameter:'',models:[]};
   $('#apiBaseUrl').value=cfg.base_url||'';$('#apiKey').value=cfg.api_key||'';$('#apiModel').value=cfg.model||'';$('#apiReasoningParam').value=cfg.reasoning_parameter||'';
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)manifestInput.value=localStorage.getItem('app.updateManifestUrl')||DEFAULT_UPDATE_MANIFEST;
+  const modelsInput=$('#apiModels');
+  if(modelsInput)modelsInput.value=(cfg.models||[]).join('\n');
   const ok=!!getClientApi();
   $('#apiStatus').textContent=ok?'已保存到当前设备':'';$('#apiStatus').className='settings-status'+(ok?' ok':'');
 }
@@ -546,7 +658,6 @@ function switchSettingsTab(tab){
   $$('.settings-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));$$('.settings-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab));
 }
 window.__openSettings=openSettings;
-$('#settingsButton').addEventListener('click',()=>openSettings('api'));
 $('#sidebarSettings').addEventListener('click',()=>{closeSidebar();openSettings('api')});
 $('#bannerSettings').addEventListener('click',()=>openSettings('api'));
 $('#settingsClose').addEventListener('click',closeSettings);
@@ -559,7 +670,7 @@ $('#toggleKey').addEventListener('click',()=>{
   $('#toggleKey').textContent=show?'◌':'◉';
   $('#toggleKey').setAttribute('aria-label',show?'隐藏 API Key':'显示 API Key');
 });
-function settingsFormValue(){return {base_url:$('#apiBaseUrl').value.trim().replace(/\/+$/,''),api_key:$('#apiKey').value.trim(),model:$('#apiModel').value.trim(),reasoning_parameter:$('#apiReasoningParam').value.trim()}}
+function settingsFormValue(){return {base_url:$('#apiBaseUrl').value.trim().replace(/\/+$/,''),api_key:$('#apiKey').value.trim(),model:$('#apiModel').value.trim(),reasoning_parameter:$('#apiReasoningParam').value.trim(),models:normalizeModelList($('#apiModels').value)}}
 function validateCfg(cfg){
   if(!/^https?:\/\//i.test(cfg.base_url))return 'API 地址格式不正确';
   if(!cfg.api_key)return '请填写 API Key';
@@ -585,14 +696,28 @@ $('#testApiButton').addEventListener('click',async()=>{
   status.textContent='正在测试连接…';status.className='settings-status';$('#testApiButton').disabled=true;
   try{
     const res=await testApi(cfg);
-    status.textContent=res.message||'连接成功';status.className='settings-status ok';
+    const detected=normalizeModelList(res.models||[]);
+    if(detected.length){
+      $('#apiModels').value=detected.join('\n');
+      status.textContent=`连接成功 · 检测到 ${detected.length} 个模型`;status.className='settings-status ok';
+      const latest=getClientApi();
+      if(latest){
+        latest.models=normalizeModelList([...(latest.models||[]),...detected]);
+        saveClientApi(latest);
+        state.clientApi=latest;
+        rebuildModelMenu();
+        showToast(`已同步 ${detected.length} 个可用模型`);
+      }
+    }else{
+      status.textContent=res.message||'连接成功 · 未读取到模型列表，可手动填写可用模型';status.className='settings-status ok';
+    }
   }catch(e){
     status.textContent=e.message||'连接失败';status.className='settings-status error';
   }finally{$('#testApiButton').disabled=false}
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.2.0';
+const APP_CURRENT_VERSION='2.3.0';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

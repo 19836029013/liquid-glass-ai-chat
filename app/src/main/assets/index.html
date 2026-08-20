@@ -41,8 +41,6 @@
       <button class="round-glass" id="menuButton" aria-label="打开侧栏">☰</button>
       <div class="nav-right glass">
         <button class="nav-icon" id="newChatButton" aria-label="新建对话">＋</button>
-        <button class="nav-icon" id="historyButton" aria-label="历史对话">◷</button>
-        <button class="nav-icon" id="settingsButton" aria-label="设置">⚙</button>
       </div>
     </nav>
 
@@ -60,13 +58,16 @@
       </section>
 
       <section class="composer glass" id="composer">
-        <textarea id="promptInput" rows="1" placeholder="用 ChatGPT 工作"></textarea>
+        <textarea id="promptInput" rows="1" placeholder="输入消息…"></textarea>
         <div class="composer-row">
           <button class="select-control" id="modelSelect" aria-label="选择模型">
             <span class="model-mark">◇</span><span id="modelLabel">选择模型</span><span class="tiny-chevron">⌄</span>
           </button>
-          <button class="select-control grow" id="reasoningSelect" aria-label="思考程度">
-            <span>✺</span><span id="reasoningLabel">思考程度：标准</span><span class="tiny-chevron">⌄</span>
+          <button class="select-control grow reasoning-control" id="reasoningSelect" aria-label="思考等级">
+            <span class="reasoning-mark">✺</span>
+            <span class="reasoning-caption">思考等级</span>
+            <span class="reasoning-value" id="reasoningLabel">标准</span>
+            <span class="tiny-chevron">⌄</span>
           </button>
           <button class="send-button" id="sendButton" aria-label="发送">↑</button>
         </div>
@@ -143,6 +144,11 @@
                 <span>更新清单地址（可选）</span>
                 <input id="apiUpdateManifest" autocomplete="off" placeholder="https://example.com/update.json" />
               </label>
+              <label class="advanced-row model-catalog-row">
+                <span>可用模型</span>
+                <textarea id="apiModels" rows="4" autocomplete="off" placeholder="测试连接后自动读取；也可手动填写，一行一个模型"></textarea>
+              </label>
+              <p class="advanced-hint">模型列表来自你的 API /models 接口。若中转站不提供 /models，可在这里手动加入 Flash、Pro、Sol、Luna 等实际模型 ID。</p>
             </details>
           </div>
 

@@ -1,10 +1,10 @@
 {
-  "version": "2.2.0",
-  "notes": "支持 App 内一键更新：检查更新后可直接下载安装新版 APK。",
+  "version": "2.3.0",
+  "notes": "v6：真实模型列表自动同步、流式 JSON 归一化消除闪烁、可读性优化、单行思考等级、输入框文案更新。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "8c1169da80549ed38ee8b21ddd256ef4b1725953f00dfddd339fc18e837a8b64"
+      "sha256": "555f0a61ff8f64a2a2cfbd7595be4c87627d993f8e35c453d06e11337f40cee1"
     }
   }
 }
