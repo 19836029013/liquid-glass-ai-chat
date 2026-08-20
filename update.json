@@ -1,11 +1,11 @@
 {
-  "version": "2.5.4",
-  "notes": "查询模型失败时显示详细诊断（HTTP 状态码 + 接口返回原文），一眼定位 Key/地址/账户问题。",
+  "version": "2.5.5",
+  "notes": "查询模型结果改为必弹提示（失败也弹 Toast），并加固本地存储异常，避免按钮无反应。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "7bca4236d8ea51ae8776abf9fc65f6ce7a11fb9f83b3831da776fb2061b4fa6b"
+      "sha256": "341033afc071062db70ccf7fe31eebd5c4521c75456724d340d8f01b122223e"
     }
   }
 }

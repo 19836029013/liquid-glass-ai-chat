@@ -3,13 +3,16 @@ const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 
 let bridge=null;
 try{bridge=window.Android||null}catch(e){bridge=null}
+function safeGet(key,fallback=''){
+  try{return localStorage.getItem(key)||fallback}catch(e){return fallback}
+}
 
 const state={
   conversations:[],
   conversationId:null,
-  modelId:localStorage.getItem('ai.modelId')||'',
-  modelSource:localStorage.getItem('ai.modelSource')||'',
-  reasoningLevel:localStorage.getItem('ai.reasoningLevel')||'标准',
+  modelId:safeGet('ai.modelId'),
+  modelSource:safeGet('ai.modelSource'),
+  reasoningLevel:safeGet('ai.reasoningLevel','标准'),
   sending:false,
   clientApi:null,
 };
@@ -780,8 +783,8 @@ $('#fetchModelsButton')?.addEventListener('click',async()=>{
   const status=$('#apiStatus');
   const base_url=$('#apiBaseUrl').value.trim().replace(/\/+$/,'');
   const api_key=$('#apiKey').value.trim();
-  if(!/^https?:\/\//i.test(base_url)){status.textContent='请先填写正确的 API 地址';status.className='settings-status error';return}
-  if(!api_key){status.textContent='请先填写 API Key';status.className='settings-status error';return}
+  if(!/^https?:\/\//i.test(base_url)){status.textContent='请先填写正确的 API 地址';status.className='settings-status error';showToast('请先填写正确的 API 地址');return}
+  if(!api_key){status.textContent='请先填写 API Key';status.className='settings-status error';showToast('请先填写 API Key');return}
   const button=$('#fetchModelsButton');
   button.disabled=true;
   button.textContent='查询中…';
@@ -799,6 +802,7 @@ $('#fetchModelsButton')?.addEventListener('click',async()=>{
     populateApiModelSelect('',[]);
     status.textContent=e.message||'模型查询失败';
     status.className='settings-status error';
+    showToast('查询失败：'+(e.message||'未知错误'));
   }finally{
     button.disabled=false;
     button.textContent='查询模型';
@@ -865,7 +869,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.4';
+const APP_CURRENT_VERSION='2.5.5';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
