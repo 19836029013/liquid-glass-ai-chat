@@ -874,11 +874,12 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.6';
+const APP_CURRENT_VERSION='2.5.7';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
 let updateRetryDone=false;
+let updateUrlIndex=0;
 function detectUpdatePlatform(){
   const ua=navigator.userAgent||'';
   if(/Android/i.test(ua))return 'android';
@@ -1011,7 +1012,9 @@ async function startUpdate(){
   }
   const info=availableUpdate;
   const platform=info.platform||detectUpdatePlatform();
-  const url=info.mirror_url||info.download_url||info.store_url||info.web_url;
+  const candidates=[info.download_url,info.mirror_url,info.store_url,info.web_url].filter(Boolean);
+  updateUrlIndex=0;
+  const url=candidates[0];
   if(!url){
     showToast('该版本没有配置更新地址');
     return;
@@ -1068,12 +1071,17 @@ window.addEventListener('native-update-state',event=>{
     updateBusy=false;
     setUpdateButton({label:'继续更新',mode:'update'});
   }else if(detail.state==='error'){
-    if(availableUpdate&&!updateRetryDone&&availableUpdate.mirror_url&&availableUpdate.download_url){
-      updateRetryDone=true;
-      setUpdateButton({label:'正在切换线路…',mode:'update',loading:true});
-      $('#updateState').textContent='当前线路较慢，已自动切换官方线路';
-      window.AndroidUpdater.installApk(String(availableUpdate.download_url),String(availableUpdate.latest_version||''),String(availableUpdate.sha256||''));
-      return;
+    if(availableUpdate&&!updateRetryDone){
+      const candidates=[availableUpdate.download_url,availableUpdate.mirror_url,availableUpdate.store_url,availableUpdate.web_url].filter(Boolean);
+      const next=candidates[updateUrlIndex+1];
+      if(next){
+        updateRetryDone=true;
+        updateUrlIndex+=1;
+        setUpdateButton({label:'正在切换线路…',mode:'update',loading:true});
+        $('#updateState').textContent='当前线路异常，已自动切换备用线路';
+        window.AndroidUpdater.installApk(String(next),String(availableUpdate.latest_version||''),String(availableUpdate.sha256||''));
+        return;
+      }
     }
     updateBusy=false;
     setUpdateButton({label:'重新更新',mode:'update'});

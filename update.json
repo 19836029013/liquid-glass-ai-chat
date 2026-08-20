@@ -1,11 +1,11 @@
 {
-  "version": "2.5.6",
-  "notes": "核心修复：原生桥接事件 JSON 未解析导致查询模型/测试连接/思考摘要全部失效，现已修复，查询模型可正常使用。",
+  "version": "2.5.7",
+  "notes": "更新下载改为官方线路优先，镜像仅作备用；下载校验失败会自动切换线路重试。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "f2f265f069ad52d064bdcf0026d916dfc0b09c56363d93f78ece48045d9ec5d0"
+      "sha256": "e28c4e8ede2426af6deb7d65ea5992045803207edfc90d21241c30f2c87ffdfb"
     }
   }
 }
