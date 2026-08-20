@@ -1,11 +1,11 @@
 {
-  "version": "2.5.1",
-  "notes": "v8.1 热修复：查询模型错误改为可诊断的 401/403/404 提示；DeepSeek V4 自动启用 thinking + reasoning_effort；兼容参数名防填模型名。",
+  "version": "2.5.2",
+  "notes": "v8.2：修复设置页边缘右滑穿透拉出侧边栏，设置打开期间后台手势彻底禁用，设置页仍可正常纵向滚动。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "1894a4a516a06bf989c72af73ad86233f0fcf6f37b7698735cc9800461a64813"
+      "sha256": "2002169cf1d9fa0c2c657ea61c7d473b654457ce08642c0c3825ffded677e27a"
     }
   }
 }

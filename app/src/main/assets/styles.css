@@ -992,3 +992,52 @@ body.settings-open .chat-list{
 #fetchModelsButton:disabled{
   opacity:.62;
 }
+
+
+/* =========================================================
+   v8.2 — Settings modal gesture isolation
+   ========================================================= */
+
+/* Settings owns the entire viewport. Horizontal swipes must never leak
+   through rounded-card edges to the background sidebar gesture layer. */
+body.settings-open{
+  overflow:hidden!important;
+  overscroll-behavior:none;
+  touch-action:none;
+}
+
+body.settings-open .settings-screen-backdrop{
+  pointer-events:auto!important;
+  touch-action:pan-y;
+  overscroll-behavior:contain;
+}
+
+body.settings-open .settings-screen{
+  pointer-events:auto;
+  touch-action:pan-y;
+}
+
+body.settings-open .settings-screen-scroll{
+  touch-action:pan-y;
+  overscroll-behavior-y:contain;
+  overscroll-behavior-x:none;
+}
+
+/* The background navigation drawer is completely inert while Settings is open. */
+body.settings-open .sidebar,
+body.settings-open .sidebar-backdrop,
+body.settings-open .floating-nav,
+body.settings-open .composer{
+  pointer-events:none!important;
+}
+
+body.settings-open .sidebar{
+  transform:translateX(calc(-100% - 30px))!important;
+}
+
+/* Ensure there is no interactive slit around the full-screen settings layer. */
+.settings-screen-backdrop{
+  inset:0!important;
+  margin:0!important;
+  border:0!important;
+}

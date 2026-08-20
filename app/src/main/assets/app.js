@@ -352,10 +352,18 @@ $('#addProjectButton').addEventListener('click',()=>showToast('项目功能等�
 
 let swipeStart=null;
 function beginSwipe(x,y,pointer='touch'){
+  if(document.body.classList.contains('settings-open')||!settingsBackdrop.hidden){
+    swipeStart=null;
+    return;
+  }
   const open=sidebar.classList.contains('open');
   if(open||x<=Math.max(90,window.innerWidth*.55))swipeStart={x,y,open,pointer};
 }
 function endSwipe(x,y){
+  if(document.body.classList.contains('settings-open')||!settingsBackdrop.hidden){
+    swipeStart=null;
+    return;
+  }
   if(!swipeStart)return;
   const dx=x-swipeStart.x,dy=y-swipeStart.y;
   if(Math.abs(dx)>72&&Math.abs(dx)>Math.abs(dy)*1.15){
@@ -754,6 +762,8 @@ function fillSettings(){
   $('#apiStatus').textContent=ok?'已保存到当前设备':'';$('#apiStatus').className='settings-status'+(ok?' ok':'');
 }
 function openSettings(tab='api'){
+  closeSidebar();
+  swipeStart=null;
   fillSettings();settingsBackdrop.hidden=false;document.body.style.overflow='hidden';document.body.classList.add('settings-open');switchSettingsTab(tab);loadCurrentVersion();
 }
 function closeSettings(){settingsBackdrop.hidden=true;document.body.style.overflow='';document.body.classList.remove('settings-open')}
@@ -797,6 +807,14 @@ $('#apiModels')?.addEventListener('input',()=>{
   const models=normalizeModelList($('#apiModels').value);
   populateApiModelSelect($('#apiModel')?.value||'',models);
 });
+function lockSettingsBackgroundGesture(event){
+  if(settingsBackdrop.hidden)return;
+  swipeStart=null;
+  event.stopPropagation();
+}
+settingsBackdrop.addEventListener('touchstart',lockSettingsBackgroundGesture,{capture:true,passive:true});
+settingsBackdrop.addEventListener('touchmove',lockSettingsBackgroundGesture,{capture:true,passive:true});
+settingsBackdrop.addEventListener('pointerdown',lockSettingsBackgroundGesture,{capture:true,passive:true});
 settingsBackdrop.addEventListener('click',e=>{if(e.target===settingsBackdrop)closeSettings()});
 $$('.settings-tab').forEach(b=>b.addEventListener('click',()=>switchSettingsTab(b.dataset.tab)));
 $('#toggleKey').addEventListener('click',()=>{
@@ -846,7 +864,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.1';
+const APP_CURRENT_VERSION='2.5.2';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
