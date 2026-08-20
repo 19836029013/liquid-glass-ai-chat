@@ -278,11 +278,6 @@ function newConversation(){
 }
 
 /* ---------- rendering ---------- */
-function reasoningBlock(message){
-  const summary=message.reasoning_summary||'';
-  return `<button class="reasoning-toggle" data-reasoning-toggle ${summary?'':'disabled'} aria-expanded="false"><span>✺</span><span>深度思考</span><span class="chevron">⌄</span></button>
-  <div class="reasoning-panel" data-reasoning-panel><div class="reasoning-scroll">${escapeHTML(summary).replace(/\n/g,'<br>')}</div></div>`;
-}
 function actions(message){return `<div class="message-actions">
   <button data-action="copy" data-mid="${message.id}">▢ <span>复制</span></button>
   <button data-action="regen" data-mid="${message.id}">↻ <span>重新生成</span></button>
@@ -292,17 +287,9 @@ function actions(message){return `<div class="message-actions">
 function messageHTML(message){
   const content=normalizeText(message.content);
   if(message.role==='user')return `<div class="turn turn-user" data-message-id="${message.id}"><div class="user-bubble"><p>${escapeHTML(content).replace(/\n/g,'<br>')}</p><div class="meta user-meta">${timeOf(message.created_at)} <span class="checks">✓✓</span></div></div></div>`;
-  return `<div class="turn turn-assistant" data-message-id="${message.id}"><div class="assistant-avatar">✦</div><div class="assistant-stack">${reasoningBlock(message)}<div class="assistant-bubble"><p>${escapeHTML(content).replace(/\n/g,'<br>')}</p><div class="meta">${timeOf(message.created_at)}</div></div>${actions(message)}</div></div>`;
+  return `<div class="turn turn-assistant" data-message-id="${message.id}"><div class="assistant-avatar">✦</div><div class="assistant-stack"><div class="assistant-bubble"><p>${escapeHTML(content).replace(/\n/g,'<br>')}</p><div class="meta">${timeOf(message.created_at)}</div></div>${actions(message)}</div></div>`;
 }
 function bindMessageInteractions(root=messagesEl){
-  $$('[data-reasoning-toggle]',root).forEach(toggle=>{
-    if(toggle.dataset.bound)return;toggle.dataset.bound='1';
-    toggle.addEventListener('click',()=>{
-      if(toggle.disabled)return;
-      const panel=toggle.nextElementSibling,next=!panel.classList.contains('open');
-      panel.classList.toggle('open',next);toggle.classList.toggle('open',next);toggle.setAttribute('aria-expanded',String(next));$('.chevron',toggle).textContent=next?'⌃':'⌄';
-    });
-  });
   $$('[data-action]',root).forEach(btn=>{
     if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('click',()=>handleAction(btn.dataset.action,btn.dataset.mid));
   });
@@ -589,20 +576,12 @@ async function fetchTest(cfg){
 
 /* ---------- chat ---------- */
 function buildHistory(conv,skipMsg){
-  const out=[{role:'system',content:'你是一个可靠、清晰、友好的 AI 助手。优先直接解决用户问题。'}];
+  const out=[];
   for(const m of conv.messages){
     if(m===skipMsg||!m.content)continue;
     out.push({role:m.role,content:normalizeText(m.content)});
   }
   return out;
-}
-async function makeSummary(cfg,userText,answer){
-  if(!cfg.api_key||!answer.trim())return '';
-  const prompt=`请根据下面的用户问题和最终回答，用中文写一段 80-160 字左右的"思考摘要"。只概括回答采用了哪些高层次考虑、约束和依据；不要给逐步推理，不要声称泄露隐藏思维链。\n\n用户问题：${userText.slice(-3000)}\n\n最终回答：${answer.slice(-6000)}`;
-  try{
-    const text=await completeChat(cfg,[{role:'system',content:'你是一个简洁的摘要助手。'},{role:'user',content:prompt}]);
-    return normalizeText(text).trim().slice(0,600);
-  }catch(e){return ''}
 }
 async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
   const msgs=buildHistory(conv,assistantMsg);
@@ -636,8 +615,6 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
   assistantMsg.content=normalizeText(finalText).trim();
   assistantMsg.created_at=nowISO();
   if(!assistantMsg.content)throw new Error('模型没有返回内容');
-  const summary=await makeSummary(cfg,userText,assistantMsg.content);
-  if(summary)assistantMsg.reasoning_summary=summary;
 }
 async function sendMessage(){
   if(state.sending)return;
@@ -886,7 +863,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.8';
+const APP_CURRENT_VERSION='2.5.9';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

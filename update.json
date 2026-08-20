@@ -1,11 +1,11 @@
 {
-  "version": "2.5.8",
-  "notes": "API Key 输入交互升级：显示/隐藏文字按钮、一键清空、点击自动全选、阻止系统自动填充旧 Key。",
+  "version": "2.5.9",
+  "notes": "移除全部内置提示词：聊天不再发送任何系统提示词，深度思考摘要及其额外提示请求一并删除。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "e20b18840cf5c4ecdee1ae119298323091bc145f26ba2d7c14725950bc2c0bbb"
+      "sha256": "ed05464f33ccb61c95d06465504995d70ef4c29d7569a7bcd0505daeb0c6a066"
     }
   }
 }
