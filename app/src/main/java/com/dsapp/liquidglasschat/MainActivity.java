@@ -500,6 +500,7 @@ public class MainActivity extends Activity {
                 boolean all404OrNone = true;
                 for (String cand : candidates) {
                     int code = 0;
+                    String bodySnippet = "";
                     try {
                         conn = (HttpURLConnection) new URL(cand).openConnection();
                         conn.setRequestMethod("GET");
@@ -518,6 +519,9 @@ public class MainActivity extends Activity {
                                 }
                                 if (modelIds.length() > 0) break;
                             }
+                            if (modelIds.length() == 0) bodySnippet = "200 无模型列表";
+                        } else {
+                            bodySnippet = truncate(readFully(conn.getErrorStream()), 240).replace("\n", " ").trim();
                         }
                     } catch (Exception ignored) {
                     } finally {
@@ -528,7 +532,8 @@ public class MainActivity extends Activity {
                     }
                     if (code == 401 || code == 403) has401Or403 = true;
                     if (code != 404) all404OrNone = false;
-                    details.add(cand + " → " + (code == 0 ? "网络错误" : "HTTP " + code));
+                    details.add(cand + " → " + (code == 0 ? "网络错误" : "HTTP " + code)
+                            + (bodySnippet.isEmpty() ? "" : " " + bodySnippet));
                 }
                 if (modelIds.length() == 0) {
                     String msg;

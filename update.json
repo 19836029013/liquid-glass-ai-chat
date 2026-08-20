@@ -1,11 +1,11 @@
 {
-  "version": "2.5.3",
-  "notes": "查询模型地址自动规范化（去掉误填的 /v1、/chat/completions 后缀），失败提示补充检查建议。",
+  "version": "2.5.4",
+  "notes": "查询模型失败时显示详细诊断（HTTP 状态码 + 接口返回原文），一眼定位 Key/地址/账户问题。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "4863abb5a50d0ae23e657787374e5136243be642406072b655c10341910c5455"
+      "sha256": "7bca4236d8ea51ae8776abf9fc65f6ce7a11fb9f83b3831da776fb2061b4fa6b"
     }
   }
 }
