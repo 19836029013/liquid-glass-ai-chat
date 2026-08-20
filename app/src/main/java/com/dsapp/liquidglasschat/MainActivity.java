@@ -45,6 +45,8 @@ import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.List;
 
 public class MainActivity extends Activity {
 
@@ -488,14 +490,18 @@ public class MainActivity extends Activity {
                 }
                 JSONArray modelIds = new JSONArray();
                 String[] candidates = {base + "/models", base + "/v1/models"};
+                List<String> details = new ArrayList<>();
+                boolean has401Or403 = false;
+                boolean all404OrNone = true;
                 for (String cand : candidates) {
+                    int code = 0;
                     try {
                         conn = (HttpURLConnection) new URL(cand).openConnection();
                         conn.setRequestMethod("GET");
                         conn.setRequestProperty("Authorization", "Bearer " + key);
                         conn.setConnectTimeout(15000);
                         conn.setReadTimeout(15000);
-                        int code = conn.getResponseCode();
+                        code = conn.getResponseCode();
                         if (code >= 200 && code < 300) {
                             JSONObject obj = new JSONObject(readFully(conn.getInputStream()));
                             JSONArray data = obj.optJSONArray("data");
@@ -515,9 +521,20 @@ public class MainActivity extends Activity {
                             conn = null;
                         }
                     }
+                    if (code == 401 || code == 403) has401Or403 = true;
+                    if (code != 404) all404OrNone = false;
+                    details.add(cand + " → " + (code == 0 ? "网络错误" : "HTTP " + code));
                 }
                 if (modelIds.length() == 0) {
-                    postEvent("models", resultObj("ok", false, "message", "接口没有返回可用模型"));
+                    String msg;
+                    if (has401Or403) {
+                        msg = "模型查询失败：API Key 无效、已过期，或没有模型列表权限";
+                    } else if (all404OrNone) {
+                        msg = "模型查询失败：没有找到 /models 接口。请确认 API 地址填写的是 OpenAI-compatible 根地址，例如 https://api.deepseek.com";
+                    } else {
+                        msg = "模型查询失败：接口没有返回可用模型。" + String.join("；", details);
+                    }
+                    postEvent("models", resultObj("ok", false, "message", msg));
                     return;
                 }
                 JSONObject out = resultObj("ok", true, "message", "找到 " + modelIds.length() + " 个模型");

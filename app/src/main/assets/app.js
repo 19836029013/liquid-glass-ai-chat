@@ -79,6 +79,14 @@ function looksLikeApiKey(value){
   const s=String(value||'').trim().toLowerCase();
   return s.startsWith('sk-')||s.startsWith('bearer ')||/^key[-_:]/.test(s);
 }
+function sanitizeReasoningParameter(value,models=[]){
+  const raw=String(value||'').trim();
+  if(!raw)return '';
+  const knownModels=normalizeModelList(models);
+  if(knownModels.includes(raw))return '';
+  if(/^(deepseek|gpt|claude|gemini|luna|opus|qwen|glm|kimi)[-_]/i.test(raw))return '';
+  return raw;
+}
 (function migrateBrokenModelState(){
   const raw=loadJSON('ai.clientApi',null);
   if(!raw)return;
@@ -414,7 +422,15 @@ function extractContent(v){
 }
 function buildPayload(cfg,messages){
   const payload={model:cfg.model,messages,stream:true};
-  if(cfg.reasoning_parameter){
+  const isDeepseekV4=(cfg.base_url||'').toLowerCase().includes('api.deepseek.com')&&String(cfg.model||'').toLowerCase().startsWith('deepseek-v4');
+  if(isDeepseekV4){
+    if(state.reasoningLevel==='简洁'){
+      payload.thinking={type:'disabled'};
+    }else{
+      payload.thinking={type:'enabled'};
+      payload.reasoning_effort=state.reasoningLevel==='最高'?'max':'high';
+    }
+  }else if(cfg.reasoning_parameter){
     const map={'简洁':'low','标准':'medium','深入':'high','最高':'high'};
     payload[cfg.reasoning_parameter]=map[state.reasoningLevel]||'medium';
   }
@@ -727,7 +743,8 @@ function populateApiModelSelect(selectedValue='',sourceModels=null){
 }
 function fillSettings(){
   const cfg=getStoredClientApiRaw()||{base_url:'https://api.deepseek.com',api_key:'',model:'',reasoning_parameter:'',models:[]};
-  $('#apiBaseUrl').value=cfg.base_url||'';$('#apiKey').value=cfg.api_key||'';$('#apiReasoningParam').value=cfg.reasoning_parameter||'';
+  $('#apiBaseUrl').value=cfg.base_url||'';$('#apiKey').value=cfg.api_key||'';
+  $('#apiReasoningParam').value=sanitizeReasoningParameter(cfg.reasoning_parameter||'',cfg.models||[]);
   populateApiModelSelect(cfg.model,cfg.models);
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)manifestInput.value=localStorage.getItem('app.updateManifestUrl')||DEFAULT_UPDATE_MANIFEST;
@@ -788,7 +805,10 @@ $('#toggleKey').addEventListener('click',()=>{
   $('#toggleKey').textContent=show?'◌':'◉';
   $('#toggleKey').setAttribute('aria-label',show?'隐藏 API Key':'显示 API Key');
 });
-function settingsFormValue(){return {base_url:$('#apiBaseUrl').value.trim().replace(/\/+$/,''),api_key:$('#apiKey').value.trim(),model:$('#apiModel')?.value||'',reasoning_parameter:$('#apiReasoningParam').value.trim(),models:normalizeModelList($('#apiModels').value)}}
+function settingsFormValue(){
+  const models=normalizeModelList($('#apiModels').value);
+  return {base_url:$('#apiBaseUrl').value.trim().replace(/\/+$/,''),api_key:$('#apiKey').value.trim(),model:$('#apiModel')?.value||'',reasoning_parameter:sanitizeReasoningParameter($('#apiReasoningParam').value,models),models};
+}
 function validateCfg(cfg){
   if(!/^https?:\/\//i.test(cfg.base_url))return 'API 地址格式不正确';
   if(!cfg.api_key)return '请填写 API Key';
@@ -826,7 +846,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.0';
+const APP_CURRENT_VERSION='2.5.1';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
