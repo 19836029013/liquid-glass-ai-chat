@@ -123,8 +123,9 @@
 
             <label class="settings-row api-key-row">
               <span class="row-label">API Key</span>
-              <input id="apiKey" type="password" autocomplete="off" placeholder="sk-…" />
-              <button id="toggleKey" class="inline-icon-button" type="button" aria-label="显示 API Key">◉</button>
+              <input id="apiKey" type="password" autocomplete="new-password" name="api_key" spellcheck="false" placeholder="sk-…" />
+              <button id="toggleKey" class="inline-text-button" type="button" aria-label="显示 API Key">显示</button>
+              <button id="clearApiKey" class="inline-text-button danger" type="button">清空</button>
               <span class="settings-chevron">›</span>
             </label>
 

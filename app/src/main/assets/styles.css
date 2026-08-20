@@ -291,17 +291,21 @@ body.readonly .composer{display:none}body.readonly .chat-page{padding-bottom:40p
 .settings-row input::placeholder{color:#869099}
 
 .api-key-row{
-  grid-template-columns:minmax(120px,180px) minmax(0,1fr) 42px auto;
+  grid-template-columns:minmax(120px,180px) minmax(0,1fr) auto auto auto;
 }
 
-.inline-icon-button{
-  width:40px;
-  height:40px;
+.inline-text-button{
+  min-height:34px;
+  padding:0 10px;
   border:0;
-  border-radius:50%;
+  border-radius:16px;
   background:transparent;
-  color:#56636d;
-  font-size:19px;
+  color:#3a8e7e;
+  font-size:13px;
+  white-space:nowrap;
+}
+.inline-text-button.danger{
+  color:#b0564f;
 }
 
 .settings-chevron{
@@ -499,7 +503,7 @@ body.readonly .composer{display:none}body.readonly .chat-page{padding-bottom:40p
     padding:12px 14px;
   }
   .api-key-row{
-    grid-template-columns:108px minmax(0,1fr) 38px auto;
+    grid-template-columns:108px minmax(0,1fr) auto auto auto;
   }
   .settings-row .row-label,.settings-row input{font-size:15px}
   .settings-card-footer{

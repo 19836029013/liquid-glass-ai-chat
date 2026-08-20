@@ -830,8 +830,20 @@ $$('.settings-tab').forEach(b=>b.addEventListener('click',()=>switchSettingsTab(
 $('#toggleKey').addEventListener('click',()=>{
   const input=$('#apiKey'),show=input.type==='password';
   input.type=show?'text':'password';
-  $('#toggleKey').textContent=show?'◌':'◉';
+  $('#toggleKey').textContent=show?'隐藏':'显示';
   $('#toggleKey').setAttribute('aria-label',show?'隐藏 API Key':'显示 API Key');
+});
+$('#clearApiKey')?.addEventListener('click',()=>{
+  const input=$('#apiKey');
+  input.value='';
+  input.type='password';
+  $('#toggleKey').textContent='显示';
+  $('#toggleKey').setAttribute('aria-label','显示 API Key');
+  input.focus();
+  showToast('API Key 已清空');
+});
+$('#apiKey')?.addEventListener('focus',()=>{
+  try{$('#apiKey').select()}catch(e){}
 });
 function settingsFormValue(){
   const models=normalizeModelList($('#apiModels').value);
@@ -874,7 +886,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.7';
+const APP_CURRENT_VERSION='2.5.8';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

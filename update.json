@@ -1,11 +1,11 @@
 {
-  "version": "2.5.7",
-  "notes": "更新下载改为官方线路优先，镜像仅作备用；下载校验失败会自动切换线路重试。",
+  "version": "2.5.8",
+  "notes": "API Key 输入交互升级：显示/隐藏文字按钮、一键清空、点击自动全选、阻止系统自动填充旧 Key。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "e28c4e8ede2426af6deb7d65ea5992045803207edfc90d21241c30f2c87ffdfb"
+      "sha256": "e20b18840cf5c4ecdee1ae119298323091bc145f26ba2d7c14725950bc2c0bbb"
     }
   }
 }
