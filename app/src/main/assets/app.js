@@ -519,7 +519,8 @@ function handleEvent(name,data){
 window.AndroidEvents={onEvent:handleEvent};
 
 async function fetchQueryModels(cfg){
-  const base=(cfg.base_url||'').replace(/\/+$/,'');
+  let base=(cfg.base_url||'').trim().replace(/\/+$/,'');
+  base=base.replace(/\/v1\/chat\/completions$/i,'').replace(/\/chat\/completions$/i,'').replace(/\/v1beta$/i,'').replace(/\/v1$/i,'');
   let models=[];
   for(const path of ['/models','/v1/models']){
     try{
@@ -864,7 +865,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.2';
+const APP_CURRENT_VERSION='2.5.3';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

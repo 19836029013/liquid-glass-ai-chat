@@ -482,7 +482,12 @@ public class MainActivity extends Activity {
             HttpURLConnection conn = null;
             try {
                 JSONObject req = new JSONObject(requestJson);
-                String base = req.optString("base_url", "").replaceAll("/+$", "");
+                String base = req.optString("base_url", "").trim();
+                base = base.replaceAll("/+$", "");
+                base = base.replaceFirst("(?i)/v1/chat/completions$", "");
+                base = base.replaceFirst("(?i)/chat/completions$", "");
+                base = base.replaceFirst("(?i)/v1beta$", "");
+                base = base.replaceFirst("(?i)/v1$", "");
                 String key = req.optString("api_key", "");
                 if (base.isEmpty() || key.isEmpty()) {
                     postEvent("models", resultObj("ok", false, "message", "请先填写 API 地址和 Key"));
@@ -532,7 +537,8 @@ public class MainActivity extends Activity {
                     } else if (all404OrNone) {
                         msg = "模型查询失败：没有找到 /models 接口。请确认 API 地址填写的是 OpenAI-compatible 根地址，例如 https://api.deepseek.com";
                     } else {
-                        msg = "模型查询失败：接口没有返回可用模型。" + String.join("；", details);
+                        msg = "模型查询失败：接口没有返回可用模型。" + String.join("；", details)
+                                + "。请检查 API 地址和 Key 是否正确，账户是否已完成实名认证且有余额。";
                     }
                     postEvent("models", resultObj("ok", false, "message", msg));
                     return;

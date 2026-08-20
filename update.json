@@ -1,11 +1,11 @@
 {
-  "version": "2.5.2",
-  "notes": "v8.2：修复设置页边缘右滑穿透拉出侧边栏，设置打开期间后台手势彻底禁用，设置页仍可正常纵向滚动。",
+  "version": "2.5.3",
+  "notes": "查询模型地址自动规范化（去掉误填的 /v1、/chat/completions 后缀），失败提示补充检查建议。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "2002169cf1d9fa0c2c657ea61c7d473b654457ce08642c0c3825ffded677e27a"
+      "sha256": "4863abb5a50d0ae23e657787374e5136243be642406072b655c10341910c5455"
     }
   }
 }
