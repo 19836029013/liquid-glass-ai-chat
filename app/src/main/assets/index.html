@@ -14,17 +14,29 @@
   <div class="app-shell">
     <aside class="sidebar glass" id="sidebar" aria-hidden="true">
       <div class="sidebar-head">
-        <span>项目</span>
+        <div class="sidebar-brand">
+          <span class="sidebar-brand-mark">✦</span>
+          <div>
+            <strong>鲸鱼娘</strong>
+            <small id="sidebarModelLabel">未选择模型</small>
+          </div>
+        </div>
         <button class="plain-icon" data-sidebar-close aria-label="关闭侧栏">×</button>
       </div>
 
+      <label class="sidebar-search">
+        <span>⌕</span>
+        <input id="sidebarSearch" type="search" autocomplete="off" placeholder="搜索对话…" />
+      </label>
+
+      <div class="side-subhead section-label">项目</div>
       <button class="side-item add-project" id="addProjectButton"><span class="plus-small">＋</span><span>新建项目</span></button>
       <div class="empty-projects" id="projectEmptyState">暂无项目</div>
 
       <div class="side-separator"></div>
 
       <section id="historySection">
-        <h3>最近聊天</h3>
+        <h3>聊天记录</h3>
         <div class="side-subhead">置顶聊天</div>
         <div id="pinnedChatList"></div>
         <div class="side-subhead recent-title">最近</div>
@@ -32,6 +44,7 @@
       </section>
 
       <div class="sidebar-bottom">
+        <button class="side-item sidebar-new-chat" id="sidebarNewChat"><span>＋</span><span>新建对话</span></button>
         <button class="side-item" id="sidebarSettings"><span>⚙</span><span>设置</span></button>
       </div>
     </aside>
@@ -39,6 +52,13 @@
 
     <nav class="floating-nav" aria-label="聊天操作">
       <button class="round-glass" id="menuButton" aria-label="打开侧栏">☰</button>
+
+      <button class="top-model-pill glass" id="topModelButton" type="button" aria-label="切换模型">
+        <span class="top-model-dot">✦</span>
+        <span id="topModelLabel">选择模型</span>
+        <span class="tiny-chevron">⌄</span>
+      </button>
+
       <div class="nav-right glass">
         <button class="nav-icon" id="newChatButton" aria-label="新建对话">＋</button>
       </div>
@@ -69,11 +89,13 @@
             <span class="reasoning-value" id="reasoningLabel">标准</span>
             <span class="tiny-chevron">⌄</span>
           </button>
-          <button class="send-button" id="sendButton" aria-label="发送">↑</button>
+          <button class="send-button" id="sendButton" aria-label="发送"><span aria-hidden="true">➤</span></button>
         </div>
-        <div class="popover glass" id="modelPopover"></div>
-        <div class="popover glass reasoning-popover" id="reasoningPopover"></div>
+        <div class="popover glass bottom-sheet" id="modelPopover"></div>
+        <div class="popover glass reasoning-popover bottom-sheet" id="reasoningPopover"></div>
       </section>
+
+      <div class="sheet-scrim" id="sheetScrim" hidden></div>
 
       <div class="toast" id="toast"></div>
     </main>
@@ -82,7 +104,7 @@
   <div class="modal-backdrop settings-screen-backdrop" id="settingsBackdrop" hidden>
     <section class="settings-screen" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
       <header class="settings-screen-header">
-        <button class="settings-header-button glass" id="settingsBack" aria-label="返回">←</button>
+        <span class="settings-header-spacer" aria-hidden="true"></span>
         <h2 id="settingsTitle">设置</h2>
         <button class="settings-header-button glass" id="settingsClose" aria-label="关闭">×</button>
       </header>
@@ -168,6 +190,15 @@
           <div class="settings-section-title">
             <div class="settings-card-icon appearance-icon">◒</div>
             <h3>外观</h3>
+          </div>
+
+          <div class="wallpaper-presets" id="wallpaperPresets" aria-label="预设壁纸">
+            <button class="wallpaper-preset preset-dawn" data-wallpaper-preset="dawn" aria-label="晨光"></button>
+            <button class="wallpaper-preset preset-forest" data-wallpaper-preset="forest" aria-label="森林"></button>
+            <button class="wallpaper-preset preset-night" data-wallpaper-preset="night" aria-label="夜空"></button>
+            <button class="wallpaper-preset preset-mountain" data-wallpaper-preset="mountain" aria-label="山谷"></button>
+            <button class="wallpaper-preset preset-cloud" data-wallpaper-preset="cloud" aria-label="云霞"></button>
+            <button class="wallpaper-preset preset-mist" data-wallpaper-preset="mist" aria-label="薄雾"></button>
           </div>
 
           <div class="settings-list appearance-list">

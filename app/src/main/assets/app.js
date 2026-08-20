@@ -3,6 +3,7 @@ const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 
 let bridge=null;
 try{bridge=window.Android||null}catch(e){bridge=null}
+
 function safeGet(key,fallback=''){
   try{return localStorage.getItem(key)||fallback}catch(e){return fallback}
 }
@@ -14,6 +15,8 @@ const state={
   modelSource:safeGet('ai.modelSource'),
   reasoningLevel:safeGet('ai.reasoningLevel','标准'),
   sending:false,
+  shared:false,
+  serverModels:[],
   clientApi:null,
 };
 
@@ -22,6 +25,7 @@ const messagesEl=$('#messages'),promptInput=$('#promptInput'),sendButton=$('#sen
 const modelPopover=$('#modelPopover'),reasoningPopover=$('#reasoningPopover');
 const apiBanner=$('#apiBanner');
 const settingsBackdrop=$('#settingsBackdrop');
+const sheetScrim=$('#sheetScrim');
 
 function showToast(text){
   toast.textContent=text;toast.classList.add('show');
@@ -31,11 +35,10 @@ function escapeHTML(s=''){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','
 function timeOf(iso){try{return new Date(iso).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})}catch{return ''}}
 function scrollBottom(smooth=true){requestAnimationFrame(()=>window.scrollTo({top:document.body.scrollHeight,behavior:smooth?'smooth':'auto'}))}
 function loadJSON(key,fallback=null){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
-function saveJSON(key,value){localStorage.setItem(key,JSON.stringify(value))}
+function saveJSON(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(e){}}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,8)}
 function nowISO(){return new Date().toISOString()}
 
-/* ---------- content normalization (v3 fix) ---------- */
 function decodeJsonishString(input){
   const s=String(input??'');
   const t=s.trim();
@@ -68,6 +71,12 @@ function normalizeText(value){
   }
   return '';
 }
+
+function looksLikeApiKey(value){
+  const s=String(value||'').trim().toLowerCase();
+  return s.startsWith('sk-')||s.startsWith('bearer ')||/^key[-_:]/.test(s);
+}
+
 function normalizeModelList(value){
   const raw=Array.isArray(value)?value:String(value||'').split(/[\n,，;；]+/);
   const seen=new Set(),out=[];
@@ -78,10 +87,7 @@ function normalizeModelList(value){
   }
   return out.slice(0,200);
 }
-function looksLikeApiKey(value){
-  const s=String(value||'').trim().toLowerCase();
-  return s.startsWith('sk-')||s.startsWith('bearer ')||/^key[-_:]/.test(s);
-}
+
 function sanitizeReasoningParameter(value,models=[]){
   const raw=String(value||'').trim();
   if(!raw)return '';
@@ -89,112 +95,6 @@ function sanitizeReasoningParameter(value,models=[]){
   if(knownModels.includes(raw))return '';
   if(/^(deepseek|gpt|claude|gemini|luna|opus|qwen|glm|kimi)[-_]/i.test(raw))return '';
   return raw;
-}
-(function migrateBrokenModelState(){
-  const raw=loadJSON('ai.clientApi',null);
-  if(!raw)return;
-  const apiKey=String(raw.api_key||'').trim();
-  const model=String(raw.model||'').trim();
-  if(model&&(model===apiKey||looksLikeApiKey(model))){
-    raw.model='';
-    raw.models=normalizeModelList(raw.models||[]);
-    saveClientApi(raw);
-    localStorage.removeItem('ai.modelId');
-    localStorage.setItem('ai.modelSource','local');
-    state.modelId='';
-    state.modelSource='local';
-  }
-})();
-
-/* Streaming transport normalizer: buffers split JSON wrappers like {"text":"你"} and emits pure text. */
-class StreamingTextNormalizer{
-  constructor(){this.buffer='';this.wrapperMode=false}
-  feed(chunk){
-    if(!chunk)return [];
-    if(this.wrapperMode){this.buffer+=chunk;return this.drainWrapper()}
-    if(this.buffer){this.buffer+=chunk;return this.resolveProbe()}
-    const stripped=chunk.replace(/^\s+/,'');
-    if(stripped.startsWith('{')||stripped.startsWith('[')){
-      this.buffer=chunk;
-      return this.resolveProbe();
-    }
-    return [chunk];
-  }
-  resolveProbe(){
-    const stripped=this.buffer.replace(/^\s+/,'');
-    if(/^\{\s*"(?:text|content|output_text)"\s*:/.test(stripped)||/^\[\s*\{\s*"(?:text|content|output_text)"\s*:/.test(stripped)){
-      this.wrapperMode=true;
-      return this.drainWrapper();
-    }
-    const m=/^\{\s*"([^"]+)"\s*:/.exec(stripped);
-    if(m&&!['text','content','output_text'].includes(m[1])){
-      const raw=this.buffer;this.buffer='';return [raw];
-    }
-    if(this.buffer.length>96){
-      const raw=this.buffer;this.buffer='';return [raw];
-    }
-    return [];
-  }
-  drainWrapper(){
-    const out=[];
-    while(this.buffer){
-      const leading=this.buffer.length-this.buffer.replace(/^\s+/,'').length;
-      if(leading){
-        this.buffer=this.buffer.slice(leading);
-        if(!this.buffer)break;
-      }
-      if(!this.buffer.startsWith('{')&&!this.buffer.startsWith('[')){
-        const raw=this.buffer;this.buffer='';this.wrapperMode=false;
-        if(raw)out.push(raw);
-        break;
-      }
-      const end=firstJsonEnd(this.buffer);
-      if(end<0)break;
-      const rawValue=this.buffer.slice(0,end);
-      this.buffer=this.buffer.slice(end);
-      try{
-        const value=JSON.parse(rawValue);
-        const text=normalizeText(value);
-        if(text)out.push(text);
-        else if(rawValue)out.push(rawValue);
-      }catch(e){
-        if(rawValue)out.push(rawValue);
-      }
-    }
-    return out;
-  }
-  finish(){
-    if(!this.buffer)return [];
-    const raw=this.buffer;this.buffer='';
-    try{
-      const text=normalizeText(JSON.parse(raw));
-      if(text)return [text];
-    }catch(e){}
-    return [raw];
-  }
-}
-function firstJsonEnd(s){
-  let i=0;
-  while(i<s.length&&/\s/.test(s[i]))i++;
-  if(s[i]!=='{'&&s[i]!=='[')return -1;
-  const stack=[];let inStr=false,esc=false;
-  for(let j=i;j<s.length;j++){
-    const c=s[j];
-    if(inStr){
-      if(esc)esc=false;
-      else if(c==='\\')esc=true;
-      else if(c==='"')inStr=false;
-      continue;
-    }
-    if(c==='"'){inStr=true;continue}
-    if(c==='{'||c==='[')stack.push(c);
-    else if(c==='}'||c===']'){
-      const open=stack.pop();
-      if((c==='}'&&open!=='{')||(c===']'&&open!=='['))return -1;
-      if(!stack.length)return j+1;
-    }
-  }
-  return -1;
 }
 
 /* ---------- API config (local, mirrored to native storage) ---------- */
@@ -213,9 +113,13 @@ function readClientApi(){
   const local=loadJSON('ai.clientApi',null);
   return local?{...local,models:normalizeModelList(local.models||[])}:null;
 }
-function getClientApi(){
-  const clean=getStoredClientApiRaw();
-  return clean&&clean.base_url&&clean.api_key&&clean.model?clean:null;
+function saveClientApi(cfg){
+  saveJSON('ai.clientApi',cfg);
+  try{
+    if(bridge&&bridge.saveConfig){
+      bridge.saveConfig(JSON.stringify({apiBase:cfg.base_url,apiKey:cfg.api_key,model:cfg.model,reasoningParam:cfg.reasoning_parameter||'',models:normalizeModelList(cfg.models||[])}));
+    }
+  }catch(e){}
 }
 function getStoredClientApiRaw(){
   const cfg=readClientApi();
@@ -231,16 +135,13 @@ function getStoredClientApiRaw(){
     models:normalizeModelList(cfg.models||[]),
   };
 }
-function saveClientApi(cfg){
-  saveJSON('ai.clientApi',cfg);
-  try{
-    if(bridge&&bridge.saveConfig){
-      bridge.saveConfig(JSON.stringify({apiBase:cfg.base_url,apiKey:cfg.api_key,model:cfg.model,reasoningParam:cfg.reasoning_parameter,models:normalizeModelList(cfg.models||[])}));
-    }
-  }catch(e){}
+function getClientApi(){
+  const clean=getStoredClientApiRaw();
+  return clean&&clean.base_url&&clean.api_key&&clean.model?clean:null;
 }
 function clientModelIds(){
-  const cfg=getStoredClientApiRaw();if(!cfg)return [];
+  const cfg=getStoredClientApiRaw();
+  if(!cfg)return [];
   return normalizeModelList([cfg.model,...(cfg.models||[])]);
 }
 function isConfigured(){return !!getClientApi()}
@@ -250,6 +151,22 @@ function updateApiBanner(){
   apiBanner.classList.toggle('force-hidden',configured);
   apiBanner.setAttribute('aria-hidden',configured?'true':'false');
 }
+
+(function migrateBrokenModelState(){
+  const raw=loadJSON('ai.clientApi',null);
+  if(!raw)return;
+  const apiKey=String(raw.api_key||'').trim();
+  const model=String(raw.model||'').trim();
+  if(model&&(model===apiKey||looksLikeApiKey(model))){
+    raw.model='';
+    raw.models=normalizeModelList(raw.models||[]);
+    saveClientApi(raw);
+    localStorage.removeItem('ai.modelId');
+    localStorage.setItem('ai.modelSource','local');
+    state.modelId='';
+    state.modelSource='local';
+  }
+})();
 
 /* ---------- local conversations ---------- */
 function loadConversations(){
@@ -277,68 +194,12 @@ function newConversation(){
   return c;
 }
 
-/* ---------- rendering ---------- */
-function actions(message){return `<div class="message-actions">
-  <button data-action="copy" data-mid="${message.id}">▢ <span>复制</span></button>
-  <button data-action="regen" data-mid="${message.id}">↻ <span>重新生成</span></button>
-  <button data-action="share" data-mid="${message.id}">⇧ <span>分享</span></button>
-  <button data-action="branch" data-mid="${message.id}">⑂ <span>创建分支</span></button>
-</div>`}
-function messageHTML(message){
-  const content=normalizeText(message.content);
-  if(message.role==='user')return `<div class="turn turn-user" data-message-id="${message.id}"><div class="user-bubble"><p>${escapeHTML(content).replace(/\n/g,'<br>')}</p><div class="meta user-meta">${timeOf(message.created_at)} <span class="checks">✓✓</span></div></div></div>`;
-  return `<div class="turn turn-assistant" data-message-id="${message.id}"><div class="assistant-avatar">✦</div><div class="assistant-stack"><div class="assistant-bubble"><p>${escapeHTML(content).replace(/\n/g,'<br>')}</p><div class="meta">${timeOf(message.created_at)}</div></div>${actions(message)}</div></div>`;
-}
-function bindMessageInteractions(root=messagesEl){
-  $$('[data-action]',root).forEach(btn=>{
-    if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('click',()=>handleAction(btn.dataset.action,btn.dataset.mid));
-  });
-}
-function renderMessages(items){messagesEl.innerHTML=items.map(messageHTML).join('');bindMessageInteractions()}
-function appendTempAssistant(msg){
-  messagesEl.insertAdjacentHTML('beforeend',messageHTML(msg));
-  const turn=$(`[data-message-id="${msg.id}"]`);
-  const p=$('.assistant-bubble p',turn);
-  if(p)p.classList.add('streaming-caret');
-  bindMessageInteractions(turn);
-  return turn;
-}
-
-/* ---------- sidebar / history ---------- */
-function historyButton(c){
-  const b=document.createElement('button');b.className='side-item chat-history'+(c.id===state.conversationId?' current':'');
-  b.innerHTML=`<span>${c.pinned?'⌖':'◷'}</span><span>${escapeHTML(c.title)}</span>`;b.addEventListener('click',()=>loadConversation(c.id));return b;
-}
-function renderHistory(){
-  const pinned=$('#pinnedChatList'),recent=$('#recentChatList');
-  pinned.innerHTML='';recent.innerHTML='';
-  [...state.conversations].sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||''))).forEach(c=>(c.pinned?pinned:recent).appendChild(historyButton(c)));
-  if(!pinned.children.length)pinned.innerHTML='<div class="empty-history">暂无置顶聊天</div>';
-  if(!recent.children.length)recent.innerHTML='<div class="empty-history">暂无最近聊天</div>';
-}
-function loadConversation(id){
-  const conv=state.conversations.find(c=>c.id===id);if(!conv)return;
-  state.conversationId=id;
-  $('#greeting').textContent=conv.title||'对话';
-  renderMessages(conv.messages||[]);
-  closeSidebar();renderHistory();scrollBottom(false);
-}
-function newChat(){
-  state.conversationId=null;
-  messagesEl.innerHTML='';
-  $('#greeting').textContent='你好，今天想聊点什么？';
-  promptInput.value='';promptInput.focus();
-  closeSidebar();renderHistory();showToast('新建对话');
-}
-
 /* ---------- sidebar / swipe ---------- */
 function openSidebar(){sidebar.classList.add('open');sidebar.setAttribute('aria-hidden','false');backdrop.classList.add('show')}
 function closeSidebar(){sidebar.classList.remove('open');sidebar.setAttribute('aria-hidden','true');backdrop.classList.remove('show')}
 $('#menuButton').addEventListener('click',openSidebar);
 backdrop.addEventListener('click',closeSidebar);
 $$('[data-sidebar-close]').forEach(b=>b.addEventListener('click',closeSidebar));
-$('#newChatButton').addEventListener('click',newChat);
-$('#addProjectButton').addEventListener('click',()=>showToast('项目功能等待后续接入'));
 
 let swipeStart=null;
 function beginSwipe(x,y,pointer='touch'){
@@ -367,48 +228,249 @@ document.addEventListener('touchend',e=>{if(e.changedTouches.length)endSwipe(e.c
 document.addEventListener('pointerdown',e=>{if(e.pointerType==='mouse')beginSwipe(e.clientX,e.clientY,'mouse')},{passive:true});
 document.addEventListener('pointerup',e=>{if(swipeStart?.pointer==='mouse')endSwipe(e.clientX,e.clientY)},{passive:true});
 
-/* ---------- model / reasoning menus ---------- */
+/* ---------- rendering ---------- */
+function modelDisplayName(message){
+  const raw=String(message?.model||state.modelId||'AI').trim();
+  return raw||'AI';
+}
+function actions(message){
+  return `<div class="message-actions" aria-label="消息操作">
+    <button data-action="copy" data-mid="${message.id}" title="复制"><span class="action-icon">▢</span><span>复制</span></button>
+    <button data-action="regen" data-mid="${message.id}" title="重新生成"><span class="action-icon">↻</span><span>重新生成</span></button>
+    <button data-action="share" data-mid="${message.id}" title="分享"><span class="action-icon">⇧</span><span>分享</span></button>
+    <button data-action="branch" data-mid="${message.id}" title="创建分支"><span class="action-icon">⑂</span><span>创建分支</span></button>
+  </div>`;
+}
+function messageHTML(message){
+  const content=normalizeText(message.content);
+  if(message.role==='user'){
+    return `<div class="turn turn-user" data-message-id="${message.id}">
+      <div class="user-bubble">
+        <p>${escapeHTML(content).replace(/\n/g,'<br>')}</p>
+        <div class="meta user-meta">${timeOf(message.created_at)} <span class="checks">✓✓</span></div>
+      </div>
+    </div>`;
+  }
+  const model=escapeHTML(modelDisplayName(message));
+  return `<div class="turn turn-assistant" data-message-id="${message.id}">
+    <div class="assistant-stack">
+      <div class="assistant-bubble">
+        <div class="assistant-message-head">
+          <span class="assistant-model"><span class="assistant-model-mark">✦</span><span>${model}</span></span>
+          <span class="assistant-time">${timeOf(message.created_at)}</span>
+        </div>
+        <p>${escapeHTML(content).replace(/\n/g,'<br>')}</p>
+      </div>
+      ${state.shared?'':actions(message)}
+    </div>
+  </div>`;
+}
+function bindMessageInteractions(root=messagesEl){
+  $$('[data-action]',root).forEach(btn=>{
+    if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('click',()=>handleAction(btn.dataset.action,btn.dataset.mid));
+  });
+}
+function renderMessages(items){messagesEl.innerHTML=items.map(messageHTML).join('');bindMessageInteractions()}
+function appendTempAssistant(msg){
+  messagesEl.insertAdjacentHTML('beforeend',messageHTML(msg));
+  const turn=$(`[data-message-id="${msg.id}"]`);
+  const p=$('.assistant-bubble p',turn);
+  if(p)p.classList.add('streaming-caret');
+  bindMessageInteractions(turn);
+  return turn;
+}
+
+/* ---------- model / reasoning sheets ---------- */
 function chooseModel(id,source){
-  state.modelId=id;state.modelSource=source;
-  localStorage.setItem('ai.modelId',id);localStorage.setItem('ai.modelSource',source);
-  $('#modelLabel').textContent=id||'选择模型';closePopovers();
+  state.modelId=id;
+  state.modelSource=source;
+  localStorage.setItem('ai.modelId',id);
+  localStorage.setItem('ai.modelSource',source);
+  $('#modelLabel').textContent=id||'选择模型';
+  $('#topModelLabel').textContent=id||'选择模型';
+  $('#sidebarModelLabel').textContent=id||'未选择模型';
+  closePopovers();
 }
 function rebuildModelMenu(){
-  modelPopover.innerHTML='';
+  modelPopover.innerHTML=`
+    <div class="sheet-head">
+      <div>
+        <span class="sheet-kicker">模型</span>
+        <strong>选择模型</strong>
+      </div>
+      <button class="sheet-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="sheet-list" id="modelSheetList"></div>`;
+  const list=$('#modelSheetList',modelPopover);
   const entries=[];
-  if(isConfigured()){
-    clientModelIds().forEach(id=>entries.push({id,source:'local',available:true,label:id}));
-  }
+  clientModelIds().forEach(id=>entries.push({id,source:'local',available:true,label:id}));
   const seen=new Set();
   for(const m of entries){
-    const key=`${m.source}:${m.id}`;if(seen.has(key))continue;seen.add(key);
-    const b=document.createElement('button');b.textContent=m.label;b.title=m.id;b.disabled=!m.available;
+    const key=`${m.source}:${m.id}`;
+    if(seen.has(key))continue;
+    seen.add(key);
+    const b=document.createElement('button');
+    b.className='sheet-option';
+    b.disabled=!m.available;
+    b.title=m.id;
+    b.innerHTML=`
+      <span class="sheet-option-icon">${m.id===state.modelId?'✓':'◇'}</span>
+      <span class="sheet-option-copy">
+        <strong>${escapeHTML(m.label)}</strong>
+        <small>来自当前 API</small>
+      </span>
+      ${m.id===state.modelId&&m.source===state.modelSource?'<span class="sheet-check">✓</span>':''}
+    `;
     if(m.id===state.modelId&&m.source===state.modelSource)b.classList.add('current-model');
-    b.addEventListener('click',()=>chooseModel(m.id,m.source));modelPopover.appendChild(b);
+    b.addEventListener('click',()=>chooseModel(m.id,m.source));
+    list.appendChild(b);
   }
-  if(!entries.length){
-    const b=document.createElement('button');b.textContent='先配置 AI 接口';b.disabled=true;modelPopover.appendChild(b);
-    const s=document.createElement('button');s.textContent='⚙ 去设置';s.addEventListener('click',()=>{closePopovers();openSettings('api')});modelPopover.appendChild(s);
+  if(!entries.some(e=>e.available)){
+    list.innerHTML='<div class="sheet-empty">暂无可用模型<br><small>请先在设置中填写 API 地址和 Key，并查询模型。</small></div>';
   }
+  $('.sheet-close',modelPopover)?.addEventListener('click',closePopovers);
   const currentValid=entries.some(e=>e.available&&e.id===state.modelId&&e.source===state.modelSource);
   if(!currentValid){
-    const preferred=entries.find(e=>e.available);
-    if(preferred)chooseModel(preferred.id,preferred.source);else{$('#modelLabel').textContent='选择模型';state.modelId='';state.modelSource=''}
-  }else $('#modelLabel').textContent=state.modelId;
+    const preferred=entries.find(e=>e.available&&e.source==='local')||entries.find(e=>e.available);
+    if(preferred){
+      state.modelId=preferred.id;
+      state.modelSource=preferred.source;
+      localStorage.setItem('ai.modelId',preferred.id);
+      localStorage.setItem('ai.modelSource',preferred.source);
+      $('#modelLabel').textContent=preferred.id;
+      $('#topModelLabel').textContent=preferred.id;
+      $('#sidebarModelLabel').textContent=preferred.id;
+    }else{
+      $('#modelLabel').textContent='选择模型';
+      $('#topModelLabel').textContent='选择模型';
+      $('#sidebarModelLabel').textContent='未选择模型';
+      state.modelId='';
+      state.modelSource='';
+    }
+  }else{
+    $('#modelLabel').textContent=state.modelId;
+    $('#topModelLabel').textContent=state.modelId;
+    $('#sidebarModelLabel').textContent=state.modelId;
+  }
 }
 function loadConfig(){
   state.clientApi=getClientApi();
-  reasoningPopover.innerHTML='';
+  reasoningPopover.innerHTML=`
+    <div class="sheet-head">
+      <div>
+        <span class="sheet-kicker">推理</span>
+        <strong>思考等级</strong>
+      </div>
+      <button class="sheet-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="sheet-list" id="reasoningSheetList"></div>`;
+  const descriptions={
+    '简洁':'更快返回，适合简单问答',
+    '标准':'速度与深度平衡',
+    '深入':'更充分的分析与推理',
+    '最高':'适合复杂任务，耗时更长',
+  };
+  const list=$('#reasoningSheetList',reasoningPopover);
   ['简洁','标准','深入','最高'].forEach(level=>{
-    const b=document.createElement('button');b.textContent=level;b.addEventListener('click',()=>{state.reasoningLevel=level;localStorage.setItem('ai.reasoningLevel',level);$('#reasoningLabel').textContent=level;closePopovers()});reasoningPopover.appendChild(b);
+    const b=document.createElement('button');
+    b.className='sheet-option';
+    if(level===state.reasoningLevel)b.classList.add('current-model');
+    b.innerHTML=`
+      <span class="sheet-option-icon">${level===state.reasoningLevel?'✓':'✺'}</span>
+      <span class="sheet-option-copy">
+        <strong>${escapeHTML(level)}</strong>
+        <small>${descriptions[level]||''}</small>
+      </span>
+      ${level===state.reasoningLevel?'<span class="sheet-check">✓</span>':''}
+    `;
+    b.addEventListener('click',()=>{
+      state.reasoningLevel=level;
+      localStorage.setItem('ai.reasoningLevel',level);
+      $('#reasoningLabel').textContent=level;
+      closePopovers();
+    });
+    list.appendChild(b);
   });
+  $('.sheet-close',reasoningPopover)?.addEventListener('click',closePopovers);
   $('#reasoningLabel').textContent=state.reasoningLevel;
-  rebuildModelMenu();updateApiBanner();
+  rebuildModelMenu();
+  updateApiBanner();
 }
-function closePopovers(except){[modelPopover,reasoningPopover].forEach(p=>{if(p!==except)p.classList.remove('show')})}
-$('#modelSelect').addEventListener('click',e=>{e.stopPropagation();const o=!modelPopover.classList.contains('show');closePopovers(modelPopover);modelPopover.classList.toggle('show',o)});
-$('#reasoningSelect').addEventListener('click',e=>{e.stopPropagation();const o=!reasoningPopover.classList.contains('show');closePopovers(reasoningPopover);reasoningPopover.classList.toggle('show',o)});
-document.addEventListener('click',()=>closePopovers());
+
+function closePopovers(except=null){
+  [modelPopover,reasoningPopover].forEach(p=>{
+    if(p!==except)p.classList.remove('show');
+  });
+  const anyOpen=[modelPopover,reasoningPopover].some(p=>p.classList.contains('show'));
+  sheetScrim.hidden=!anyOpen;
+  document.body.classList.toggle('sheet-open',anyOpen);
+}
+function openSheet(popover){
+  closePopovers(popover);
+  popover.classList.add('show');
+  sheetScrim.hidden=false;
+  document.body.classList.add('sheet-open');
+}
+$('#modelSelect').addEventListener('click',e=>{
+  e.stopPropagation();
+  if(modelPopover.classList.contains('show'))closePopovers();
+  else openSheet(modelPopover);
+});
+$('#topModelButton').addEventListener('click',e=>{
+  e.stopPropagation();
+  openSheet(modelPopover);
+});
+$('#reasoningSelect').addEventListener('click',e=>{
+  e.stopPropagation();
+  if(reasoningPopover.classList.contains('show'))closePopovers();
+  else openSheet(reasoningPopover);
+});
+sheetScrim.addEventListener('click',closePopovers);
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closePopovers()});
+
+/* ---------- history / sidebar ---------- */
+function historyButton(c){
+  const b=document.createElement('button');b.className='side-item chat-history'+(c.id===state.conversationId?' current':'');
+  b.innerHTML=`<span>${c.pinned?'⌖':'◷'}</span><span>${escapeHTML(c.title)}</span>`;b.addEventListener('click',()=>loadConversation(c.id));return b;
+}
+function renderHistory(){
+  const pinned=$('#pinnedChatList'),recent=$('#recentChatList');
+  pinned.innerHTML='';recent.innerHTML='';
+  [...state.conversations].sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||''))).forEach(c=>(c.pinned?pinned:recent).appendChild(historyButton(c)));
+  if(!pinned.children.length)pinned.innerHTML='<div class="empty-history">暂无置顶聊天</div>';
+  if(!recent.children.length)recent.innerHTML='<div class="empty-history">暂无最近聊天</div>';
+}
+function loadConversation(id){
+  const conv=state.conversations.find(c=>c.id===id);if(!conv)return;
+  state.conversationId=id;
+  $('#greeting').textContent=conv.title||'对话';
+  renderMessages(conv.messages||[]);
+  closeSidebar();
+  renderHistory();
+  scrollBottom(false);
+}
+function newChat(){
+  state.conversationId=null;
+  messagesEl.innerHTML='';
+  $('#greeting').textContent='你好，今天想聊点什么？';
+  promptInput.value='';promptInput.focus();
+  closeSidebar();renderHistory();showToast('新建对话');
+}
+$('#newChatButton').addEventListener('click',newChat);
+$('#sidebarNewChat')?.addEventListener('click',newChat);
+$('#sidebarSearch')?.addEventListener('input',e=>{
+  const q=String(e.target.value||'').trim().toLowerCase();
+  $$('.chat-history').forEach(item=>{
+    const text=(item.textContent||'').toLowerCase();
+    item.hidden=!!q&&!text.includes(q);
+  });
+});
+$('#addProjectButton').addEventListener('click',()=>showToast('项目功能等待后续接入'));
+
+/* ---------- composer ---------- */
+promptInput.addEventListener('input',()=>{promptInput.style.height='auto';promptInput.style.height=Math.min(promptInput.scrollHeight,145)+'px'});
+promptInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
+sendButton.addEventListener('click',sendMessage);
 
 /* ---------- streaming (native bridge first, fetch fallback) ---------- */
 let pendingStream=null,pendingComplete=null,pendingTest=null,pendingQuery=null;
@@ -513,24 +575,6 @@ function handleEvent(name,data){
 }
 window.AndroidEvents={onEvent:handleEvent};
 
-async function fetchQueryModels(cfg){
-  let base=(cfg.base_url||'').trim().replace(/\/+$/,'');
-  base=base.replace(/\/v1\/chat\/completions$/i,'').replace(/\/chat\/completions$/i,'').replace(/\/v1beta$/i,'').replace(/\/v1$/i,'');
-  let models=[];
-  for(const path of ['/models','/v1/models']){
-    try{
-      const r=await fetch(base+path,{headers:{'Authorization':'Bearer '+cfg.api_key}});
-      if(r.ok){
-        const j=await r.json();
-        models=normalizeModelList((j.data||[]).map(m=>m&&m.id?m.id:m));
-        if(models.length)break;
-      }
-    }catch(e){}
-  }
-  if(!models.length)throw new Error('接口没有返回可用模型');
-  return {ok:true,models,message:`找到 ${models.length} 个模型`};
-}
-
 async function fetchStream(cfg,messages,handlers){
   const res=await fetch(apiUrl(cfg),{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.api_key},body:JSON.stringify(buildPayload(cfg,messages))});
   if(!res.ok){let msg='请求失败';try{const j=await res.json();msg=(j.error&&(j.error.message||j.error.code))||msg}catch(e){}throw new Error(msg)}
@@ -562,16 +606,30 @@ async function fetchTest(cfg){
   let models=[];
   try{
     const r=await fetch(cfg.base_url.replace(/\/+$/,'')+'/models',{headers:{'Authorization':'Bearer '+cfg.api_key}});
-    if(r.ok){
-      const j=await r.json();
-      models=normalizeModelList((j.data||[]).map(m=>m.id||m));
-    }
+    if(r.ok){const j=await r.json();models=normalizeModelList((j.data||[]).map(m=>m&&m.id?m.id:m))}
   }catch(e){}
   if(!models.length){
     const r=await fetch(apiUrl(cfg),{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.api_key},body:JSON.stringify({model:cfg.model,messages:[{role:'user',content:'ping'}],max_tokens:1,stream:false})});
     if(!r.ok){let msg='请求失败';try{const j=await r.json();msg=(j.error&&(j.error.message||j.error.code))||msg}catch(e){}throw new Error(msg)}
   }
   return {ok:true,message:models.length?`连接成功 · 检测到 ${models.length} 个模型`:'连接成功',models};
+}
+async function fetchQueryModels(cfg){
+  let base=(cfg.base_url||'').trim().replace(/\/+$/,'');
+  base=base.replace(/\/v1\/chat\/completions$/i,'').replace(/\/chat\/completions$/i,'').replace(/\/v1beta$/i,'').replace(/\/v1$/i,'');
+  let models=[];
+  for(const path of ['/models','/v1/models']){
+    try{
+      const r=await fetch(base+path,{headers:{'Authorization':'Bearer '+cfg.api_key}});
+      if(r.ok){
+        const j=await r.json();
+        models=normalizeModelList((j.data||[]).map(m=>m&&m.id?m.id:m));
+        if(models.length)break;
+      }
+    }catch(e){}
+  }
+  if(!models.length)throw new Error('接口没有返回可用模型');
+  return {ok:true,models,message:`找到 ${models.length} 个模型`};
 }
 
 /* ---------- chat ---------- */
@@ -589,26 +647,18 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
   const p0=$('.assistant-bubble p',turn);
   if(p0&&existingTurn)p0.classList.add('streaming-caret');
   let finalText='';
-  const normalizer=new StreamingTextNormalizer();
   try{
     await streamChat(cfg,msgs,{
       delta(t){
         finalText+=t;
-        const parts=normalizer.feed(t);
-        if(!parts.length)return;
         const p=$('.assistant-bubble p',turn);
-        parts.forEach(part=>{if(p)p.insertAdjacentText('beforeend',part)});
+        if(p)p.insertAdjacentText('beforeend',t);
         scrollBottom();
       },
       reasoning(){},
       done(){},
     });
   }finally{
-    const rest=normalizer.finish();
-    if(rest.length){
-      const p=$('.assistant-bubble p',turn);
-      rest.forEach(part=>{if(p)p.insertAdjacentText('beforeend',part)});
-    }
     const p=$('.assistant-bubble p',turn);
     if(p)p.classList.remove('streaming-caret');
   }
@@ -617,14 +667,14 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
   if(!assistantMsg.content)throw new Error('模型没有返回内容');
 }
 async function sendMessage(){
-  if(state.sending)return;
+  if(state.sending||state.shared)return;
   const text=promptInput.value.trim();if(!text){showToast('请输入消息');return}
   const cfg=getClientApi();
   if(!cfg){openSettings('api');showToast('请先配置 AI 接口');return}
   let conv=currentConversation();
   if(!conv)conv=newConversation();
-  const userMsg={id:uid(),role:'user',content:text,reasoning_summary:null,created_at:nowISO()};
-  const assistantMsg={id:uid(),role:'assistant',content:'',reasoning_summary:null,created_at:nowISO()};
+  const userMsg={id:uid(),role:'user',content:text,created_at:nowISO()};
+  const assistantMsg={id:uid(),role:'assistant',content:'',model:state.modelId||cfg.model,created_at:nowISO()};
   conv.messages.push(userMsg,assistantMsg);
   if(conv.title==='新对话')conv.title=text.slice(0,18);
   promptInput.value='';promptInput.style.height='auto';
@@ -659,7 +709,7 @@ async function handleAction(action,mid){
     const assistant=conv.messages[idx];
     const userMsg=[...conv.messages.slice(0,idx)].reverse().find(m=>m.role==='user');
     const userText=userMsg?userMsg.content:'';
-    assistant.content='';assistant.reasoning_summary=null;
+    assistant.content='';
     saveConversations();renderMessages(conv.messages);
     const existingTurn=$(`[data-message-id="${mid}"]`);
     state.sending=true;sendButton.disabled=true;
@@ -706,7 +756,7 @@ function shareText(text){
   else copyText(text);
 }
 
-/* ---------- settings modal ---------- */
+/* ---------- settings ---------- */
 function populateApiModelSelect(selectedValue='',sourceModels=null){
   const select=$('#apiModel');
   if(!select)return;
@@ -719,48 +769,65 @@ function populateApiModelSelect(selectedValue='',sourceModels=null){
     const option=document.createElement('option');
     option.value='';
     option.textContent='先查询模型';
-    option.disabled=true;
     option.selected=true;
     select.appendChild(option);
     select.disabled=true;
     return;
   }
-  models.forEach(id=>{
+  for(const id of models){
     const option=document.createElement('option');
     option.value=id;
     option.textContent=id;
     option.selected=id===selected;
     select.appendChild(option);
-  });
+  }
   select.disabled=false;
   select.value=selected||models[0];
 }
 function fillSettings(){
   const cfg=getStoredClientApiRaw()||{base_url:'https://api.deepseek.com',api_key:'',model:'',reasoning_parameter:'',models:[]};
-  $('#apiBaseUrl').value=cfg.base_url||'';$('#apiKey').value=cfg.api_key||'';
+  $('#apiBaseUrl').value=cfg.base_url||'';
+  $('#apiKey').value=cfg.api_key||'';
   $('#apiReasoningParam').value=sanitizeReasoningParameter(cfg.reasoning_parameter||'',cfg.models||[]);
-  populateApiModelSelect(cfg.model,cfg.models);
+  $('#apiModels').value=(cfg.models||[]).join('\n');
   const manifestInput=$('#apiUpdateManifest');
-  if(manifestInput)manifestInput.value=localStorage.getItem('app.updateManifestUrl')||DEFAULT_UPDATE_MANIFEST;
-  const modelsInput=$('#apiModels');
-  if(modelsInput)modelsInput.value=(cfg.models||[]).join('\n');
+  if(manifestInput)manifestInput.value=safeGet('app.updateManifestUrl',DEFAULT_UPDATE_MANIFEST);
+  populateApiModelSelect(cfg.model,cfg.models);
   const ok=!!getClientApi();
-  $('#apiStatus').textContent=ok?'已保存到当前设备':'';$('#apiStatus').className='settings-status'+(ok?' ok':'');
+  $('#apiStatus').textContent=ok?'已保存到当前设备':'';
+  $('#apiStatus').className='settings-status'+(ok?' ok':'');
 }
 function openSettings(tab='api'){
   closeSidebar();
   swipeStart=null;
-  fillSettings();settingsBackdrop.hidden=false;document.body.style.overflow='hidden';document.body.classList.add('settings-open');switchSettingsTab(tab);loadCurrentVersion();
+  fillSettings();
+  settingsBackdrop.hidden=false;
+  document.body.style.overflow='hidden';
+  document.body.classList.add('settings-open');
+  switchSettingsTab(tab);
+  loadCurrentVersion();
 }
-function closeSettings(){settingsBackdrop.hidden=true;document.body.style.overflow='';document.body.classList.remove('settings-open')}
+function closeSettings(){
+  settingsBackdrop.hidden=true;
+  document.body.style.overflow='';
+  document.body.classList.remove('settings-open');
+}
 function switchSettingsTab(tab){
-  $$('.settings-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));$$('.settings-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab));
+  $$('.settings-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
+  $$('.settings-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab));
 }
 window.__openSettings=openSettings;
 $('#sidebarSettings').addEventListener('click',()=>{closeSidebar();openSettings('api')});
 $('#bannerSettings').addEventListener('click',()=>openSettings('api'));
 $('#settingsClose').addEventListener('click',closeSettings);
-$('#settingsBack')?.addEventListener('click',closeSettings);
+function lockSettingsBackgroundGesture(event){
+  if(settingsBackdrop.hidden)return;
+  swipeStart=null;
+  event.stopPropagation();
+}
+settingsBackdrop.addEventListener('touchstart',lockSettingsBackgroundGesture,{capture:true,passive:true});
+settingsBackdrop.addEventListener('touchmove',lockSettingsBackgroundGesture,{capture:true,passive:true});
+settingsBackdrop.addEventListener('pointerdown',lockSettingsBackgroundGesture,{capture:true,passive:true});
 $('#fetchModelsButton')?.addEventListener('click',async()=>{
   const status=$('#apiStatus');
   const base_url=$('#apiBaseUrl').value.trim().replace(/\/+$/,'');
@@ -770,7 +837,8 @@ $('#fetchModelsButton')?.addEventListener('click',async()=>{
   const button=$('#fetchModelsButton');
   button.disabled=true;
   button.textContent='查询中…';
-  status.textContent='正在读取模型列表…';status.className='settings-status';
+  status.textContent='正在读取模型列表…';
+  status.className='settings-status';
   try{
     const res=await queryModels({base_url,api_key});
     const models=normalizeModelList(res.models||[]);
@@ -790,20 +858,11 @@ $('#fetchModelsButton')?.addEventListener('click',async()=>{
     button.textContent='查询模型';
   }
 });
+settingsBackdrop.addEventListener('click',e=>{if(e.target===settingsBackdrop)closeSettings()});
 $('#apiModels')?.addEventListener('input',()=>{
   const models=normalizeModelList($('#apiModels').value);
   populateApiModelSelect($('#apiModel')?.value||'',models);
 });
-function lockSettingsBackgroundGesture(event){
-  if(settingsBackdrop.hidden)return;
-  swipeStart=null;
-  event.stopPropagation();
-}
-settingsBackdrop.addEventListener('touchstart',lockSettingsBackgroundGesture,{capture:true,passive:true});
-settingsBackdrop.addEventListener('touchmove',lockSettingsBackgroundGesture,{capture:true,passive:true});
-settingsBackdrop.addEventListener('pointerdown',lockSettingsBackgroundGesture,{capture:true,passive:true});
-settingsBackdrop.addEventListener('click',e=>{if(e.target===settingsBackdrop)closeSettings()});
-$$('.settings-tab').forEach(b=>b.addEventListener('click',()=>switchSettingsTab(b.dataset.tab)));
 $('#toggleKey').addEventListener('click',()=>{
   const input=$('#apiKey'),show=input.type==='password';
   input.type=show?'text':'password';
@@ -824,7 +883,13 @@ $('#apiKey')?.addEventListener('focus',()=>{
 });
 function settingsFormValue(){
   const models=normalizeModelList($('#apiModels').value);
-  return {base_url:$('#apiBaseUrl').value.trim().replace(/\/+$/,''),api_key:$('#apiKey').value.trim(),model:$('#apiModel')?.value||'',reasoning_parameter:sanitizeReasoningParameter($('#apiReasoningParam').value,models),models};
+  return {
+    base_url:$('#apiBaseUrl').value.trim().replace(/\/+$/,''),
+    api_key:$('#apiKey').value.trim(),
+    model:$('#apiModel')?.value||'',
+    reasoning_parameter:sanitizeReasoningParameter($('#apiReasoningParam').value,models),
+    models,
+  };
 }
 function validateCfg(cfg){
   if(!/^https?:\/\//i.test(cfg.base_url))return 'API 地址格式不正确';
@@ -834,36 +899,50 @@ function validateCfg(cfg){
 }
 $('#saveApiButton').addEventListener('click',()=>{
   const cfg=settingsFormValue();
-  cfg.model=$('#apiModel')?.value||cfg.model;
-  const err=validateCfg(cfg),status=$('#apiStatus');
+  const err=validateCfg(cfg);
+  const status=$('#apiStatus');
   if(err){status.textContent=err;status.className='settings-status error';return}
   if(!cfg.models.includes(cfg.model))cfg.models=normalizeModelList([cfg.model,...cfg.models]);
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)localStorage.setItem('app.updateManifestUrl',manifestInput.value.trim());
-  saveClientApi(cfg);state.clientApi=cfg;
-  state.modelId=cfg.model;state.modelSource='local';
-  localStorage.setItem('ai.modelId',cfg.model);localStorage.setItem('ai.modelSource','local');
-  rebuildModelMenu();updateApiBanner();
-  apiBanner.hidden=true;apiBanner.classList.add('force-hidden');
-  status.textContent=`已保存 · 默认模型 ${cfg.model}`;status.className='settings-status ok';
+  saveClientApi(cfg);
+  state.clientApi=cfg;
+  state.modelId=cfg.model;
+  state.modelSource='local';
+  localStorage.setItem('ai.modelId',cfg.model);
+  localStorage.setItem('ai.modelSource','local');
+  rebuildModelMenu();
+  updateApiBanner();
+  apiBanner.hidden=true;
+  apiBanner.classList.add('force-hidden');
+  status.textContent=`已保存 · 默认模型 ${cfg.model}`;
+  status.className='settings-status ok';
   showToast('API 与模型设置已保存');
   setTimeout(closeSettings,260);
 });
 $('#testApiButton').addEventListener('click',async()=>{
-  const cfg=settingsFormValue(),err=validateCfg(cfg),status=$('#apiStatus');
+  const cfg=settingsFormValue();
+  const err=validateCfg(cfg);
+  const status=$('#apiStatus');
   if(err){status.textContent=err;status.className='settings-status error';return}
-  status.textContent='正在测试所选模型…';status.className='settings-status';$('#testApiButton').disabled=true;
+  status.textContent='正在测试所选模型…';
+  status.className='settings-status';
+  $('#testApiButton').disabled=true;
   try{
     await testApi({base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,reasoning_parameter:cfg.reasoning_parameter||''});
-    status.textContent=`连接成功 · ${cfg.model} 可用`;status.className='settings-status ok';
+    status.textContent=`连接成功 · ${cfg.model} 可用`;
+    status.className='settings-status ok';
     showToast('模型测试成功');
   }catch(e){
-    status.textContent=e.message||'模型测试失败';status.className='settings-status error';
-  }finally{$('#testApiButton').disabled=false}
+    status.textContent=e.message||'模型测试失败';
+    status.className='settings-status error';
+  }finally{
+    $('#testApiButton').disabled=false;
+  }
 });
 
-/* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.5.9';
+/* ---------- update ---------- */
+const APP_CURRENT_VERSION='2.6.0';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
@@ -915,7 +994,7 @@ function setUpdateProgress(percent,text=''){
 function loadCurrentVersion(){
   const platform=detectUpdatePlatform();
   $('#currentVersionText').textContent=`当前版本 ${APP_CURRENT_VERSION}（${platform==='android'?'Android':platform}）`;
-  const manifestUrl=(localStorage.getItem('app.updateManifestUrl')||'').trim()||DEFAULT_UPDATE_MANIFEST;
+  const manifestUrl=(safeGet('app.updateManifestUrl')||'').trim()||DEFAULT_UPDATE_MANIFEST;
   $('#updateState').textContent=manifestUrl?'可检查在线更新':'未配置更新源';
   availableUpdate=null;
   updateRetryDone=false;
@@ -926,12 +1005,13 @@ async function checkForUpdates(){
   if(updateBusy)return;
   updateBusy=true;
   availableUpdate=null;
+  updateRetryDone=false;
   setUpdateProgress(null);
   setUpdateButton({label:'检查中…',loading:true});
   $('#updateState').textContent='正在检查更新…';
   try{
     const platform=detectUpdatePlatform();
-    const manifestUrl=(localStorage.getItem('app.updateManifestUrl')||'').trim()||DEFAULT_UPDATE_MANIFEST;
+    const manifestUrl=(safeGet('app.updateManifestUrl')||'').trim()||DEFAULT_UPDATE_MANIFEST;
     if(!manifestUrl){
       $('#updateState').textContent='未配置更新源 · 安装新版 APK 即可更新';
       setUpdateButton({label:'检查更新'});
@@ -1080,7 +1160,108 @@ window.addEventListener('native-update-state',event=>{
   }
 });
 
-/* ---------- v5 tactile / visual feedback ---------- */
+/* ---------- wallpaper & appearance ---------- */
+const WALL_DB='ai-chat-assets',WALL_STORE='files',WALL_KEY='wallpaper';let wallpaperObjectURL=null;
+function openWallDB(){return new Promise((resolve,reject)=>{const req=indexedDB.open(WALL_DB,1);req.onupgradeneeded=()=>req.result.createObjectStore(WALL_STORE);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
+async function putWallpaper(blob){const db=await openWallDB();await new Promise((resolve,reject)=>{const tx=db.transaction(WALL_STORE,'readwrite');tx.objectStore(WALL_STORE).put(blob,WALL_KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}
+async function getWallpaper(){const db=await openWallDB();const blob=await new Promise((resolve,reject)=>{const tx=db.transaction(WALL_STORE,'readonly'),r=tx.objectStore(WALL_STORE).get(WALL_KEY);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)});db.close();return blob}
+async function deleteWallpaper(){const db=await openWallDB();await new Promise((resolve,reject)=>{const tx=db.transaction(WALL_STORE,'readwrite');tx.objectStore(WALL_STORE).delete(WALL_KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}
+const WALLPAPER_PRESETS={
+  dawn:'radial-gradient(circle at 72% 18%,rgba(255,232,198,.82),transparent 24%),linear-gradient(160deg,#9bbbd2 0%,#d8c3b7 48%,#e7b996 100%)',
+  forest:'radial-gradient(circle at 55% 18%,rgba(213,238,205,.55),transparent 20%),linear-gradient(155deg,#789b83 0%,#385c50 52%,#1e3b36 100%)',
+  night:'radial-gradient(circle at 68% 16%,rgba(142,166,233,.38),transparent 18%),linear-gradient(160deg,#182746 0%,#243d68 55%,#101b35 100%)',
+  mountain:'radial-gradient(circle at 46% 22%,rgba(255,255,255,.38),transparent 18%),linear-gradient(155deg,#91afbc 0%,#6c8890 48%,#385e61 100%)',
+  cloud:'radial-gradient(circle at 30% 20%,rgba(255,230,230,.88),transparent 28%),linear-gradient(155deg,#9fbdd5 0%,#d3b9c6 48%,#f1c5a8 100%)',
+  mist:'radial-gradient(circle at 75% 22%,rgba(255,255,255,.58),transparent 22%),linear-gradient(160deg,#d7e5e7 0%,#b9ced0 52%,#82a9a8 100%)',
+};
+function markWallpaperPreset(name=''){
+  $$('[data-wallpaper-preset]').forEach(btn=>{
+    btn.classList.toggle('selected',btn.dataset.wallpaperPreset===name);
+  });
+}
+function applyWallpaperPreset(name){
+  const gradient=WALLPAPER_PRESETS[name]||'';
+  const layer=$('#wallpaperLayer');
+  const preview=$('#wallpaperPreview');
+  if(wallpaperObjectURL){
+    URL.revokeObjectURL(wallpaperObjectURL);
+    wallpaperObjectURL=null;
+  }
+  layer.style.backgroundImage=gradient;
+  if(preview)preview.style.backgroundImage=gradient;
+  if(name){
+    localStorage.setItem('appearance.preset',name);
+  }else{
+    localStorage.removeItem('appearance.preset');
+  }
+  markWallpaperPreset(name);
+}
+function applyWallpaperBlob(blob){
+  if(wallpaperObjectURL)URL.revokeObjectURL(wallpaperObjectURL);
+  const preview=$('#wallpaperPreview');
+  if(!blob){
+    wallpaperObjectURL=null;
+    return false;
+  }
+  wallpaperObjectURL=URL.createObjectURL(blob);
+  const image=`url("${wallpaperObjectURL}")`;
+  $('#wallpaperLayer').style.backgroundImage=image;
+  if(preview)preview.style.backgroundImage=image;
+  localStorage.removeItem('appearance.preset');
+  markWallpaperPreset('');
+  return true;
+}
+async function loadWallpaper(){
+  try{
+    const blob=await getWallpaper();
+    if(blob){
+      applyWallpaperBlob(blob);
+      return;
+    }
+    const preset=localStorage.getItem('appearance.preset')||'dawn';
+    applyWallpaperPreset(preset);
+  }catch{
+    applyWallpaperPreset('dawn');
+  }
+}
+$('#wallpaperInput').addEventListener('change',async e=>{
+  const file=e.target.files?.[0];
+  if(!file)return;
+  if(!file.type.startsWith('image/')){showToast('请选择图片文件');return}
+  try{
+    await putWallpaper(file);
+    applyWallpaperBlob(file);
+    showToast('背景壁纸已更新');
+  }catch{
+    showToast('壁纸保存失败');
+  }
+});
+$$('[data-wallpaper-preset]').forEach(btn=>{
+  btn.addEventListener('click',async()=>{
+    const preset=btn.dataset.wallpaperPreset;
+    try{await deleteWallpaper()}catch(e){}
+    applyWallpaperPreset(preset);
+    showToast('壁纸已切换');
+  });
+});
+$('#resetWallpaper').addEventListener('click',async()=>{
+  try{await deleteWallpaper()}catch(e){}
+  localStorage.removeItem('appearance.preset');
+  applyWallpaperPreset('dawn');
+  showToast('已恢复默认背景');
+});
+function applyAppearance(){
+  const dim=Number(localStorage.getItem('appearance.dim')||8),glass=Number(localStorage.getItem('appearance.glass')||12);
+  document.documentElement.style.setProperty('--wallpaper-dim',String(dim/100));
+  document.documentElement.style.setProperty('--glass-a',String(glass/100));
+  document.documentElement.style.setProperty('--glass-a-strong',String(Math.min(.52,glass/100+.06)));
+  $('#wallpaperDim').value=dim;$('#dimOutput').textContent=`${dim}%`;
+  $('#glassOpacity').value=glass;$('#glassOutput').textContent=`${glass}%`;
+}
+$('#wallpaperDim').addEventListener('input',e=>{const v=Number(e.target.value);localStorage.setItem('appearance.dim',String(v));document.documentElement.style.setProperty('--wallpaper-dim',String(v/100));$('#dimOutput').textContent=`${v}%`});
+$('#glassOpacity').addEventListener('input',e=>{const v=Number(e.target.value);localStorage.setItem('appearance.glass',String(v));document.documentElement.style.setProperty('--glass-a',String(v/100));document.documentElement.style.setProperty('--glass-a-strong',String(Math.min(.52,v/100+.06)));$('#glassOutput').textContent=`${v}%`});
+
+/* ---------- tactile feedback ---------- */
 function canVibrate(){
   return typeof navigator.vibrate==='function'&&!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 }
@@ -1107,7 +1288,7 @@ function addRipple(el,event){
   setTimeout(()=>ripple.remove(),520);
 }
 function bindInteractionFeedback(root=document){
-  const selector='button,.select-control,.side-item,.choose-wallpaper,.reasoning-toggle';
+  const selector='button,.select-control,.side-item,.choose-wallpaper';
   const nodes=[];
   if(root.matches?.(selector))nodes.push(root);
   root.querySelectorAll?.(selector).forEach(n=>nodes.push(n));
@@ -1136,49 +1317,6 @@ const interactionObserver=new MutationObserver(records=>{
 });
 interactionObserver.observe(document.body,{childList:true,subtree:true});
 
-/* ---------- wallpaper & appearance ---------- */
-const WALL_DB='ai-chat-assets',WALL_STORE='files',WALL_KEY='wallpaper';let wallpaperObjectURL=null;
-function openWallDB(){return new Promise((resolve,reject)=>{const req=indexedDB.open(WALL_DB,1);req.onupgradeneeded=()=>req.result.createObjectStore(WALL_STORE);req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)})}
-async function putWallpaper(blob){const db=await openWallDB();await new Promise((resolve,reject)=>{const tx=db.transaction(WALL_STORE,'readwrite');tx.objectStore(WALL_STORE).put(blob,WALL_KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}
-async function getWallpaper(){const db=await openWallDB();const blob=await new Promise((resolve,reject)=>{const tx=db.transaction(WALL_STORE,'readonly'),r=tx.objectStore(WALL_STORE).get(WALL_KEY);r.onsuccess=()=>resolve(r.result||null);r.onerror=()=>reject(r.error)});db.close();return blob}
-async function deleteWallpaper(){const db=await openWallDB();await new Promise((resolve,reject)=>{const tx=db.transaction(WALL_STORE,'readwrite');tx.objectStore(WALL_STORE).delete(WALL_KEY);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}
-function applyWallpaperBlob(blob){
-  if(wallpaperObjectURL)URL.revokeObjectURL(wallpaperObjectURL);
-  const preview=$('#wallpaperPreview');
-  if(!blob){
-    wallpaperObjectURL=null;
-    $('#wallpaperLayer').style.backgroundImage='';
-    if(preview)preview.style.backgroundImage='';
-    return;
-  }
-  wallpaperObjectURL=URL.createObjectURL(blob);
-  const image=`url("${wallpaperObjectURL}")`;
-  $('#wallpaperLayer').style.backgroundImage=image;
-  if(preview)preview.style.backgroundImage=image;
-}
-async function loadWallpaper(){try{applyWallpaperBlob(await getWallpaper())}catch{}}
-$('#wallpaperInput').addEventListener('change',async e=>{
-  const file=e.target.files?.[0];if(!file)return;
-  if(!file.type.startsWith('image/')){showToast('请选择图片文件');return}
-  try{await putWallpaper(file);applyWallpaperBlob(file);showToast('背景壁纸已更新')}catch{showToast('壁纸保存失败')}
-});
-$('#resetWallpaper').addEventListener('click',async()=>{try{await deleteWallpaper();applyWallpaperBlob(null);showToast('已恢复默认背景')}catch{}});
-function applyAppearance(){
-  const dim=Number(localStorage.getItem('appearance.dim')||8),glass=Number(localStorage.getItem('appearance.glass')||12);
-  document.documentElement.style.setProperty('--wallpaper-dim',String(dim/100));
-  document.documentElement.style.setProperty('--glass-a',String(glass/100));
-  document.documentElement.style.setProperty('--glass-a-strong',String(Math.min(.52,glass/100+.06)));
-  $('#wallpaperDim').value=dim;$('#dimOutput').textContent=`${dim}%`;
-  $('#glassOpacity').value=glass;$('#glassOutput').textContent=`${glass}%`;
-}
-$('#wallpaperDim').addEventListener('input',e=>{const v=Number(e.target.value);localStorage.setItem('appearance.dim',String(v));document.documentElement.style.setProperty('--wallpaper-dim',String(v/100));$('#dimOutput').textContent=`${v}%`});
-$('#glassOpacity').addEventListener('input',e=>{const v=Number(e.target.value);localStorage.setItem('appearance.glass',String(v));document.documentElement.style.setProperty('--glass-a',String(v/100));document.documentElement.style.setProperty('--glass-a-strong',String(Math.min(.52,v/100+.06)));$('#glassOutput').textContent=`${v}%`});
-
-/* ---------- composer ---------- */
-promptInput.addEventListener('input',()=>{promptInput.style.height='auto';promptInput.style.height=Math.min(promptInput.scrollHeight,145)+'px'});
-promptInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
-sendButton.addEventListener('click',sendMessage);
-
 /* ---------- init ---------- */
 (async function init(){
   applyAppearance();
@@ -1191,8 +1329,16 @@ sendButton.addEventListener('click',sendMessage);
 })();
 
 window.addEventListener('storage',e=>{
-  if(e.key==='ai.clientApi'){state.clientApi=getClientApi();rebuildModelMenu();updateApiBanner()}
+  if(e.key==='ai.clientApi'){
+    state.clientApi=getClientApi();
+    rebuildModelMenu();
+    updateApiBanner();
+  }
 });
 document.addEventListener('visibilitychange',()=>{
-  if(!document.hidden){state.clientApi=getClientApi();rebuildModelMenu();updateApiBanner()}
+  if(!document.hidden){
+    state.clientApi=getClientApi();
+    rebuildModelMenu();
+    updateApiBanner();
+  }
 });

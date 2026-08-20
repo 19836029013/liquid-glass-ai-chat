@@ -1,11 +1,11 @@
 {
-  "version": "2.5.9",
-  "notes": "移除全部内置提示词：聊天不再发送任何系统提示词，深度思考摘要及其额外提示请求一并删除。",
+  "version": "2.6.0",
+  "notes": "v10 视觉重构：模型/思考等级底部 Sheet、AI 回复显示模型名、侧栏搜索与新建对话、6 个内置壁纸预设、发送按钮纸飞机样式。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "ed05464f33ccb61c95d06465504995d70ef4c29d7569a7bcd0505daeb0c6a066"
+      "sha256": "e57c9d4771914dd96d044b561c3945393bc70e2ff49780f5ed66568a34a52b5c"
     }
   }
 }
