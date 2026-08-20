@@ -640,9 +640,36 @@ function shareText(text){
 }
 
 /* ---------- settings modal ---------- */
+function populateApiModelSelect(selectedValue='',sourceModels=null){
+  const select=$('#apiModel');
+  if(!select)return;
+  const currentCfg=getClientApi();
+  const models=normalizeModelList(sourceModels||currentCfg?.models||[]);
+  const current=selectedValue||select.value||currentCfg?.model||'';
+  const all=normalizeModelList([current,...models]);
+  select.innerHTML='';
+  if(!all.length){
+    const option=document.createElement('option');
+    option.value='';
+    option.textContent='先查询模型';
+    option.disabled=true;
+    option.selected=true;
+    select.appendChild(option);
+    return;
+  }
+  all.forEach(id=>{
+    const option=document.createElement('option');
+    option.value=id;
+    option.textContent=id;
+    if(id===current)option.selected=true;
+    select.appendChild(option);
+  });
+  if(!all.includes(current))select.value=all[0];
+}
 function fillSettings(){
   const cfg=getClientApi()||{base_url:'https://api.deepseek.com',api_key:'',model:'deepseek-chat',reasoning_parameter:'',models:[]};
-  $('#apiBaseUrl').value=cfg.base_url||'';$('#apiKey').value=cfg.api_key||'';$('#apiModel').value=cfg.model||'';$('#apiReasoningParam').value=cfg.reasoning_parameter||'';
+  $('#apiBaseUrl').value=cfg.base_url||'';$('#apiKey').value=cfg.api_key||'';$('#apiReasoningParam').value=cfg.reasoning_parameter||'';
+  populateApiModelSelect(cfg.model,cfg.models);
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)manifestInput.value=localStorage.getItem('app.updateManifestUrl')||DEFAULT_UPDATE_MANIFEST;
   const modelsInput=$('#apiModels');
@@ -651,9 +678,9 @@ function fillSettings(){
   $('#apiStatus').textContent=ok?'已保存到当前设备':'';$('#apiStatus').className='settings-status'+(ok?' ok':'');
 }
 function openSettings(tab='api'){
-  fillSettings();settingsBackdrop.hidden=false;document.body.style.overflow='hidden';switchSettingsTab(tab);loadCurrentVersion();
+  fillSettings();settingsBackdrop.hidden=false;document.body.style.overflow='hidden';document.body.classList.add('settings-open');switchSettingsTab(tab);loadCurrentVersion();
 }
-function closeSettings(){settingsBackdrop.hidden=true;document.body.style.overflow=''}
+function closeSettings(){settingsBackdrop.hidden=true;document.body.style.overflow='';document.body.classList.remove('settings-open')}
 function switchSettingsTab(tab){
   $$('.settings-tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));$$('.settings-panel').forEach(p=>p.classList.toggle('active',p.dataset.panel===tab));
 }
@@ -662,6 +689,7 @@ $('#sidebarSettings').addEventListener('click',()=>{closeSidebar();openSettings(
 $('#bannerSettings').addEventListener('click',()=>openSettings('api'));
 $('#settingsClose').addEventListener('click',closeSettings);
 $('#settingsBack')?.addEventListener('click',closeSettings);
+$('#fetchModelsButton')?.addEventListener('click',()=>$('#testApiButton')?.click());
 settingsBackdrop.addEventListener('click',e=>{if(e.target===settingsBackdrop)closeSettings()});
 $$('.settings-tab').forEach(b=>b.addEventListener('click',()=>switchSettingsTab(b.dataset.tab)));
 $('#toggleKey').addEventListener('click',()=>{
@@ -670,7 +698,7 @@ $('#toggleKey').addEventListener('click',()=>{
   $('#toggleKey').textContent=show?'◌':'◉';
   $('#toggleKey').setAttribute('aria-label',show?'隐藏 API Key':'显示 API Key');
 });
-function settingsFormValue(){return {base_url:$('#apiBaseUrl').value.trim().replace(/\/+$/,''),api_key:$('#apiKey').value.trim(),model:$('#apiModel').value.trim(),reasoning_parameter:$('#apiReasoningParam').value.trim(),models:normalizeModelList($('#apiModels').value)}}
+function settingsFormValue(){return {base_url:$('#apiBaseUrl').value.trim().replace(/\/+$/,''),api_key:$('#apiKey').value.trim(),model:$('#apiModel')?.value||'',reasoning_parameter:$('#apiReasoningParam').value.trim(),models:normalizeModelList($('#apiModels').value)}}
 function validateCfg(cfg){
   if(!/^https?:\/\//i.test(cfg.base_url))return 'API 地址格式不正确';
   if(!cfg.api_key)return '请填写 API Key';
@@ -678,7 +706,9 @@ function validateCfg(cfg){
   return '';
 }
 $('#saveApiButton').addEventListener('click',()=>{
-  const cfg=settingsFormValue(),err=validateCfg(cfg),status=$('#apiStatus');
+  const cfg=settingsFormValue();
+  cfg.model=$('#apiModel')?.value||cfg.model;
+  const err=validateCfg(cfg),status=$('#apiStatus');
   if(err){status.textContent=err;status.className='settings-status error';return}
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)localStorage.setItem('app.updateManifestUrl',manifestInput.value.trim());
@@ -689,6 +719,23 @@ $('#saveApiButton').addEventListener('click',()=>{
   apiBanner.hidden=true;apiBanner.classList.add('force-hidden');
   showToast('API 设置已保存');
   setTimeout(closeSettings,220);
+  (async()=>{
+    try{
+      const requestCfg={base_url:cfg.base_url,api_key:cfg.api_key,model:cfg.model,reasoning_parameter:cfg.reasoning_parameter||''};
+      const res=await testApi(requestCfg);
+      const detected=normalizeModelList(res.models||[]);
+      if(!detected.length)return;
+      const latest=getClientApi();
+      if(!latest)return;
+      latest.models=normalizeModelList([...(latest.models||[]),...detected]);
+      latest.model=latest.model||detected[0]||latest.model;
+      saveClientApi(latest);
+      state.clientApi=latest;
+      populateApiModelSelect(latest.model,latest.models);
+      rebuildModelMenu();
+      showToast(`已同步 ${detected.length} 个可用模型`);
+    }catch(e){}
+  })();
 });
 $('#testApiButton').addEventListener('click',async()=>{
   const cfg=settingsFormValue(),err=validateCfg(cfg),status=$('#apiStatus');
@@ -696,28 +743,24 @@ $('#testApiButton').addEventListener('click',async()=>{
   status.textContent='正在测试连接…';status.className='settings-status';$('#testApiButton').disabled=true;
   try{
     const res=await testApi(cfg);
-    const detected=normalizeModelList(res.models||[]);
-    if(detected.length){
-      $('#apiModels').value=detected.join('\n');
-      status.textContent=`连接成功 · 检测到 ${detected.length} 个模型`;status.className='settings-status ok';
-      const latest=getClientApi();
-      if(latest){
-        latest.models=normalizeModelList([...(latest.models||[]),...detected]);
-        saveClientApi(latest);
-        state.clientApi=latest;
-        rebuildModelMenu();
-        showToast(`已同步 ${detected.length} 个可用模型`);
-      }
+    const models=normalizeModelList(res.models||[]);
+    if(models.length){
+      $('#apiModels').value=models.join('\n');
+      populateApiModelSelect(cfg.model,models);
+      if(!cfg.model||!models.includes(cfg.model))$('#apiModel').value=models[0];
+      status.textContent=`连接成功 · 检测到 ${models.length} 个模型`;
     }else{
-      status.textContent=res.message||'连接成功 · 未读取到模型列表，可手动填写可用模型';status.className='settings-status ok';
+      populateApiModelSelect(cfg.model,[]);
+      status.textContent='连接成功 · 未读取到模型列表，可手动填写可用模型';
     }
+    status.className='settings-status ok';
   }catch(e){
     status.textContent=e.message||'连接失败';status.className='settings-status error';
   }finally{$('#testApiButton').disabled=false}
 });
 
 /* ---------- v5 update check & install ---------- */
-const APP_CURRENT_VERSION='2.3.0';
+const APP_CURRENT_VERSION='2.4.0';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

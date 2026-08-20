@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#dfe7eb" />
-  <title>AI Chat</title>
+  <title>鲸鱼娘</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
@@ -128,11 +128,12 @@
               <span class="settings-chevron">›</span>
             </label>
 
-            <label class="settings-row">
+            <label class="settings-row model-select-row">
               <span class="row-label">默认模型</span>
-              <input id="apiModel" autocomplete="off" placeholder="deepseek-chat" />
-              <span class="settings-chevron">›</span>
+              <select id="apiModel" aria-label="默认模型"></select>
+              <button id="fetchModelsButton" class="inline-action-button" type="button">查询模型</button>
             </label>
+            <p class="settings-inline-hint">先输入 API 地址和 Key，再点“查询模型”。这里决定新对话默认使用哪个模型；聊天页底部仍可随时切换模型。</p>
 
             <details class="advanced-settings">
               <summary>高级兼容设置</summary>

@@ -874,3 +874,101 @@ button[disabled] {
   .advanced-row.model-catalog-row{grid-template-columns:1fr}
   .advanced-row.model-catalog-row span{margin-bottom:4px}
 }
+
+
+/* =========================================================
+   v7 — settings model query + duplicate UI cleanup
+   ========================================================= */
+.model-select-row{
+  grid-template-columns:minmax(100px,160px) minmax(0,1fr) auto;
+}
+.model-select-row select{
+  width:100%;
+  min-width:0;
+  border:0;
+  outline:none;
+  background:transparent;
+  color:#46535d;
+  text-align:right;
+  font-size:17px;
+  padding:10px 2px;
+  appearance:none;
+  -webkit-appearance:none;
+}
+.inline-action-button{
+  min-height:36px;
+  padding:0 14px;
+  border-radius:18px;
+  border:1px solid rgba(255,255,255,.54);
+  background:linear-gradient(145deg,rgba(255,255,255,.28),rgba(255,255,255,.12));
+  color:#2f7c69;
+  font-size:13px;
+  white-space:nowrap;
+  box-shadow:0 8px 20px rgba(48,64,74,.05), inset 0 1px 0 rgba(255,255,255,.52);
+  -webkit-backdrop-filter:blur(18px) saturate(135%);
+  backdrop-filter:blur(18px) saturate(135%);
+}
+.settings-inline-hint{
+  margin:10px 4px 0;
+  color:#70808a;
+  font-size:12px;
+  line-height:1.6;
+}
+
+/* When settings is open, hide the underlying app chrome to avoid duplicate buttons. */
+body.settings-open .floating-nav,
+body.settings-open .composer{
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transform:translateY(10px);
+}
+body.settings-open .chat-list{
+  filter:blur(1px);
+}
+
+/* The send button should remain a clean circle, not stretched by the grid. */
+.send-button{
+  width:58px!important;
+  height:58px!important;
+  min-width:58px;
+  min-height:58px;
+  aspect-ratio:1/1;
+  justify-self:end;
+  align-self:center;
+  padding:0!important;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  box-shadow:
+    0 14px 30px rgba(78,168,146,.20),
+    inset 0 1px 0 rgba(255,255,255,.58);
+  background:linear-gradient(145deg,rgba(172,228,214,.88),rgba(116,194,172,.92));
+}
+.send-button span,.send-button svg{
+  transform:translateY(-.5px);
+}
+
+@media(max-width:700px){
+  .model-select-row{
+    grid-template-columns:96px minmax(0,1fr) auto;
+  }
+  .model-select-row select{
+    font-size:15px;
+  }
+  .inline-action-button{
+    min-height:34px;
+    padding:0 11px;
+    font-size:12px;
+  }
+  .settings-inline-hint{
+    margin:8px 2px 0;
+    font-size:11.5px;
+  }
+  .send-button{
+    width:53px!important;
+    height:53px!important;
+    min-width:53px;
+    min-height:53px;
+  }
+}
