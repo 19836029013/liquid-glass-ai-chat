@@ -1586,8 +1586,9 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.12';
+const APP_CURRENT_VERSION='2.7.13';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
+const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
 let updateBusy=false;
 let updateRetryDone=false;
@@ -1606,6 +1607,11 @@ function compareVersions(a,b){
     if(x!==y)return x>y?1:-1;
   }
   return 0;
+}
+function fetchWithTimeout(url,ms=8000){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(),ms);
+  return fetch(url,{cache:'no-store',signal:ctrl.signal}).finally(()=>clearTimeout(timer));
 }
 function setUpdateButton({label='检查更新',mode='check',loading=false}={}){
   const btn=$('#checkUpdateButton');
@@ -1663,9 +1669,19 @@ async function checkForUpdates(){
       return;
     }
     const sep=manifestUrl.includes('?')?'&':'?';
-    const res=await fetch(manifestUrl+sep+'t='+Date.now(),{cache:'no-store'});
-    if(!res.ok)throw new Error('HTTP '+res.status);
-    const j=await res.json();
+    const directUrl=manifestUrl+sep+'t='+Date.now();
+    const urls=[directUrl,...MIRROR_PREFIXES.map(p=>p+directUrl)];
+    let j=null;
+    let lastErr=null;
+    for(const u of urls){
+      try{
+        const res=await fetchWithTimeout(u,8000);
+        if(!res.ok)throw new Error('HTTP '+res.status);
+        j=await res.json();
+        break;
+      }catch(e){lastErr=e}
+    }
+    if(!j)throw lastErr||new Error('无法连接更新源');
     const remote=String(j.version||'').trim();
     const notes=String(j.notes||'');
     const platforms=j.platforms||{};
@@ -1727,7 +1743,8 @@ async function startUpdate(){
   }
   const info=availableUpdate;
   const platform=info.platform||detectUpdatePlatform();
-  const candidates=[info.download_url,info.mirror_url,info.store_url,info.web_url].filter(Boolean);
+  const base=info.download_url;
+  const candidates=[base,...(base?MIRROR_PREFIXES.map(p=>p+base):[]),info.store_url,info.web_url].filter(Boolean);
   updateUrlIndex=0;
   updateAttempts=0;
   const url=candidates[0];
@@ -1788,7 +1805,8 @@ window.addEventListener('native-update-state',event=>{
     setUpdateButton({label:'继续更新',mode:'update'});
   }else if(detail.state==='error'){
     if(availableUpdate&&updateAttempts<3){
-      const candidates=[availableUpdate.download_url,availableUpdate.mirror_url,availableUpdate.store_url,availableUpdate.web_url].filter(Boolean);
+      const base=availableUpdate.download_url;
+      const candidates=[base,...(base?MIRROR_PREFIXES.map(p=>p+base):[]),availableUpdate.store_url,availableUpdate.web_url].filter(Boolean);
       if(candidates.length>1){
         updateAttempts+=1;
         updateUrlIndex=(updateUrlIndex+1)%candidates.length;

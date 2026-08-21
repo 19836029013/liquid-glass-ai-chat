@@ -1,11 +1,11 @@
 {
-  "version": "2.7.12",
-  "notes": "深度思考恢复：直接实时显示模型真实思考过程（边思考边滚动展示，不额外发送任何提示词）；需使用支持思考输出的模型（如 deepseek-reasoner、deepseek-v4 并开启思考）。",
+  "version": "2.7.13",
+  "notes": "国内无 VPN 也能更新：更新清单和安装包都自动走国内镜像回退（gh-proxy / ghfast），直连失败自动切换，无需翻墙。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "487d1289ad3cd55cb13df6228338073c50fb5a8fe9b493bc2a0a8534228341ff"
+      "sha256": "15890dd5900ec10c65521c63e39ff7d88ff2e224b3e4efb7858c0a5dcc573245"
     }
   }
 }
