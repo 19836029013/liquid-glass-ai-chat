@@ -1367,7 +1367,7 @@ function buildShareCard(conv,assistantMsg){
   ctx.textAlign='left';
   ctx.fillStyle='#1d3a33';
   ctx.font='700 44px "PingFang SC","Microsoft YaHei",sans-serif';
-  ctx.fillText('✦ 鲸鱼娘',PAD,86);
+  ctx.fillText('✦ 英子起飞',PAD,86);
   ctx.font='26px "PingFang SC","Microsoft YaHei",sans-serif';
   ctx.fillStyle='#4d6b63';
   const model=modelDisplayName(assistantMsg);
@@ -1404,7 +1404,7 @@ function buildShareCard(conv,assistantMsg){
   ctx.textAlign='center';
   ctx.fillStyle='#5b6f6a';
   ctx.font='24px "PingFang SC","Microsoft YaHei",sans-serif';
-  ctx.fillText('—— 来自 鲸鱼娘 AI 聊天 ——',W/2,H-34);
+  ctx.fillText('—— 来自 英子起飞 AI 聊天 ——',W/2,H-34);
   return canvas.toDataURL('image/png');
 }
 function shareAsCard(conv,assistantMsg){
@@ -1759,7 +1759,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.1';
+const APP_CURRENT_VERSION='2.8.2';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

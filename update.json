@@ -1,11 +1,11 @@
 {
-  "version": "2.8.1",
-  "notes": "群聊升级：侧边栏四栏分类（项目/群聊/置顶/最近）；同步改用国内可达的 ntfy 通道；收到对方消息弹出系统横幅通知。",
+  "version": "2.8.2",
+  "notes": "软件更名为“英子起飞”：桌面图标名、页面标题、侧栏品牌、分享卡片署名全部更新。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "4a411ab9d6bf3c95b1cc55cd29bcd1bc8d57e2965d0e99762522065e4ad83544"
+      "sha256": "5710d4619b39d2d3becd05cc7f5440ca49bf0c5acb1c0b11ba167eddfc48a961"
     }
   }
 }

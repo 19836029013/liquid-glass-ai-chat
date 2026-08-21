@@ -644,7 +644,7 @@ public class MainActivity extends Activity {
                         send.putExtra(Intent.EXTRA_SUBJECT, title == null ? "" : title);
                         send.putExtra(Intent.EXTRA_TEXT, text == null ? "" : text);
                         send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                        startActivity(Intent.createChooser(send, "分享鲸鱼娘卡片"));
+                        startActivity(Intent.createChooser(send, "分享英子起飞卡片"));
                     } catch (Exception ignored) {
                     }
                 });
