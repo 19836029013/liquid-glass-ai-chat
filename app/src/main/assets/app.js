@@ -2202,8 +2202,9 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
   showToast('用户名已保存');
 });
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.26';
-const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
+const APP_CURRENT_VERSION='2.8.27';
+const DEFAULT_UPDATE_MANIFEST='https://api.github.com/repos/19836029013/liquid-glass-ai-chat/contents/update.json?ref=main';
+const RAW_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
 let updateBusy=false;
@@ -2287,7 +2288,8 @@ async function checkForUpdates(){
     }
     const sep=manifestUrl.includes('?')?'&':'?';
     const directUrl=manifestUrl+sep+'t='+Date.now();
-    const urls=[directUrl,...MIRROR_PREFIXES.map(p=>p+directUrl)];
+    const rawUrl=RAW_UPDATE_MANIFEST+sep+'t='+Date.now();
+    const urls=[directUrl,...MIRROR_PREFIXES.map(p=>p+directUrl),rawUrl,...MIRROR_PREFIXES.map(p=>p+rawUrl)];
     let j=null;
     let lastErr=null;
     for(const u of urls){
@@ -2295,6 +2297,14 @@ async function checkForUpdates(){
         const res=await fetchWithTimeout(u,8000);
         if(!res.ok)throw new Error('HTTP '+res.status);
         j=await res.json();
+        if(j&&typeof j.content==='string'){
+          try{
+            const bin=atob(String(j.content).replace(/\s/g,''));
+            const bytes=new Uint8Array(bin.length);
+            for(let i=0;i<bin.length;i++)bytes[i]=bin.charCodeAt(i)&0xff;
+            j=JSON.parse(new TextDecoder().decode(bytes));
+          }catch(e){}
+        }
         break;
       }catch(e){lastErr=e}
     }

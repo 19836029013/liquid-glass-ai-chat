@@ -1,14 +1,15 @@
 {
-  "version": "2.8.26",
-  "notes": "修复群聊页首次点击菜单无响应（进入页面即可打开侧栏）；同步服务增加请求日志便于排查。",
+  "version": "2.8.27",
+  "notes": "更新检查改用实时接口并增加备用线路，所有设备会同时看到新版本，不再出现手机和平板不一致。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "dd6dfbf215a1dec299eb416bbb3467c153557ea725dbd02e3fc17761f11f35a8"
+      "sha256": "24c9ab793ccbc3282c3a7014de1edf14250864043ceae39339937c5932064855"
     }
   }
 }
+
 
 
 
