@@ -1943,7 +1943,7 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.13';
+const APP_CURRENT_VERSION='2.8.14';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
@@ -2353,6 +2353,7 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
   renderProjects();
   renderHistory();
   newChat();
+  if(new URLSearchParams(location.search).get('openSidebar')==='1')openSidebar();
 })();
 
 window.addEventListener('storage',e=>{

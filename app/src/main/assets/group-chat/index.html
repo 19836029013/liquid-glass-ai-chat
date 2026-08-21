@@ -45,11 +45,11 @@
     <section class="composer glass">
       <div class="input-shell">
         <textarea id="messageInput" rows="1" placeholder="输入消息… @AI 让英子参与"></textarea>
-        <div class="attach-buttons">
-          <button class="attach-btn" id="imageButton" type="button" aria-label="发送图片">🖼</button>
-          <button class="attach-btn" id="fileButton" type="button" aria-label="发送文件">📎</button>
-          <button class="mention-ai-button" id="mentionAiButton" type="button">@ AI</button>
-        </div>
+        <button class="attach-btn plus-button" id="plusButton" type="button" aria-label="添加">＋</button>
+      </div>
+      <div class="attach-menu glass" id="attachMenu" hidden>
+        <button type="button" id="attachImageOption">🖼 图片</button>
+        <button type="button" id="attachFileOption">📎 文件</button>
       </div>
       <input id="imageInput" type="file" accept="image/*" hidden />
       <input id="fileInput" type="file" hidden />

@@ -526,7 +526,7 @@
   }
 
   /* ---------- events ---------- */
-  $('#menuButton').addEventListener('click',()=>{location.href='../index.html'});
+  $('#menuButton').addEventListener('click',()=>{location.href='../index.html?openSidebar=1'});
   $('#groupInfoButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#memberDetailsButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#inviteButton').addEventListener('click',()=>{renderInvite();openSheet('#inviteSheet')});
@@ -538,9 +538,14 @@
   });
   $('#modelSelector').addEventListener('click',()=>{renderModelOptions();openSheet('#modelSheet')});
   $('#reasoningSelector').addEventListener('click',()=>{renderReasoningOptions();openSheet('#reasoningSheet')});
-  $('#mentionAiButton').addEventListener('click',insertMention);
-  $('#imageButton').addEventListener('click',()=>$('#imageInput').click());
-  $('#fileButton').addEventListener('click',()=>$('#fileInput').click());
+  $('#plusButton').addEventListener('click',e=>{
+    e.stopPropagation();
+    const menu=$('#attachMenu');
+    menu.hidden=!menu.hidden;
+  });
+  $('#attachImageOption').addEventListener('click',()=>{$('#attachMenu').hidden=true;$('#imageInput').click()});
+  $('#attachFileOption').addEventListener('click',()=>{$('#attachMenu').hidden=true;$('#fileInput').click()});
+  document.addEventListener('click',()=>{$('#attachMenu').hidden=true});
   $('#imageInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)sendAttachment(f)});
   $('#fileInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)sendAttachment(f)});
   $('#sendButton').addEventListener('click',sendMessage);
