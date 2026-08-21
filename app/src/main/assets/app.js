@@ -734,6 +734,7 @@ function historyButton(c){
   let countBadge='';
   if(c.group){
     const ids=new Set((c.members||[]).map(m=>m.id));
+    ids.delete('friend');
     (c.messages||[]).forEach(m=>{if(m.role==='user'&&m.authorId)ids.add(m.authorId)});
     countBadge=`<small class="group-count">👥 ${ids.size}</small>`;
   }
@@ -1550,7 +1551,7 @@ async function watchGroup(conv){
   }
 }
 function newGroupChat(){
-  const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name},{id:'friend',name:'朋友'}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
+  const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
   try{localStorage.setItem('lgchat_draft',JSON.stringify(conv))}catch(e){}
   state.conversationId=conv.id;
   renderHistory();
@@ -1942,7 +1943,7 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.10';
+const APP_CURRENT_VERSION='2.8.12';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
@@ -2351,8 +2352,7 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
   loadConfig();
   renderProjects();
   renderHistory();
-  if(state.conversations.length)loadConversation(state.conversations[0].id);
-  else newChat();
+  newChat();
 })();
 
 window.addEventListener('storage',e=>{

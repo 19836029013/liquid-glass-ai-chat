@@ -1,11 +1,11 @@
 {
-  "version": "2.8.10",
-  "notes": "修复群聊发消息没反应：消息先本地显示再后台同步，配置或网络异常也不影响发送；移除右上角新建对话加号与群聊邀请加号（邀请改在成员列表里）。",
+  "version": "2.8.12",
+  "notes": "群聊修正：成员人数只算真实用户（去掉占位成员）；从群聊返回停在主页不再自动跳进对话；顶栏与成员条固定不滚动；成员条高度压扁。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "8e5905abcac848a60d9f2d7b90a346ac7ea2c0dce278daacf343b68898c14954"
+      "sha256": "ff8f768363975d1740f197df04b6ef49310c507fafe4af2834372de6f1b38344"
     }
   }
 }

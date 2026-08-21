@@ -196,11 +196,11 @@
   /* ---------- render ---------- */
   function otherMembers(){
     const c=conv();
-    return (c&&c.members||[]).filter(m=>m.id!==account.id);
+    return (c&&c.members||[]).filter(m=>m.id!=='friend'&&m.id!==account.id);
   }
   function renderMembers(){
     const c=conv();
-    const members=c&&c.members||[];
+    const members=(c&&c.members||[]).filter(m=>m.id!=='friend');
     const humans=members.length||1;
     $('#memberCount').textContent=`${humans} 人 · 1 个 AI`;
     $('#avatarStack').innerHTML=members.slice(0,4).map(m=>{
