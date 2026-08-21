@@ -1004,7 +1004,6 @@ function newChat(){
   promptInput.value='';promptInput.focus();
   closeSidebar();renderHistory();showToast('新建对话');
 }
-$('#newChatButton').addEventListener('click',newChat);
 $('#sidebarSearch')?.addEventListener('input',e=>{
   const q=String(e.target.value||'').trim().toLowerCase();
   $$('.chat-history-row').forEach(row=>{
@@ -1943,7 +1942,7 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.9';
+const APP_CURRENT_VERSION='2.8.10';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

@@ -374,37 +374,44 @@
 
   async function sendMessage(){
     const c=conv();
-    const cfg=readClientApi();
     if(!c)return;
-    commit();
     const input=$('#messageInput');
     const text=input.value.trim();
     if(!text)return;
-    if(!cfg){showToast('请先在 App 设置里配置 AI 接口');return}
-    if(!c.syncUrl){
-      c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
-      saveConversations();
-      watchGroup();
-    }
-    await fetchRecent();
+    commit();
+    const cfg=readClientApi();
+    try{
+      if(!c.syncUrl){
+        c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
+        saveConversations();
+        watchGroup();
+      }
+    }catch(e){}
     const mentions=asksAI(text)?[{type:'ai',target_id:'ai'}]:[];
     const userMsg={id:uid(),role:'user',content:text,authorId:account.id,authorName:account.name,mentions,created_at:nowISO()};
-    c.messages.push(userMsg);
-    if(!c.members||!c.members.find(m=>m.id===account.id))c.members.push({id:account.id,name:account.name});
-    const member=c.members.find(m=>m.id===account.id);
-    if(member)member.name=account.name;
+    try{
+      if(!c.members||!Array.isArray(c.members))c.members=[];
+      if(!c.members.some(m=>m.id===account.id))c.members.push({id:account.id,name:account.name});
+      const member=c.members.find(m=>m.id===account.id);
+      if(member)member.name=account.name;
+      c.messages.push(userMsg);
+    }catch(e){
+      showToast('发送失败：'+(e.message||'未知错误'));
+      return;
+    }
     input.value='';mentionIntent=false;autosize();
-    saveConversations();
+    try{saveConversations()}catch(e){}
     renderAll();
-    await pushSync();
-    if(!mentions.length){showToast('已发送');return}
+    showToast('已发送');
+    try{await fetchRecent()}catch(e){}
+    try{await pushSync()}catch(e){}
+    if(!mentions.length||!cfg)return;
     const assistantMsg={id:uid(),role:'assistant',content:'',model:state.model,created_at:nowISO()};
     c.messages.push(assistantMsg);
     $('#typingIndicator').hidden=false;
     renderMessages();
     state.sending=true;
-    const history=c.messages.filter(m=>m.role!=='assistant'||m!==assistantMsg)
-      .filter(m=>m.content)
+    const history=c.messages.filter(m=>m!==assistantMsg&&m.content)
       .map(m=>({role:m.role,content:normalizeText(m.content)}));
     try{
       await streamChat({...cfg,model:state.model},history,{
@@ -434,7 +441,6 @@
   $('#menuButton').addEventListener('click',()=>{location.href='../index.html'});
   $('#groupInfoButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#memberDetailsButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
-  $('#addMemberButton').addEventListener('click',()=>{renderInvite();openSheet('#inviteSheet')});
   $('#inviteButton').addEventListener('click',()=>{renderInvite();openSheet('#inviteSheet')});
   $('#copyInviteButton').addEventListener('click',()=>{
     const link=$('#inviteLink').textContent;
