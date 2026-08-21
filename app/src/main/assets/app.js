@@ -233,6 +233,24 @@ function modelDisplayName(message){
   const raw=String(message?.model||state.modelId||'AI').trim();
   return raw||'AI';
 }
+function reasoningMiniBlock(message){
+  const summary=normalizeText(message.reasoning_summary||'').trim();
+  const ready=Boolean(summary);
+  const stateText=message.streaming?'等待摘要':(ready?'已完成':'无摘要');
+  return `<div class="reasoning-mini-window ${ready?'ready':'waiting'}">
+    <button class="reasoning-toggle" data-reasoning-toggle ${ready?'':'disabled'} aria-expanded="false">
+      <span class="reasoning-mini-icon">✺</span>
+      <span class="reasoning-mini-copy">
+        <strong>深度思考</strong>
+        <small class="reasoning-state">${stateText}</small>
+      </span>
+      <span class="chevron">${ready?'⌄':'·'}</span>
+    </button>
+    <div class="reasoning-panel" data-reasoning-panel>
+      <div class="reasoning-scroll">${escapeHTML(summary).replace(/\n/g,'<br>')}</div>
+    </div>
+  </div>`;
+}
 function actions(message){
   return `<div class="message-actions" aria-label="消息操作">
     <button data-action="copy" data-mid="${message.id}" title="复制"><span class="action-icon">▢</span><span>复制</span></button>
@@ -254,6 +272,7 @@ function messageHTML(message){
   const model=escapeHTML(modelDisplayName(message));
   return `<div class="turn turn-assistant" data-message-id="${message.id}">
     <div class="assistant-stack">
+      ${reasoningMiniBlock(message)}
       <div class="assistant-bubble">
         <div class="assistant-message-head">
           <span class="assistant-model"><span class="assistant-model-mark">✦</span><span>${model}</span></span>
@@ -266,6 +285,14 @@ function messageHTML(message){
   </div>`;
 }
 function bindMessageInteractions(root=messagesEl){
+  $$('[data-reasoning-toggle]',root).forEach(toggle=>{
+    if(toggle.dataset.bound)return;toggle.dataset.bound='1';
+    toggle.addEventListener('click',()=>{
+      if(toggle.disabled)return;
+      const panel=toggle.nextElementSibling,next=!panel.classList.contains('open');
+      panel.classList.toggle('open',next);toggle.classList.toggle('open',next);toggle.setAttribute('aria-expanded',String(next));$('.chevron',toggle).textContent=next?'⌃':'⌄';
+    });
+  });
   $$('[data-action]',root).forEach(btn=>{
     if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('click',()=>handleAction(btn.dataset.action,btn.dataset.mid));
   });
@@ -665,6 +692,9 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
   assistantMsg.content=normalizeText(finalText).trim();
   assistantMsg.created_at=nowISO();
   if(!assistantMsg.content)throw new Error('模型没有返回内容');
+  const turn2=existingTurn||$(`[data-message-id="${assistantMsg.id}"]`);
+  const stateEl=turn2&&$('.reasoning-state',turn2);
+  if(stateEl&&stateEl.textContent==='等待摘要')stateEl.textContent='无摘要';
 }
 async function sendMessage(){
   if(state.sending||state.shared)return;
@@ -674,7 +704,7 @@ async function sendMessage(){
   let conv=currentConversation();
   if(!conv)conv=newConversation();
   const userMsg={id:uid(),role:'user',content:text,created_at:nowISO()};
-  const assistantMsg={id:uid(),role:'assistant',content:'',model:state.modelId||cfg.model,created_at:nowISO()};
+  const assistantMsg={id:uid(),role:'assistant',content:'',model:state.modelId||cfg.model,created_at:nowISO(),streaming:true};
   conv.messages.push(userMsg,assistantMsg);
   if(conv.title==='新对话')conv.title=text.slice(0,18);
   promptInput.value='';promptInput.style.height='auto';
@@ -688,6 +718,7 @@ async function sendMessage(){
     if(!assistantMsg.content)assistantMsg.content='（生成失败：'+(e.message||'未知错误')+'）';
     showToast(e.message||'生成失败');
   }finally{
+    assistantMsg.streaming=false;
     state.sending=false;sendButton.disabled=false;
     saveConversations();renderHistory();
     if(state.conversationId===conv.id){renderMessages(conv.messages);scrollBottom(false)}
@@ -710,8 +741,16 @@ async function handleAction(action,mid){
     const userMsg=[...conv.messages.slice(0,idx)].reverse().find(m=>m.role==='user');
     const userText=userMsg?userMsg.content:'';
     assistant.content='';
+    assistant.streaming=true;
     saveConversations();renderMessages(conv.messages);
     const existingTurn=$(`[data-message-id="${mid}"]`);
+    const reasoningState=existingTurn&&$('.reasoning-state',existingTurn);
+    const reasoningShell=existingTurn&&$('.reasoning-mini-window',existingTurn);
+    if(reasoningState)reasoningState.textContent='生成中';
+    if(reasoningShell){
+      reasoningShell.classList.remove('ready');
+      reasoningShell.classList.add('waiting');
+    }
     state.sending=true;sendButton.disabled=true;
     try{
       await runStream(conv,assistant,userText,cfg,existingTurn);
@@ -719,6 +758,7 @@ async function handleAction(action,mid){
       if(!assistant.content)assistant.content='（生成失败：'+(e.message||'未知错误')+'）';
       showToast(e.message||'生成失败');
     }finally{
+      assistant.streaming=false;
       state.sending=false;sendButton.disabled=false;
       saveConversations();renderHistory();
       if(state.conversationId===conv.id){renderMessages(conv.messages);scrollBottom(false)}
@@ -942,7 +982,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.6.0';
+const APP_CURRENT_VERSION='2.6.1';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

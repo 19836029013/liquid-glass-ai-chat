@@ -1,11 +1,11 @@
 {
-  "version": "2.6.0",
-  "notes": "v10 视觉重构：模型/思考等级底部 Sheet、AI 回复显示模型名、侧栏搜索与新建对话、6 个内置壁纸预设、发送按钮纸飞机样式。",
+  "version": "2.6.1",
+  "notes": "v10.1 真机修复：模型选择遮罩不再强模糊（仅轻微暗化）；每条 AI 回复常驻“深度思考”小窗口（无摘要显示“无摘要”）；修复流式结束阶段的时间显示回归。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "e57c9d4771914dd96d044b561c3945393bc70e2ff49780f5ed66568a34a52b5c"
+      "sha256": "5d8d67e7a04ffd2e099d7cb0e4d72307c0d1b74125fc3b07b5898751a8120780"
     }
   }
 }
