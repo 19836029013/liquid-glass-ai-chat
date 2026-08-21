@@ -3198,6 +3198,12 @@ body.sidebar-open .sidebar{
   -webkit-overflow-scrolling:touch;
 }
 
+/* darker, higher-contrast message text */
+.assistant-bubble p,.user-bubble p{
+  color:#0b1118!important;
+  font-weight:500;
+}
+
 /* smoother scrolling: drop heavy blur on message cards while scrolling */
 body.is-scrolling .turn .assistant-bubble,
 body.is-scrolling .turn .user-bubble,

@@ -1,11 +1,11 @@
 {
-  "version": "2.7.9",
-  "notes": "修复壁纸/毛玻璃不透明度/背景遮罩滑杆无效：全部卡片重新接入透明变量，恢复真毛玻璃效果；修复侧边栏滑动时穿透带动背景聊天滚动。",
+  "version": "2.7.10",
+  "notes": "对话文本颜色加深、加粗，提高阅读对比度（不再发灰）。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "ed3ad94d42445c08e61eec60c65c940c4a3968511d7b363f7eacca3d2207ecea"
+      "sha256": "c93ccf7797f680836b9ba7c66e57b3db8239d6b8075088bc5e6267206a03c818"
     }
   }
 }
