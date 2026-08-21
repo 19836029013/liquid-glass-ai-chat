@@ -1,11 +1,11 @@
 {
-  "version": "2.7.3",
-  "notes": "顶部胶囊改为显示当前对话名称（不再是模型选择，模型选择保留在输入框下方）；名字短自动拉伸胶囊，名字长自动滚动播放，且不会碰到两侧按钮。",
+  "version": "2.7.4",
+  "notes": "对话操作改为侧栏内小浮窗（不收起侧栏、不从底部升起）；重命名有可见输入框；侧栏展开时置顶于顶部栏之上；发送按钮与输入区收窄；长按自己发送的消息可复制/编辑；更新下载自动循环切换线路（最多3次）。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "9a9455b3a2fc1f6c32faec55d5f133d2cf683de2460be6c762d9e3ffbbbcbfbc"
+      "sha256": "38d9d1a29b3bae3e0f594fdd03655eba9307799204db33cdc9e10e0de12ff613"
     }
   }
 }

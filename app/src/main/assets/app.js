@@ -210,8 +210,8 @@ function newConversation(){
 }
 
 /* ---------- sidebar / swipe ---------- */
-function openSidebar(){sidebar.classList.add('open');sidebar.setAttribute('aria-hidden','false');backdrop.classList.add('show')}
-function closeSidebar(){sidebar.classList.remove('open');sidebar.setAttribute('aria-hidden','true');backdrop.classList.remove('show')}
+function openSidebar(){sidebar.classList.add('open');sidebar.setAttribute('aria-hidden','false');backdrop.classList.add('show');document.body.classList.add('sidebar-open')}
+function closeSidebar(){sidebar.classList.remove('open');sidebar.setAttribute('aria-hidden','true');backdrop.classList.remove('show');document.body.classList.remove('sidebar-open')}
 $('#menuButton').addEventListener('click',openSidebar);
 backdrop.addEventListener('click',closeSidebar);
 $$('[data-sidebar-close]').forEach(b=>b.addEventListener('click',closeSidebar));
@@ -310,6 +310,14 @@ function bindMessageInteractions(root=messagesEl){
   });
   $$('[data-action]',root).forEach(btn=>{
     if(btn.dataset.bound)return;btn.dataset.bound='1';btn.addEventListener('click',()=>handleAction(btn.dataset.action,btn.dataset.mid));
+  });
+  $$('.turn-user',root).forEach(turn=>{
+    if(turn.dataset.msgBound)return;turn.dataset.msgBound='1';
+    let timer=null;
+    const start=()=>{timer=setTimeout(()=>showUserMenu(turn.dataset.messageId,turn),520)};
+    const cancel=()=>{clearTimeout(timer)};
+    turn.addEventListener('pointerdown',start,{passive:true});
+    ['pointerup','pointercancel','pointerleave'].forEach(ev=>turn.addEventListener(ev,cancel,{passive:true}));
   });
 }
 function renderMessages(items){messagesEl.innerHTML=items.map(messageHTML).join('');bindMessageInteractions()}
@@ -483,6 +491,196 @@ function updateTopTitle(title){
     }
   });
 }
+let rowMenuEl=null;
+let lastMenuAnchor=null;
+function positionRowMenu(){
+  if(!rowMenuEl||!lastMenuAnchor)return;
+  const r=lastMenuAnchor.getBoundingClientRect();
+  const mw=rowMenuEl.offsetWidth||230;
+  const mh=rowMenuEl.offsetHeight||200;
+  let left=Math.max(8,Math.min(r.left,mw+8<window.innerWidth?window.innerWidth-mw-8:8));
+  let top=r.bottom+6;
+  if(top+mh>window.innerHeight-8)top=Math.max(8,r.top-mh-6);
+  rowMenuEl.style.left=left+'px';
+  rowMenuEl.style.top=top+'px';
+}
+function closeRowMenu(){
+  if(rowMenuEl){rowMenuEl.remove();rowMenuEl=null}
+}
+function showRowMenu(id,anchor){
+  closeRowMenu();
+  lastMenuAnchor=anchor;
+  const conv=state.conversations.find(c=>c.id===id);
+  if(!conv)return;
+  const menu=document.createElement('div');
+  menu.className='row-menu glass';
+  menu.innerHTML=`
+    <button class="row-menu-item" data-act="rename"><span class="row-menu-item-icon">✎</span><span class="row-menu-label">重命名对话</span></button>
+    <button class="row-menu-item" data-act="pin"><span class="row-menu-item-icon">⌖</span><span class="row-menu-label">${conv.pinned?'取消置顶':'置顶对话'}</span></button>
+    <button class="row-menu-item" data-act="move"><span class="row-menu-item-icon">▣</span><span class="row-menu-label">移动到项目</span></button>
+    <button class="row-menu-item danger" data-act="delete"><span class="row-menu-item-icon">×</span><span class="row-menu-label">删除对话</span></button>`;
+  document.body.appendChild(menu);
+  rowMenuEl=menu;
+  positionRowMenu();
+  menu.addEventListener('click',e=>{
+    const btn=e.target.closest('.row-menu-item');
+    if(!btn)return;
+    const act=btn.dataset.act;
+    if(act==='rename'){
+      showRenameInMenu(conv);
+    }else if(act==='pin'){
+      conv.pinned=!conv.pinned;
+      saveConversations();renderHistory();closeRowMenu();
+      showToast(conv.pinned?'已置顶':'已取消置顶');
+    }else if(act==='move'){
+      showMoveInMenu(conv);
+    }else if(act==='delete'){
+      if(menu.dataset.armed!=='1'){
+        menu.dataset.armed='1';
+        btn.querySelector('.row-menu-label').textContent='确认删除？再点一次';
+        return;
+      }
+      state.conversations=state.conversations.filter(c=>c.id!==conv.id);
+      if(state.conversationId===conv.id){
+        state.conversationId=null;
+        messagesEl.innerHTML='';
+        $('#greeting').textContent='你好，今天想聊点什么？';
+        updateTopTitle('新对话');
+      }
+      saveConversations();renderHistory();renderProjects();closeRowMenu();
+      showToast('对话已删除');
+    }
+  });
+  setTimeout(()=>{
+    document.addEventListener('pointerdown',e=>{
+      if(rowMenuEl&&!rowMenuEl.contains(e.target))closeRowMenu();
+    },{once:true,capture:true});
+  },0);
+}
+function showRenameInMenu(conv){
+  if(!rowMenuEl)return;
+  rowMenuEl.innerHTML=`
+    <div class="row-menu-title">重命名对话</div>
+    <input class="row-menu-input" maxlength="30" value="${escapeHTML(conv.title||'')}" />
+    <div class="row-menu-actions">
+      <button class="row-menu-btn" data-cancel>取消</button>
+      <button class="row-menu-btn primary" data-ok>确定</button>
+    </div>`;
+  positionRowMenu();
+  const input=rowMenuEl.querySelector('input');
+  input.focus();
+  input.select();
+  const done=()=>{
+    const name=input.value.trim();
+    if(name){
+      conv.title=name;
+      saveConversations();renderHistory();
+      if(state.conversationId===conv.id){
+        $('#greeting').textContent=conv.title;
+        updateTopTitle(conv.title);
+      }
+    }
+    closeRowMenu();
+    showToast(name?'已重命名':'名称未修改');
+  };
+  rowMenuEl.querySelector('[data-ok]').addEventListener('click',done);
+  rowMenuEl.querySelector('[data-cancel]').addEventListener('click',closeRowMenu);
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();done()}
+    if(e.key==='Escape'){e.preventDefault();closeRowMenu()}
+  });
+}
+function showMoveInMenu(conv){
+  if(!rowMenuEl)return;
+  rowMenuEl.innerHTML=`
+    <div class="row-menu-title">移动到项目</div>
+    <button class="row-menu-item" data-pid=""><span class="row-menu-item-icon">${!conv.projectId?'✓':'◇'}</span>无项目（全部对话）</button>
+    ${state.projects.map(p=>`<button class="row-menu-item" data-pid="${p.id}"><span class="row-menu-item-icon">${conv.projectId===p.id?'✓':'▣'}</span>${escapeHTML(p.title)}</button>`).join('')}
+    <button class="row-menu-item" data-back><span class="row-menu-item-icon">←</span>返回</button>`;
+  positionRowMenu();
+  rowMenuEl.querySelectorAll('[data-pid]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const pid=b.dataset.pid||null;
+      conv.projectId=pid;
+      saveConversations();renderHistory();renderProjects();closeRowMenu();
+      showToast(pid?'已移动到项目':'已移出项目');
+    });
+  });
+  rowMenuEl.querySelector('[data-back]').addEventListener('click',()=>showRowMenu(conv.id,lastMenuAnchor));
+}
+function showUserMenu(id,turn){
+  if(!turn)return;
+  closeRowMenu();
+  const conv=currentConversation();
+  if(!conv)return;
+  const menu=document.createElement('div');
+  menu.className='row-menu glass';
+  menu.innerHTML=`
+    <button class="row-menu-item" data-act="copy"><span class="row-menu-item-icon">▢</span>复制消息</button>
+    <button class="row-menu-item" data-act="edit"><span class="row-menu-item-icon">✎</span>编辑消息</button>`;
+  document.body.appendChild(menu);
+  rowMenuEl=menu;
+  lastMenuAnchor=turn;
+  positionRowMenu();
+  menu.addEventListener('click',e=>{
+    const btn=e.target.closest('.row-menu-item');
+    if(!btn)return;
+    const act=btn.dataset.act;
+    if(act==='copy'){
+      const msg=conv.messages.find(m=>m.id===id);
+      copyText(msg?normalizeText(msg.content):'');
+      closeRowMenu();
+    }else if(act==='edit'){
+      closeRowMenu();
+      editUserMessage(id,turn,conv);
+    }
+  });
+  setTimeout(()=>{
+    document.addEventListener('pointerdown',e=>{
+      if(rowMenuEl&&!rowMenuEl.contains(e.target))closeRowMenu();
+    },{once:true,capture:true});
+  },0);
+}
+function editUserMessage(id,turn,conv){
+  const msg=conv.messages.find(m=>m.id===id);
+  const p=turn&&$('.user-bubble p',turn);
+  if(!msg||!p)return;
+  const ta=document.createElement('textarea');
+  ta.className='user-edit-area';
+  ta.value=normalizeText(msg.content);
+  const actions=document.createElement('div');
+  actions.className='user-edit-actions';
+  actions.innerHTML=`<button class="cancel" data-cancel>取消</button><button class="save" data-save>保存</button>`;
+  const wrap=document.createElement('div');
+  wrap.appendChild(ta);
+  wrap.appendChild(actions);
+  p.replaceWith(wrap);
+  ta.focus();
+  const done=()=>{
+    const text=ta.value.trim();
+    if(text&&text!==normalizeText(msg.content)){
+      msg.content=text;
+      const idx=conv.messages.findIndex(m=>m.id===id);
+      if(idx>=0)conv.messages=conv.messages.slice(0,idx+1);
+      if(conv.title==='新对话'||conv.title===normalizeText(msg.content).slice(0,18))conv.title=text.slice(0,18);
+      saveConversations();
+      renderMessages(conv.messages);
+      if(state.conversationId===conv.id){
+        $('#greeting').textContent=conv.title;
+        updateTopTitle(conv.title);
+      }
+      showToast('消息已更新');
+    }else{
+      renderMessages(conv.messages);
+    }
+  };
+  actions.querySelector('[data-save]').addEventListener('click',done);
+  actions.querySelector('[data-cancel]').addEventListener('click',()=>renderMessages(conv.messages));
+  ta.addEventListener('keydown',e=>{
+    if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();done()}
+    if(e.key==='Escape'){e.preventDefault();renderMessages(conv.messages)}
+  });
+}
 function historyButton(c){
   const row=document.createElement('div');
   row.className='chat-history-row';
@@ -496,7 +694,7 @@ function historyButton(c){
   more.textContent='⋯';
   more.dataset.more=c.id;
   more.setAttribute('aria-label','对话操作');
-  more.addEventListener('click',e=>{e.stopPropagation();openActionSheet(c.id)});
+  more.addEventListener('click',e=>{e.stopPropagation();showRowMenu(c.id,more)});
   row.appendChild(b);
   row.appendChild(more);
   return row;
@@ -1244,12 +1442,13 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.3';
+const APP_CURRENT_VERSION='2.7.4';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
 let updateRetryDone=false;
 let updateUrlIndex=0;
+let updateAttempts=0;
 function detectUpdatePlatform(){
   const ua=navigator.userAgent||'';
   if(/Android/i.test(ua))return 'android';
@@ -1385,6 +1584,7 @@ async function startUpdate(){
   const platform=info.platform||detectUpdatePlatform();
   const candidates=[info.download_url,info.mirror_url,info.store_url,info.web_url].filter(Boolean);
   updateUrlIndex=0;
+  updateAttempts=0;
   const url=candidates[0];
   if(!url){
     showToast('该版本没有配置更新地址');
@@ -1442,15 +1642,14 @@ window.addEventListener('native-update-state',event=>{
     updateBusy=false;
     setUpdateButton({label:'继续更新',mode:'update'});
   }else if(detail.state==='error'){
-    if(availableUpdate&&!updateRetryDone){
+    if(availableUpdate&&updateAttempts<3){
       const candidates=[availableUpdate.download_url,availableUpdate.mirror_url,availableUpdate.store_url,availableUpdate.web_url].filter(Boolean);
-      const next=candidates[updateUrlIndex+1];
-      if(next){
-        updateRetryDone=true;
-        updateUrlIndex+=1;
+      if(candidates.length>1){
+        updateAttempts+=1;
+        updateUrlIndex=(updateUrlIndex+1)%candidates.length;
         setUpdateButton({label:'正在切换线路…',mode:'update',loading:true});
-        $('#updateState').textContent='当前线路异常，已自动切换备用线路';
-        window.AndroidUpdater.installApk(String(next),String(availableUpdate.latest_version||''),String(availableUpdate.sha256||''));
+        $('#updateState').textContent=`线路异常，自动切换备用线路（${updateAttempts}/3）`;
+        window.AndroidUpdater.installApk(String(candidates[updateUrlIndex]),String(availableUpdate.latest_version||''),String(availableUpdate.sha256||''));
         return;
       }
     }

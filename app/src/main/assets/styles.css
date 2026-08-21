@@ -3077,6 +3077,81 @@ body.sheet-open .wallpaper-overlay{
 .pill-text{padding-right:14px}
 @keyframes pill-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 
+/* sidebar stays on top of the floating nav when open */
+body.sidebar-open .floating-nav{
+  z-index:50!important;
+  pointer-events:none;
+}
+
+/* small context menu next to conversation rows */
+.row-menu{
+  position:fixed;
+  z-index:320;
+  width:min(230px,78vw);
+  padding:8px;
+  border-radius:18px;
+  background:linear-gradient(155deg,rgba(250,253,254,.97),rgba(240,247,249,.95));
+  border:1px solid rgba(255,255,255,.9);
+  box-shadow:0 18px 46px rgba(26,38,48,.22),inset 0 1px 0 rgba(255,255,255,.7);
+  -webkit-backdrop-filter:blur(28px) saturate(130%);
+  backdrop-filter:blur(28px) saturate(130%);
+}
+.row-menu-item{
+  width:100%;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  border:0;
+  background:transparent;
+  border-radius:13px;
+  padding:11px 12px;
+  font-size:14px;
+  color:#22313b;
+  text-align:left;
+}
+.row-menu-item:active{background:rgba(150,210,196,.18)}
+.row-menu-item.danger{color:#b0564f}
+.row-menu-item .row-menu-item-icon{width:20px;text-align:center}
+.row-menu-title{padding:8px 12px 6px;font-size:13px;color:#6d7a83}
+.row-menu-input{
+  width:100%;
+  border:1px solid rgba(120,150,140,.35);
+  border-radius:12px;
+  background:rgba(255,255,255,.7);
+  padding:10px 12px;
+  font-size:14px;
+  color:#1b2630;
+  outline:none;
+}
+.row-menu-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:10px}
+.row-menu-btn{
+  border:0;
+  border-radius:14px;
+  padding:9px 16px;
+  font-size:13px;
+  background:rgba(255,255,255,.5);
+  color:#4a5862;
+}
+.row-menu-btn.primary{background:linear-gradient(145deg,#b9ded4,#8bc8b8);color:#fff;font-weight:600}
+
+/* composer: smaller, tighter */
+.send-button{width:50px!important;height:50px!important;min-width:50px!important;min-height:50px!important;font-size:26px}
+.select-control{padding:9px 12px!important;min-height:40px}
+.composer textarea{min-height:46px!important;padding:12px 15px!important;font-size:17px!important}
+
+/* inline edit of user messages */
+.user-edit-area{width:100%;border:1px solid rgba(120,150,140,.35);border-radius:14px;background:rgba(255,255,255,.7);padding:10px 12px;font-size:16px;color:#1b2630;outline:none;resize:vertical;min-height:70px}
+.user-edit-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+.user-edit-actions button{border:0;border-radius:14px;padding:8px 14px;font-size:13px}
+.user-edit-actions .cancel{background:rgba(255,255,255,.5);color:#4a5862}
+.user-edit-actions .save{background:linear-gradient(145deg,#b9ded4,#8bc8b8);color:#fff;font-weight:600}
+
+@media(max-width:700px){
+  .send-button{width:46px!important;height:46px!important;min-width:46px!important;min-height:46px!important;font-size:24px}
+  .select-control{padding:8px 10px!important;min-height:38px}
+  .composer textarea{min-height:44px!important;padding:11px 13px!important;font-size:16px!important}
+}
+
 .project-chevron{width:16px;text-align:center;color:#6d7a83;font-size:12px}
 .project-icon{width:18px;text-align:center;color:#5b8f80}
 .project-children{margin:0 0 6px 14px;padding-left:10px;border-left:1px solid rgba(120,150,140,.28)}
