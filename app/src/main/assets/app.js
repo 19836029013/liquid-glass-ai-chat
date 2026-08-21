@@ -1347,40 +1347,19 @@ async function fetchQueryModels(cfg){
 }
 
 /* ---------- chat ---------- */
-function readVisionCfg(){
-  const base=safeGet('vision.base');
-  const key=safeGet('vision.key');
-  const model=safeGet('vision.model');
-  return (base&&key&&model)?{base_url:base,api_key:key,model}:null;
-}
-async function describeImage(vision,url){
-  const text=await completeChat(vision,[{role:'user',content:[
-    {type:'text',text:'请用中文详细描述这张图片的内容，尽量具体完整，为后续回答提供信息。'},
-    {type:'image_url',image_url:{url}},
-  ]}]);
-  return normalizeText(text).trim();
+function imageMessageContent(message){
+  const content=[{type:'text',text:normalizeText(message.content)||'请看这张图片。'}];
+  content.push({type:'image_url',image_url:{url:message.attachment.url}});
+  return content;
 }
 async function buildHistory(conv,skipMsg){
   const out=[];
-  const visionEnabled=safeGet('ai.visionEnabled','1')!=='0';
-  const vision=readVisionCfg();
   const imageMsgs=conv.messages.filter(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
   const recentImages=new Set(imageMsgs.slice(-3).map(m=>m.id));
-  let descIndex=0;
   for(const m of conv.messages){
     if(m===skipMsg)continue;
-    if(m.attachment&&String(m.attachment.type||'').startsWith('image/')&&visionEnabled&&recentImages.has(m.id)){
-      descIndex++;
-      if(vision){
-        try{
-          const desc=await describeImage(vision,m.attachment.url);
-          out.push({role:'user',content:`[图片${descIndex}的视觉描述] ${desc}`});
-        }catch(e){
-          out.push({role:'user',content:`[图片${descIndex}：视觉模型描述失败]`});
-        }
-      }else{
-        out.push({role:'user',content:`[图片${descIndex}：未配置视觉模型，无法查看]`});
-      }
+    if(m.attachment&&String(m.attachment.type||'').startsWith('image/')&&recentImages.has(m.id)){
+      out.push({role:m.role,content:imageMessageContent(m)});
     }else if(m.content){
       out.push({role:m.role,content:normalizeText(m.content)});
     }
@@ -1432,10 +1411,6 @@ async function sendMessage(){
   const text=promptInput.value.trim();if(!text){showToast('请输入消息');return}
   const cfg=getClientApi();
   if(!cfg){openSettings('api');showToast('请先配置 AI 接口');return}
-  if(conv.messages&&conv.messages.some(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'))
-     &&safeGet('ai.visionEnabled','1')!=='0'&&!readVisionCfg()){
-    showToast('未配置视觉模型，DeepSeek 无法看图，请在设置里配置');
-  }
   let conv=currentConversation();
   if(!conv)conv=newConversation();
   if(state.draft===conv){
@@ -1976,14 +1951,6 @@ function fillSettings(){
   $('#apiReasoningParam').value=sanitizeReasoningParameter(cfg.reasoning_parameter||'',cfg.models||[]);
   const nickInput=$('#apiNickname');
   if(nickInput)nickInput.value=state.account.name;
-  const visionToggle=$('#visionEnabled');
-  if(visionToggle)visionToggle.checked=safeGet('ai.visionEnabled','1')!=='0';
-  const vBase=$('#visionBaseUrl');
-  if(vBase)vBase.value=safeGet('vision.base');
-  const vKey=$('#visionApiKey');
-  if(vKey)vKey.value=safeGet('vision.key');
-  const vModel=$('#visionModel');
-  if(vModel)vModel.value=safeGet('vision.model');
   const accountInput=$('#accountName');
   if(accountInput)accountInput.value=state.account.name;
   const accountStatus=$('#accountStatus');
@@ -2112,12 +2079,6 @@ $('#saveApiButton').addEventListener('click',()=>{
     state.nickname=nick;
     state.account.name=nick;
   }
-  const vBase=$('#visionBaseUrl');
-  const vKey=$('#visionApiKey');
-  const vModel=$('#visionModel');
-  if(vBase)localStorage.setItem('vision.base',vBase.value.trim());
-  if(vKey)localStorage.setItem('vision.key',vKey.value.trim());
-  if(vModel)localStorage.setItem('vision.model',vModel.value.trim());
   saveClientApi(cfg);
   state.clientApi=cfg;
   state.modelId=cfg.model;
@@ -2175,26 +2136,8 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
   }
   showToast('用户名已保存');
 });
-$('#visionEnabled')?.addEventListener('change',e=>{
-  try{localStorage.setItem('ai.visionEnabled',e.target.checked?'1':'0')}catch(err){}
-});
-$$('.vision-preset').forEach(btn=>{
-  btn.addEventListener('click',()=>{
-    const preset=btn.dataset.vision;
-    const map={
-      qwen:['https://dashscope.aliyuncs.com/compatible-mode/v1','qwen-vl-max'],
-      glm:['https://open.bigmodel.cn/api/paas/v4','glm-4v-plus'],
-    };
-    const [base,model]=map[preset]||[];
-    if(!base)return;
-    $('#visionBaseUrl').value=base;
-    $('#visionModel').value=model;
-    showToast('已填入视觉模型 '+btn.textContent+'，填好视觉 Key 后保存');
-  });
-});
-
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.22';
+const APP_CURRENT_VERSION='2.8.23';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
@@ -2255,6 +2198,7 @@ function loadCurrentVersion(){
   $('#currentVersionText').textContent=`当前版本 ${APP_CURRENT_VERSION}（${platform==='android'?'Android':platform}）`;
   const manifestUrl=(safeGet('app.updateManifestUrl')||'').trim()||DEFAULT_UPDATE_MANIFEST;
   $('#updateState').textContent=manifestUrl?'可检查在线更新':'未配置更新源';
+  $('#updateNotes').textContent='点击“检查更新”查看版本说明。';
   availableUpdate=null;
   updateRetryDone=false;
   setUpdateProgress(null);
@@ -2292,6 +2236,7 @@ async function checkForUpdates(){
     if(!j)throw lastErr||new Error('无法连接更新源');
     const remote=String(j.version||'').trim();
     const notes=String(j.notes||'');
+    const noteText=notes||'官方没有为本版提供说明。';
     const platforms=j.platforms||{};
     const android=platforms.android||{};
     const ios=platforms.ios||{};
@@ -2314,17 +2259,20 @@ async function checkForUpdates(){
         web_url:webUrl,
         sha256:String(android.sha256||'').trim(),
       };
-      $('#updateState').textContent=`发现新版本 ${remote}${notes?' · '+notes:''}`;
+      $('#updateState').textContent=`发现新版本 ${remote}`;
+      $('#updateNotes').textContent=noteText;
       setUpdateButton({label:'立即更新',mode:'update'});
       pulseControl($('#checkUpdateButton'));
       showToast(`发现新版本 ${remote}`);
       return;
     }
-    $('#updateState').textContent=`已是最新版本 · ${remote}`;
+    $('#updateState').textContent=`已是最新版本 ${remote}`;
+    $('#updateNotes').textContent=noteText;
     setUpdateButton({label:'检查更新'});
     showToast('已经是最新版本');
   }catch(e){
     $('#updateState').textContent=e.message||'检查更新失败';
+    $('#updateNotes').textContent='请稍后重试，或检查网络与更新清单地址。';
     setUpdateButton({label:'重新检查'});
   }finally{
     updateBusy=false;

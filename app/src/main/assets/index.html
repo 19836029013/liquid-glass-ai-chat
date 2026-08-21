@@ -151,17 +151,19 @@
         </section>
 
         <section class="settings-card glass update-card">
-          <div class="settings-card-icon update-icon">⇧</div>
-          <div class="update-copy">
-            <h3>检查更新</h3>
-            <p id="currentVersionText">当前版本 —</p>
+          <div class="update-head">
+            <div class="settings-card-icon update-icon">⇧</div>
+            <div class="update-copy">
+              <h3>软件更新</h3>
+              <p id="currentVersionText">当前版本 —</p>
+            </div>
+            <button class="settings-pill-button update-action-button" id="checkUpdateButton" type="button">
+              <span class="button-icon" aria-hidden="true">↻</span>
+              <span class="button-label">检查更新</span>
+            </button>
           </div>
-          <div class="update-state" id="updateState">点击检查最新版本</div>
-          <button class="settings-pill-button update-action-button" id="checkUpdateButton" type="button">
-            <span class="button-icon" aria-hidden="true">↻</span>
-            <span class="button-label">检查更新</span>
-            <span class="settings-chevron">›</span>
-          </button>
+          <div class="update-state" id="updateState">准备就绪</div>
+          <div class="update-notes" id="updateNotes">点击“检查更新”查看版本说明。</div>
           <div class="update-progress" id="updateProgress" hidden>
             <div class="update-progress-track">
               <div class="update-progress-bar" id="updateProgressBar"></div>
@@ -197,30 +199,6 @@
               <button id="fetchModelsButton" class="inline-action-button" type="button">查询模型</button>
             </label>
             <p class="settings-inline-hint">填好 API 地址和 Key 后点“查询模型”。成功后这里会列出接口真实返回的全部模型；选择一个作为新聊天默认模型。</p>
-
-            <div class="settings-row vision-preset-row">
-              <span class="row-label">视觉模型（DeepSeek 的眼睛）</span>
-              <div class="vision-presets">
-                <button class="vision-preset" type="button" data-vision="qwen">千问 Qwen-VL</button>
-                <button class="vision-preset" type="button" data-vision="glm">GLM-4V</button>
-              </div>
-            </div>
-            <label class="settings-row">
-              <span class="row-label">视觉 API 地址</span>
-              <input id="visionBaseUrl" autocomplete="off" placeholder="千问/GLM 的 OpenAI 兼容地址" />
-            </label>
-            <label class="settings-row">
-              <span class="row-label">视觉 API Key</span>
-              <input id="visionApiKey" type="password" autocomplete="new-password" placeholder="视觉模型的 Key" />
-            </label>
-            <label class="settings-row">
-              <span class="row-label">视觉模型名</span>
-              <input id="visionModel" autocomplete="off" placeholder="qwen-vl-max / glm-4v-plus" />
-            </label>
-            <label class="settings-row toggle-row">
-              <span class="row-label">让 DeepSeek 看图（走视觉模型）</span>
-              <input type="checkbox" id="visionEnabled" />
-            </label>
 
             <details class="advanced-settings">
               <summary>高级兼容设置（一般不用改）</summary>

@@ -514,40 +514,19 @@
       }
     });
   }
-  function readVisionCfg(){
-    const base=safeGet('vision.base');
-    const key=safeGet('vision.key');
-    const model=safeGet('vision.model');
-    return (base&&key&&model)?{base_url:base,api_key:key,model}:null;
-  }
-  async function describeImage(vision,url){
-    const text=await completeChat(vision,[{role:'user',content:[
-      {type:'text',text:'请用中文详细描述这张图片的内容，尽量具体完整，为后续回答提供信息。'},
-      {type:'image_url',image_url:{url}},
-    ]}]);
-    return normalizeText(text).trim();
+  function imageMessageContent(message){
+    const content=[{type:'text',text:normalizeText(message.content)||'请看这张图片。'}];
+    content.push({type:'image_url',image_url:{url:message.attachment.url}});
+    return content;
   }
   async function buildGroupHistory(c,assistantMsg){
     const out=[];
-    const visionEnabled=safeGet('ai.visionEnabled','1')!=='0';
-    const vision=readVisionCfg();
     const imageMsgs=c.messages.filter(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
     const recentImages=new Set(imageMsgs.slice(-3).map(m=>m.id));
-    let descIndex=0;
     for(const m of c.messages){
       if(m===assistantMsg)continue;
-      if(m.attachment&&String(m.attachment.type||'').startsWith('image/')&&visionEnabled&&recentImages.has(m.id)){
-        descIndex++;
-        if(vision){
-          try{
-            const desc=await describeImage(vision,m.attachment.url);
-            out.push({role:'user',content:`[图片${descIndex}的视觉描述] ${desc}`});
-          }catch(e){
-            out.push({role:'user',content:`[图片${descIndex}：视觉模型描述失败]`});
-          }
-        }else{
-          out.push({role:'user',content:`[图片${descIndex}：未配置视觉模型，无法查看]`});
-        }
+      if(m.attachment&&String(m.attachment.type||'').startsWith('image/')&&recentImages.has(m.id)){
+        out.push({role:m.role,content:imageMessageContent(m)});
       }else if(m.content){
         out.push({role:m.role,content:normalizeText(m.content)});
       }
@@ -629,9 +608,7 @@
     $('#typingIndicator').hidden=false;
     renderMessages();
     state.sending=true;
-    const visionEnabled=safeGet('ai.visionEnabled','1')!=='0';
     const hasImages=c.messages.some(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
-    if(hasImages&&visionEnabled&&!readVisionCfg())showToast('未配置视觉模型，DeepSeek 无法看图，请在设置里配置');
     const history=await buildGroupHistory(c,assistantMsg);
     try{
       await streamChat({...cfg,model:state.model},history,{

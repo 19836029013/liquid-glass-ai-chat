@@ -1,11 +1,11 @@
 {
-  "version": "2.8.22",
-  "notes": "加入群聊改为本地秒加入：不再等网络拉取历史，先加入成功再后台补消息；消息同步轮询间隔缩短到 1 秒，收发更接近即时。",
+  "version": "2.8.23",
+  "notes": "设置页标题与检查更新卡片重做；更新说明单独展示；移除外接视觉模型，图片直接交给当前 DeepSeek 模型处理。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "2b1a22dcb46ad2af1a27ea28cdedda8293eff03d9e0899dc9dfedce782318f22"
+      "sha256": "568b859b578b14ee82fcf2af94335416cac815e30b555eee315daa79c8c86a32"
     }
   }
 }
