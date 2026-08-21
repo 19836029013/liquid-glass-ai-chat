@@ -47,6 +47,12 @@ function showToast(text){
 }
 function escapeHTML(s=''){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
 function timeOf(iso){try{return new Date(iso).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false})}catch{return ''}}
+function fmtSize(n){
+  if(!n)return '';
+  if(n<1024)return n+' B';
+  if(n<1024*1024)return (n/1024).toFixed(1)+' KB';
+  return (n/1024/1024).toFixed(1)+' MB';
+}
 function scrollBottom(smooth=true){requestAnimationFrame(()=>window.scrollTo({top:document.body.scrollHeight,behavior:smooth?'smooth':'auto'}))}
 function loadJSON(key,fallback=null){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
 function saveJSON(key,value){try{localStorage.setItem(key,JSON.stringify(value))}catch(e){}}
@@ -289,6 +295,13 @@ function actions(message){
 }
 function messageHTML(message){
   const content=normalizeText(message.content);
+  let attachHtml='';
+  if(message.attachment){
+    const isImg=String(message.attachment.type||'').startsWith('image/');
+    attachHtml=isImg
+      ? `<img class="chat-attach-img" src="${escapeHTML(message.attachment.url)}" data-full="${escapeHTML(message.attachment.url)}" loading="lazy" alt="图片" />`
+      : `<div class="file-card chat-file-card"><span class="file-icon">📄</span><span class="file-copy"><strong>${escapeHTML(message.attachment.name||'文件')}</strong><small>${fmtSize(message.attachment.size)}</small></span></div>`;
+  }
   if(message.role==='user'){
     const conv=currentConversation();
     const author=conv&&conv.group&&message.authorName
@@ -297,6 +310,7 @@ function messageHTML(message){
     return `<div class="turn turn-user" data-message-id="${message.id}">
       <div class="user-bubble">
         ${author}
+        ${attachHtml}
         <p>${escapeHTML(content).replace(/\n/g,'<br>')}</p>
         <div class="meta user-meta">${timeOf(message.created_at)} <span class="checks">✓✓</span></div>
       </div>
@@ -311,6 +325,7 @@ function messageHTML(message){
           <span class="assistant-model"><span class="assistant-model-mark">✦</span><span>${model}</span></span>
           <span class="assistant-time">${timeOf(message.created_at)}</span>
         </div>
+        ${attachHtml}
         <p>${escapeHTML(content).replace(/\n/g,'<br>')}</p>
       </div>
       ${state.shared?'':actions(message)}
@@ -1018,6 +1033,66 @@ promptInput.addEventListener('input',()=>{promptInput.style.height='auto';prompt
 promptInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
 sendButton.addEventListener('click',sendMessage);
 
+let pendingChatFile=null;
+let pendingChatPreviewUrl=null;
+function renderChatAttachPreview(){
+  const wrap=$('#chatAttachPreview');
+  if(!pendingChatFile){wrap.hidden=true;wrap.innerHTML='';return}
+  const isImg=String(pendingChatFile.type||'').startsWith('image/');
+  if(isImg&&!pendingChatPreviewUrl){
+    try{pendingChatPreviewUrl=URL.createObjectURL(pendingChatFile)}catch(e){}
+  }
+  wrap.innerHTML=(isImg&&pendingChatPreviewUrl)
+    ? `<img src="${pendingChatPreviewUrl}" alt="预览" /><button id="chatRemoveAttachment" type="button">×</button>`
+    : `<div class="preview-file"><span class="file-icon">📄</span><span class="file-copy"><strong>${escapeHTML(pendingChatFile.name||'文件')}</strong><small>${fmtSize(pendingChatFile.size)}</small></span><button id="chatRemoveAttachment" type="button">×</button></div>`;
+  wrap.hidden=false;
+  $('#chatRemoveAttachment').addEventListener('click',()=>{
+    if(pendingChatPreviewUrl){try{URL.revokeObjectURL(pendingChatPreviewUrl)}catch(e){}}
+    pendingChatFile=null;
+    pendingChatPreviewUrl=null;
+    renderChatAttachPreview();
+  });
+}
+function pickChatAttachment(file){
+  if(pendingChatPreviewUrl){try{URL.revokeObjectURL(pendingChatPreviewUrl)}catch(e){}}
+  pendingChatFile=file;
+  pendingChatPreviewUrl=null;
+  renderChatAttachPreview();
+}
+function readFileAsDataURL(file){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=()=>resolve(reader.result);
+    reader.onerror=()=>reject(new Error('读取文件失败'));
+    reader.readAsDataURL(file);
+  });
+}
+$('#chatPlusButton').addEventListener('click',e=>{
+  e.stopPropagation();
+  const menu=$('#chatAttachMenu');
+  menu.hidden=!menu.hidden;
+});
+$('#chatImageOption').addEventListener('click',()=>{$('#chatAttachMenu').hidden=true;$('#chatImageInput').click()});
+$('#chatFileOption').addEventListener('click',()=>{$('#chatAttachMenu').hidden=true;$('#chatFileInput').click()});
+document.addEventListener('click',()=>{$('#chatAttachMenu').hidden=true});
+$('#chatImageInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)pickChatAttachment(f)});
+$('#chatFileInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)pickChatAttachment(f)});
+document.addEventListener('click',e=>{
+  const img=e.target.closest('.chat-attach-img');
+  if(img){
+    $('#chatImageViewerImg').src=img.dataset.full||img.src;
+    $('#chatImageViewer').hidden=false;
+    return;
+  }
+  if(e.target.closest('#chatImageViewer')){
+    $('#chatImageViewer').hidden=true;
+    $('#chatImageViewerImg').src='';
+  }
+  const card=e.target.closest('.chat-file-card');
+  if(card)showToast('文件保存在本机聊天记录中');
+});
+$('#chatImageViewerClose').addEventListener('click',()=>{$('#chatImageViewer').hidden=true;$('#chatImageViewerImg').src=''});
+
 /* ---------- streaming (native bridge first, fetch fallback) ---------- */
 let pendingStream=null,pendingComplete=null,pendingTest=null,pendingQuery=null;
 function apiUrl(cfg){return (cfg.base_url||'https://api.deepseek.com').replace(/\/+$/,'')+'/chat/completions'}
@@ -1181,9 +1256,16 @@ async function fetchQueryModels(cfg){
 /* ---------- chat ---------- */
 function buildHistory(conv,skipMsg){
   const out=[];
+  const visionEnabled=safeGet('ai.visionEnabled','1')!=='0';
+  const imageMsgs=conv.messages.filter(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
+  const recentImages=new Set(imageMsgs.slice(-3).map(m=>m.id));
   for(const m of conv.messages){
-    if(m===skipMsg||!m.content)continue;
-    out.push({role:m.role,content:normalizeText(m.content)});
+    if(m===skipMsg)continue;
+    if(m.attachment&&String(m.attachment.type||'').startsWith('image/')&&visionEnabled&&recentImages.has(m.id)){
+      out.push({role:'user',content:[{type:'image_url',image_url:{url:m.attachment.url}}]});
+    }else if(m.content){
+      out.push({role:m.role,content:normalizeText(m.content)});
+    }
   }
   return out;
 }
@@ -1246,7 +1328,18 @@ async function sendMessage(){
     }
     upsertMember(conv);
   }
-  const userMsg={id:uid(),role:'user',content:text,created_at:nowISO()};
+  let chatAttachment=null;
+  if(pendingChatFile){
+    if(pendingChatFile.size>10*1024*1024){showToast('文件过大（限 10MB）');return}
+    try{
+      chatAttachment={url:await readFileAsDataURL(pendingChatFile),type:pendingChatFile.type||'',name:pendingChatFile.name||'file',size:pendingChatFile.size||0};
+    }catch(e){showToast(e.message||'读取文件失败');return}
+    if(pendingChatPreviewUrl){try{URL.revokeObjectURL(pendingChatPreviewUrl)}catch(e){}}
+    pendingChatFile=null;
+    pendingChatPreviewUrl=null;
+    renderChatAttachPreview();
+  }
+  const userMsg={id:uid(),role:'user',content:text,attachment:chatAttachment,created_at:nowISO()};
   if(conv.group){
     userMsg.authorId=state.account.id;
     userMsg.authorName=state.account.name;
@@ -1964,7 +2057,7 @@ $$('.vision-preset').forEach(btn=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.15';
+const APP_CURRENT_VERSION='2.8.18';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
@@ -2373,8 +2466,16 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
   loadConfig();
   renderProjects();
   renderHistory();
-  newChat();
-  if(new URLSearchParams(location.search).get('openSidebar')==='1')openSidebar();
+  if(new URLSearchParams(location.search).get('openSidebar')==='1'){
+    state.conversationId=null;
+    messagesEl.innerHTML='';
+    $('#greeting').textContent='你好，今天想聊点什么？';
+    updateTopTitle('新对话');
+    toggleGroupUi(null);
+    openSidebar();
+  }else{
+    newChat();
+  }
 })();
 
 window.addEventListener('storage',e=>{

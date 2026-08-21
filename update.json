@@ -1,11 +1,11 @@
 {
-  "version": "2.8.15",
-  "notes": "群聊发送状态微信化：选图/文件先留在输入框预览、可配文字再发送；发送时消息立即显示转圈，成功变 ✓✓，失败显示红色感叹号，点感叹号重发；发送中不再拉取远端覆盖本地消息。",
+  "version": "2.8.18",
+  "notes": "普通聊天也支持发送图片/文件（本机保存，缩略图点击放大）；群聊图片上传改用正确接口（PUT+Filename）并保留本地预览双保险；从群聊返回侧栏不再自动弹键盘。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "efdaf3abb27eb163b935c0685a004227ff7d74eb072b3b249bd502f38717dd3a"
+      "sha256": "c686df1eade860eff8dc074d1338ae85c68e13202a840f669057ca93d5e7e976"
     }
   }
 }

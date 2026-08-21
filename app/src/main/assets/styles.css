@@ -3292,3 +3292,101 @@ body.is-scrolling .turn{
 .project-new-chat{background:rgba(255,255,255,.14);border:1px dashed rgba(120,150,140,.35);padding:10px 12px;font-size:13px}
 .project-children .chat-history-row .chat-history{padding:10px 12px;font-size:13px;margin:4px 0}
 .project-children .history-more{width:30px;height:30px;font-size:16px}
+
+/* sidebar: fixed header/search, everything else scrolls together */
+.sidebar{display:flex;flex-direction:column;overflow:hidden!important}
+.sidebar-head,.sidebar-search{flex:0 0 auto}
+.sidebar-scroll{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+}
+.sidebar-bottom{
+  position:static!important;
+  background:none!important;
+}
+
+/* normal chat attachments */
+.plus-button{
+  flex:0 0 auto;
+  width:44px;height:44px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.55);
+  background:rgba(255,255,255,.2);
+  font-size:24px;color:#2f7c69;
+  display:grid;place-items:center;
+}
+.attach-menu{
+  position:absolute;
+  right:14px;
+  bottom:calc(100% + 8px);
+  z-index:35;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  padding:8px;
+  border-radius:18px;
+  background:linear-gradient(155deg,rgba(248,251,253,.95),rgba(239,246,248,.9));
+  border:1px solid rgba(255,255,255,.86);
+  box-shadow:0 18px 46px rgba(26,38,48,.18);
+  -webkit-backdrop-filter:blur(28px) saturate(125%);
+  backdrop-filter:blur(28px) saturate(125%);
+}
+.attach-menu[hidden]{display:none}
+.attach-menu button{
+  border:0;background:transparent;border-radius:13px;
+  padding:11px 16px;font-size:14px;color:#22313b;
+  display:flex;align-items:center;gap:9px;text-align:left;
+}
+.attach-menu button:active{background:rgba(150,210,196,.18)}
+.attach-preview{
+  margin-bottom:8px;
+  padding:10px 12px;
+  border-radius:16px;
+  background:rgba(255,255,255,.45);
+  border:1px solid rgba(255,255,255,.7);
+  position:relative;
+  display:flex;align-items:center;gap:10px;
+}
+.attach-preview[hidden]{display:none}
+.attach-preview img{max-width:110px;max-height:110px;border-radius:12px;object-fit:cover}
+.attach-preview #chatRemoveAttachment{
+  position:absolute;top:8px;right:8px;
+  width:26px;height:26px;border-radius:50%;border:0;
+  background:rgba(30,40,48,.55);color:#fff;font-size:14px;line-height:1;
+}
+.preview-file{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
+.chat-attach-img{
+  display:block;
+  max-width:150px;
+  max-height:150px;
+  border-radius:12px;
+  object-fit:cover;
+  margin-bottom:6px;
+  cursor:pointer;
+}
+.file-card{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:14px;
+  background:rgba(255,255,255,.5);
+  border:1px solid rgba(255,255,255,.6);
+  margin-bottom:6px;
+}
+.file-card .file-icon{font-size:24px}
+.file-copy{display:flex;flex-direction:column;min-width:0}
+.file-copy strong{font-size:13px;color:#1b2a33;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.file-copy small{font-size:11px;color:#7a8791}
+.image-viewer{
+  position:fixed;inset:0;z-index:400;
+  background:rgba(10,16,20,.92);
+  display:flex;align-items:center;justify-content:center;
+  padding:20px;
+}
+.image-viewer[hidden]{display:none}
+.image-viewer img{max-width:96vw;max-height:92vh;border-radius:14px;object-fit:contain}
+.image-viewer button{
+  position:absolute;top:18px;right:18px;
+  width:40px;height:40px;border-radius:50%;border:0;
+  background:rgba(255,255,255,.18);color:#fff;font-size:24px;
+}

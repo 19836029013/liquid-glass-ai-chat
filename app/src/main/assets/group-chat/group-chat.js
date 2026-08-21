@@ -236,8 +236,9 @@
       let bubbleContent=decorateMentions(normalizeText(m.content));
       if(m.attachment){
         const isImg=String(m.attachment.type||'').startsWith('image/');
+        const imgSrc=m.attachment.localUrl||m.attachment.url||'';
         bubbleContent=isImg
-          ? `<img class="attach-img" src="${escapeHtml(m.attachment.url)}" loading="lazy" alt="图片" />`
+          ? `<img class="attach-img" src="${escapeHtml(imgSrc)}" data-full="${escapeHtml(m.attachment.url||imgSrc)}" loading="lazy" alt="图片" />`
           : `<div class="file-card" data-url="${escapeHtml(m.attachment.url)}"><span class="file-icon">📄</span><span class="file-copy"><strong>${escapeHtml(m.attachment.name||'文件')}</strong><small>${formatSize(m.attachment.size)}</small></span></div>`;
       }
       if(m.role==='assistant'){
@@ -272,6 +273,17 @@
     requestAnimationFrame(()=>{const s=$('#chatScroll');s.scrollTop=s.scrollHeight});
   }
   document.addEventListener('click',e=>{
+    const img=e.target.closest('.attach-img');
+    if(img){
+      $('#imageViewerImg').src=img.dataset.full||img.src;
+      $('#imageViewer').hidden=false;
+      return;
+    }
+    if(e.target.closest('#imageViewer')){
+      $('#imageViewer').hidden=true;
+      $('#imageViewerImg').src='';
+      return;
+    }
     const card=e.target.closest('.file-card');
     if(card&&card.dataset.url&&bridge&&bridge.openUrl){
       bridge.openUrl(card.dataset.url);
@@ -279,6 +291,7 @@
     const retry=e.target.closest('[data-retry]');
     if(retry)retryMessage(retry.dataset.retry);
   });
+  $('#imageViewerClose').addEventListener('click',()=>{$('#imageViewer').hidden=true;$('#imageViewerImg').src=''});
   async function retryMessage(id){
     const c=conv();
     if(!c)return;
@@ -426,15 +439,17 @@
       saveConversations();
       watchGroup();
     }
-    const res=await fetch(c.syncUrl+'?filename='+encodeURIComponent(file.name),{
-      method:'POST',
-      headers:{'Content-Type':file.type||'application/octet-stream'},
+    const res=await fetch(c.syncUrl,{
+      method:'PUT',
+      headers:{'Content-Type':file.type||'application/octet-stream','Filename':file.name},
       body:file,
     });
     if(!res.ok)throw new Error('上传失败 HTTP '+res.status);
     const j=await res.json();
     const att=j.attachment||{};
-    return {url:att.url||'',type:file.type||'',name:file.name||'file',size:file.size||0};
+    let url=att.url||'';
+    if(url.startsWith('/'))url=SYNC_BASE+url;
+    return {url,type:file.type||'',name:file.name||'file',size:file.size||0};
   }
   let pendingFile=null;
   let pendingPreviewUrl=null;
@@ -518,7 +533,7 @@
     const mentions=buildMentions(text);
     let attachment=null;
     if(pendingFile){
-      attachment={url:pendingPreviewUrl||'',type:pendingFile.type||'',name:pendingFile.name||'file',size:pendingFile.size||0,local:true};
+      attachment={url:pendingPreviewUrl||'',localUrl:pendingPreviewUrl||'',type:pendingFile.type||'',name:pendingFile.name||'file',size:pendingFile.size||0,local:true};
     }
     const userMsg={id:uid(),role:'user',content:text,authorId:account.id,authorName:account.name,mentions,attachment,status:'sending',created_at:nowISO()};
     if(pendingFile)$('#attachPreview').hidden=true;
@@ -540,7 +555,6 @@
         if(attachment&&attachment.local){
           const remote=await uploadAttachment(c,{name:attachment.name,type:attachment.type,size:attachment.size});
           userMsg.attachment={...attachment,url:remote.url,local:false};
-          if(pendingPreviewUrl){try{URL.revokeObjectURL(pendingPreviewUrl)}catch(e){}}
           pendingPreviewUrl=null;
           pendingFile=null;
         }
