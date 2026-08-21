@@ -1,11 +1,11 @@
 {
-  "version": "2.7.5",
-  "notes": "分享升级为卡片分享：自动生成鲸鱼娘风格对话卡片图，调起系统分享面板（QQ/微信等可选）；复制保持纯文本复制，不再重复。",
+  "version": "2.7.6",
+  "notes": "对话操作小浮窗改为毛玻璃拟态样式：四个功能项（重命名/置顶/移动/删除）带细分隔线，与全 App 玻璃风格统一。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "12227217ca0eff5ab3120e712f0dd925a2622bb49f69b353069773d1635eae4a"
+      "sha256": "9f96e5111df965a69df323ea7100c074b86e90d562f854e1d1e634167cc83417"
     }
   }
 }
