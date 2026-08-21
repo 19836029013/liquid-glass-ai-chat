@@ -1,11 +1,11 @@
 {
-  "version": "2.7.0",
-  "notes": "对话管理：侧栏每条对话可重命名/置顶/取消置顶/移动到项目/删除；项目功能可用（新建项目文件夹，可把对话放进去）；侧栏新建对话按钮移除。",
+  "version": "2.7.1",
+  "notes": "修复：从侧边栏打开对话操作菜单时弹窗被侧栏遮挡的问题（弹窗层级提升到最顶层，打开时自动收起侧栏）。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "0c283dd0e6eb779cec4ada52bd4abe153c109de4dfce1a8f1a64bde553748855"
+      "sha256": "f78ade9aa855b65c9f79ab17ce0560d9ffc764a82c2141bf4083c587e3adeb20"
     }
   }
 }

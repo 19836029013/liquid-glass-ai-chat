@@ -562,6 +562,7 @@ let deleteArmed=false;
 function openActionSheet(id){
   actionTargetId=id;
   deleteArmed=false;
+  closeSidebar();
   const conv=state.conversations.find(c=>c.id===id);
   if(!conv)return;
   actionSheet.innerHTML=`
@@ -1199,7 +1200,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.0';
+const APP_CURRENT_VERSION='2.7.1';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
