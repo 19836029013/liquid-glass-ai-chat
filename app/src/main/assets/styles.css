@@ -3069,6 +3069,14 @@ body.sheet-open .wallpaper-overlay{
 .sheet-option.danger{color:#b0564f}
 .sheet-option.danger .sheet-option-icon{color:#b0564f}
 
+/* top pill shows the conversation title */
+.top-model-pill{flex:0 1 auto;min-width:120px;max-width:min(48vw,420px);margin:0 10px;overflow:hidden}
+.pill-marquee{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-align:center}
+#topModelLabel{white-space:nowrap;display:inline-block;max-width:100%}
+.top-model-pill.marquee #topModelLabel{display:inline-flex;animation:pill-scroll 9s linear infinite}
+.pill-text{padding-right:14px}
+@keyframes pill-scroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
 .project-chevron{width:16px;text-align:center;color:#6d7a83;font-size:12px}
 .project-icon{width:18px;text-align:center;color:#5b8f80}
 .project-children{margin:0 0 6px 14px;padding-left:10px;border-left:1px solid rgba(120,150,140,.28)}

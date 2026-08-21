@@ -329,7 +329,6 @@ function chooseModel(id,source){
   localStorage.setItem('ai.modelId',id);
   localStorage.setItem('ai.modelSource',source);
   $('#modelLabel').textContent=id||'选择模型';
-  $('#topModelLabel').textContent=id||'选择模型';
   $('#sidebarModelLabel').textContent=id||'未选择模型';
   closePopovers();
 }
@@ -380,18 +379,15 @@ function rebuildModelMenu(){
       localStorage.setItem('ai.modelId',preferred.id);
       localStorage.setItem('ai.modelSource',preferred.source);
       $('#modelLabel').textContent=preferred.id;
-      $('#topModelLabel').textContent=preferred.id;
       $('#sidebarModelLabel').textContent=preferred.id;
     }else{
       $('#modelLabel').textContent='选择模型';
-      $('#topModelLabel').textContent='选择模型';
       $('#sidebarModelLabel').textContent='未选择模型';
       state.modelId='';
       state.modelSource='';
     }
   }else{
     $('#modelLabel').textContent=state.modelId;
-    $('#topModelLabel').textContent=state.modelId;
     $('#sidebarModelLabel').textContent=state.modelId;
   }
 }
@@ -458,10 +454,6 @@ $('#modelSelect').addEventListener('click',e=>{
   if(modelPopover.classList.contains('show'))closePopovers();
   else openSheet(modelPopover);
 });
-$('#topModelButton').addEventListener('click',e=>{
-  e.stopPropagation();
-  openSheet(modelPopover);
-});
 $('#reasoningSelect').addEventListener('click',e=>{
   e.stopPropagation();
   if(reasoningPopover.classList.contains('show'))closePopovers();
@@ -471,6 +463,26 @@ sheetScrim.addEventListener('click',closePopovers);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePopovers()});
 
 /* ---------- history / sidebar ---------- */
+function updateTopTitle(title){
+  const btn=$('#topModelButton');
+  const label=$('#topModelLabel');
+  if(!btn||!label)return;
+  const text=String(title||'').trim()||'新对话';
+  label.textContent=text;
+  requestAnimationFrame(()=>{
+    const wrap=label.parentElement;
+    const over=wrap&&label.scrollWidth>wrap.clientWidth+2;
+    btn.classList.toggle('marquee',!!over);
+    if(over){
+      label.innerHTML='';
+      const a=document.createElement('span');
+      a.className='pill-text';
+      a.textContent=text;
+      label.appendChild(a);
+      label.appendChild(a.cloneNode(true));
+    }
+  });
+}
 function historyButton(c){
   const row=document.createElement('div');
   row.className='chat-history-row';
@@ -707,6 +719,7 @@ function startRenameConversation(id){
     saveConversations();
     renderHistory();
     if(state.conversationId===conv.id)$('#greeting').textContent=conv.title||'对话';
+    updateTopTitle(conv.title||'对话');
     showToast(name?'已重命名':'名称未修改');
   };
   input.addEventListener('keydown',e=>{
@@ -719,6 +732,7 @@ function loadConversation(id){
   const conv=state.conversations.find(c=>c.id===id);if(!conv)return;
   state.conversationId=id;
   $('#greeting').textContent=conv.title||'对话';
+  updateTopTitle(conv.title||'对话');
   renderMessages(conv.messages||[]);
   closeSidebar();
   renderHistory();
@@ -728,6 +742,7 @@ function newChat(){
   state.conversationId=null;
   messagesEl.innerHTML='';
   $('#greeting').textContent='你好，今天想聊点什么？';
+  updateTopTitle('新对话');
   promptInput.value='';promptInput.focus();
   closeSidebar();renderHistory();showToast('新建对话');
 }
@@ -953,6 +968,7 @@ async function sendMessage(){
   const assistantMsg={id:uid(),role:'assistant',content:'',model:state.modelId||cfg.model,created_at:nowISO(),streaming:true};
   conv.messages.push(userMsg,assistantMsg);
   if(conv.title==='新对话')conv.title=text.slice(0,18);
+  updateTopTitle(conv.title);
   promptInput.value='';promptInput.style.height='auto';
   messagesEl.insertAdjacentHTML('beforeend',messageHTML(userMsg));
   scrollBottom();
@@ -1228,7 +1244,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.2';
+const APP_CURRENT_VERSION='2.7.3';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

@@ -1,11 +1,11 @@
 {
-  "version": "2.7.2",
-  "notes": "项目改为可展开/收起的文件夹：项目内对话只显示在文件夹里，不再混入最近聊天；点项目不再影响最近聊天列表；文件夹内可直接新建对话。",
+  "version": "2.7.3",
+  "notes": "顶部胶囊改为显示当前对话名称（不再是模型选择，模型选择保留在输入框下方）；名字短自动拉伸胶囊，名字长自动滚动播放，且不会碰到两侧按钮。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "231e5f63e9adc8651a6159c2b036c8a613f12c23c9d1d3cdff9577dcc4e31995"
+      "sha256": "9a9455b3a2fc1f6c32faec55d5f133d2cf683de2460be6c762d9e3ffbbbcbfbc"
     }
   }
 }
