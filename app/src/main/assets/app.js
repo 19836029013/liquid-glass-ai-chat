@@ -12,6 +12,7 @@ const state={
   conversations:[],
   projects:[],
   expandedProject:null,
+  draft:null,
   conversationId:null,
   modelId:safeGet('ai.modelId'),
   modelSource:safeGet('ai.modelSource'),
@@ -210,12 +211,14 @@ function saveConversations(){
     saveTimer=setTimeout(()=>{try{bridge.saveState(json)}catch(e){}},400);
   }
 }
-function currentConversation(){return state.conversations.find(c=>c.id===state.conversationId)||null}
+function currentConversation(){
+  if(state.draft&&state.draft.id===state.conversationId)return state.draft;
+  return state.conversations.find(c=>c.id===state.conversationId)||null;
+}
 function newConversation(){
   const c={id:uid(),title:'新对话',pinned:false,projectId:state.expandedProject||null,created_at:nowISO(),messages:[]};
-  state.conversations.push(c);
+  state.draft=c;
   state.conversationId=c.id;
-  saveConversations();
   return c;
 }
 
@@ -977,8 +980,8 @@ function startRenameConversation(id){
   input.addEventListener('blur',finish);
 }
 function loadConversation(id){
-  const conv=state.conversations.find(c=>c.id===id);if(!conv)return;
   state.conversationId=id;
+  const conv=currentConversation();if(!conv)return;
   if(conv.group){
     closeSidebar();
     location.href='group-chat/index.html?conv='+encodeURIComponent(id);
@@ -1231,6 +1234,11 @@ async function sendMessage(){
   if(!cfg){openSettings('api');showToast('请先配置 AI 接口');return}
   let conv=currentConversation();
   if(!conv)conv=newConversation();
+  if(state.draft===conv){
+    state.conversations.push(conv);
+    state.draft=null;
+    saveConversations();
+  }
   if(conv.group){
     await pullSync(conv);
     if(!conv.syncUrl){
@@ -1544,9 +1552,8 @@ async function watchGroup(conv){
 }
 function newGroupChat(){
   const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name},{id:'friend',name:'朋友'}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
-  state.conversations.push(conv);
+  try{localStorage.setItem('lgchat_draft',JSON.stringify(conv))}catch(e){}
   state.conversationId=conv.id;
-  saveConversations();
   renderHistory();
   closeSidebar();
   location.href='group-chat/index.html?conv='+encodeURIComponent(conv.id);
@@ -1936,7 +1943,7 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.8';
+const APP_CURRENT_VERSION='2.8.9';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
@@ -2335,6 +2342,7 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
 
 /* ---------- init ---------- */
 (async function init(){
+  try{localStorage.removeItem('lgchat_draft')}catch(e){}
   applyAppearance();
   loadWallpaper();
   loadConversations();

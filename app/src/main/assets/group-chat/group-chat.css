@@ -165,6 +165,14 @@ button:active{transform:scale(.975)}
 .message.mine .message-meta{padding-right:3px}
 .message-meta .checks{color:#70b7a3;font-weight:800;margin-left:4px}
 
+/* avatar instead of name for own messages; narrower, taller bubbles; tight time */
+.message-body{max-width:min(66%,460px)!important}
+.message.mine .message-name{display:none!important}
+.message-meta{margin-top:2px!important;font-size:10.5px!important;opacity:.85}
+@media(max-width:700px){
+  .message-body{max-width:74%!important}
+}
+
 .ai-status{
   align-self:center;margin:2px 0;
   padding:6px 12px;border-radius:999px;

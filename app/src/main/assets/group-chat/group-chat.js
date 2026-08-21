@@ -65,7 +65,32 @@
       saveTimer=setTimeout(()=>{try{bridge.saveState(json)}catch(e){}},400);
     }
   }
-  const conv=()=>conversations.find(c=>c.id===convId)||null;
+  let isDraft=false;
+  let draftConv=null;
+  {
+    const d=loadJSON('lgchat_draft',null);
+    if(d&&d.id===convId&&!conversations.some(c=>c.id===convId)){
+      draftConv=d;
+      isDraft=true;
+    }
+  }
+  function conv(){
+    if(isDraft)return draftConv;
+    return conversations.find(c=>c.id===convId)||null;
+  }
+  function commit(){
+    if(isDraft&&draftConv){
+      conversations.push(draftConv);
+      isDraft=false;
+      try{localStorage.removeItem('lgchat_draft')}catch(e){}
+      saveConversations();
+    }
+  }
+  window.addEventListener('pagehide',()=>{
+    if(isDraft&&draftConv&&(!draftConv.messages||!draftConv.messages.length)){
+      try{localStorage.removeItem('lgchat_draft')}catch(e){}
+    }
+  });
   const account={
     id:safeGet('account.id')||uid(),
     name:safeGet('account.name')||safeGet('group.nickname')||'我',
@@ -212,11 +237,12 @@
           </article>`;
       }
       const mine=m.authorId===account.id;
+      const nameRow=mine?'':`<div class="message-name"><span>${escapeHtml(m.authorName||'成员')}</span></div>`;
       return `
         <article class="message ${mine?'mine':''}" data-mid="${m.id}">
           <div class="message-avatar" style="background:${colorFor(m.authorName||'成员')}">${escapeHtml(initials(m.authorName||'成员'))}</div>
           <div class="message-body">
-            <div class="message-name"><span>${escapeHtml(m.authorName||'成员')}</span></div>
+            ${nameRow}
             <div class="bubble">${decorateMentions(normalizeText(m.content))}</div>
             <div class="message-meta">${timeOf(m.created_at)} ${mine?'<span class="checks">✓✓</span>':''}</div>
           </div>
@@ -281,6 +307,7 @@
   function renderInvite(){
     const c=conv();
     if(!c)return;
+    commit();
     if(!c.syncUrl){
       c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
       saveConversations();
@@ -349,10 +376,16 @@
     const c=conv();
     const cfg=readClientApi();
     if(!c)return;
+    commit();
     const input=$('#messageInput');
     const text=input.value.trim();
     if(!text)return;
     if(!cfg){showToast('请先在 App 设置里配置 AI 接口');return}
+    if(!c.syncUrl){
+      c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
+      saveConversations();
+      watchGroup();
+    }
     await fetchRecent();
     const mentions=asksAI(text)?[{type:'ai',target_id:'ai'}]:[];
     const userMsg={id:uid(),role:'user',content:text,authorId:account.id,authorName:account.name,mentions,created_at:nowISO()};

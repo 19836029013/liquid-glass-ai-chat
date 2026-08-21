@@ -1,11 +1,11 @@
 {
-  "version": "2.8.8",
-  "notes": "群聊全新界面：微信式左右消息/头像/成员条/@AI 按钮/邀请链接，全部接入真实逻辑；成员列表只读（不显示自己、不可编辑），点遮罩或×即可关闭。",
+  "version": "2.8.9",
+  "notes": "群聊气泡改版：自己的消息只显示头像+气泡+小时间（去掉名字行），气泡更窄更长；新建对话/项目对话/群聊改为点击后进入、发送消息才真正保存，不再产生空对话。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "d04ab8d453b81598dfda14cf57fee9fc65de2055ac4b64efddd3460257c79186"
+      "sha256": "56024a7ac4630509088e9ffbd0da907a0683cb6b2a9ea11e995a3fe7405eca38"
     }
   }
 }
