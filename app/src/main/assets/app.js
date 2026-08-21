@@ -1506,10 +1506,51 @@ async function shareGroup(conv){
   if(!conv.syncUrl){
     try{await createSyncBlob(conv)}catch(e){showToast('同步不可用');closeRowMenu();return}
   }
-  copyText(conv.syncUrl);
+  const topic=String(conv.syncUrl||'').replace(/\/+$/,'').split('/').pop();
+  copyText('yingzi://join/'+topic);
   closeRowMenu();
-  showToast('群聊链接已复制，发给朋友加入');
+  showToast('群聊专属链接已复制，朋友点击即可加入');
 }
+async function joinGroupByUrl(urlOrTopic){
+  const raw=String(urlOrTopic||'').trim();
+  const topic=raw.split('/').pop();
+  if(!topic)throw new Error('链接无效');
+  const syncUrl=SYNC_BASE+'/'+topic;
+  const res=await fetch(syncUrl+'/json',{cache:'no-store'});
+  if(!res.ok)throw new Error('HTTP '+res.status);
+  const arr=await res.json();
+  let remote=null;
+  if(Array.isArray(arr)&&arr.length){
+    const last=arr[arr.length-1];
+    if(last&&typeof last==='object'&&last.message){
+      try{remote=JSON.parse(last.message)}catch(e){}
+    }else if(typeof last==='string'){
+      try{remote=JSON.parse(last)}catch(e){}
+    }
+  }
+  if(!remote&&Array.isArray(arr))remote={title:'新群聊',members:[],messages:[],updatedAt:Date.now()};
+  if(!remote||!Array.isArray(remote.messages))throw new Error('不是有效的群聊');
+  if(state.conversations.some(c=>c.id===remote.id))throw new Error('已加入该群聊');
+  remote.syncUrl=syncUrl;
+  remote.updatedAt=Date.now();
+  remote.notifiedId=remote.messages.length?remote.messages[remote.messages.length-1].id:null;
+  state.conversations.push(remote);
+  state.conversationId=remote.id;
+  saveConversations();
+  renderHistory();
+  $('#greeting').textContent=remote.title;
+  updateTopTitle(remote.title);
+  renderMessages(remote.messages||[]);
+  return remote;
+}
+window.__autoJoinGroup=async function(topic){
+  try{
+    await joinGroupByUrl(topic);
+    showToast('已加入群聊');
+  }catch(e){
+    showToast('加入失败：'+(e.message||'未知错误'));
+  }
+};
 function promptJoinGroup(){
   closeRowMenu();
   const menu=document.createElement('div');
@@ -1525,35 +1566,8 @@ function promptJoinGroup(){
     const url=input.value.trim();
     if(!url){showToast('请粘贴链接');return}
     try{
-      const topic=String(url).replace(/\/+$/,'').split('/').pop();
-      if(!topic)throw new Error('链接无效');
-      const syncUrl=SYNC_BASE+'/'+topic;
-      const res=await fetch(syncUrl+'/json',{cache:'no-store'});
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      const arr=await res.json();
-      let remote=null;
-      if(Array.isArray(arr)&&arr.length){
-        const last=arr[arr.length-1];
-        if(last&&typeof last==='object'&&last.message){
-          try{remote=JSON.parse(last.message)}catch(e){}
-        }else if(typeof last==='string'){
-          try{remote=JSON.parse(last)}catch(e){}
-        }
-      }
-      if(!remote&&Array.isArray(arr))remote={title:'新群聊',members:[],messages:[],updatedAt:Date.now()};
-      if(!remote||!Array.isArray(remote.messages))throw new Error('不是有效的群聊');
-      if(state.conversations.some(c=>c.id===remote.id))throw new Error('已加入该群聊');
-      remote.syncUrl=syncUrl;
-      remote.updatedAt=Date.now();
-      remote.notifiedId=remote.messages.length?remote.messages[remote.messages.length-1].id:null;
-      state.conversations.push(remote);
-      state.conversationId=remote.id;
-      saveConversations();
-      renderHistory();
+      await joinGroupByUrl(url);
       closeRowMenu();
-      $('#greeting').textContent=remote.title;
-      updateTopTitle(remote.title);
-      renderMessages(remote.messages||[]);
       showToast('已加入群聊');
     }catch(e){
       showToast('加入失败：'+(e.message||'未知错误'));
@@ -1759,7 +1773,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.2';
+const APP_CURRENT_VERSION='2.8.3';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

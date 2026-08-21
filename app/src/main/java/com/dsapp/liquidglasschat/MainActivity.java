@@ -70,6 +70,7 @@ public class MainActivity extends Activity {
     private SharedPreferences prefs;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ValueCallback<Uri[]> fileChooserCallback;
+    private String pendingJoinTopic = null;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -109,6 +110,7 @@ public class MainActivity extends Activity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 loadingBar.setVisibility(View.GONE);
+                pushJoinTopicToJs();
                 if (!prefs.contains(KEY_API_CONFIG)) {
                     handler.postDelayed(() -> {
                         if (!isFinishing() && !isDestroyed()) openSettingsModal();
@@ -162,6 +164,40 @@ public class MainActivity extends Activity {
         ((Button) findViewById(R.id.settingsButton)).setOnClickListener(v -> openSettingsModal());
 
         webView.loadUrl("file:///android_asset/index.html");
+        handleJoinIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleJoinIntent(intent);
+    }
+
+    private void handleJoinIntent(Intent intent) {
+        if (intent == null) return;
+        Uri uri = intent.getData();
+        if (uri == null) return;
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        if (scheme == null || !scheme.equalsIgnoreCase("yingzi")) return;
+        if (host == null || !host.equalsIgnoreCase("join")) return;
+        String topic = uri.getLastPathSegment();
+        if (topic == null || topic.isEmpty()) {
+            topic = uri.getPath() == null ? "" : uri.getPath().replace("/", "");
+        }
+        if (!topic.isEmpty()) {
+            pendingJoinTopic = topic;
+            pushJoinTopicToJs();
+        }
+    }
+
+    private void pushJoinTopicToJs() {
+        if (pendingJoinTopic == null) return;
+        final String topic = pendingJoinTopic;
+        pendingJoinTopic = null;
+        webView.evaluateJavascript(
+                "window.__autoJoinGroup&&window.__autoJoinGroup(" + JSONObject.quote(topic) + ")", null);
     }
 
     private void openSettingsModal() {

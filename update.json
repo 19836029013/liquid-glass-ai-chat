@@ -1,11 +1,11 @@
 {
-  "version": "2.8.2",
-  "notes": "软件更名为“英子起飞”：桌面图标名、页面标题、侧栏品牌、分享卡片署名全部更新。",
+  "version": "2.8.3",
+  "notes": "群聊加入方式改为专属链接（yingzi://join/xxx）：朋友点击链接直接唤起 App 并自动加入群聊，不再打开网页。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "5710d4619b39d2d3becd05cc7f5440ca49bf0c5acb1c0b11ba167eddfc48a961"
+      "sha256": "8312bfd97bfbbac7bf807bc9be16a28187a3870907b6935f78505021aa3508b6"
     }
   }
 }
