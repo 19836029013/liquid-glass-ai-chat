@@ -1,11 +1,11 @@
 {
-  "version": "2.7.10",
-  "notes": "对话文本颜色加深、加粗，提高阅读对比度（不再发灰）。",
+  "version": "2.7.11",
+  "notes": "对话到底不再有空白可滚动区：最后一条消息的动作按钮紧贴输入框上方，滚动到底即停；壁纸/遮罩/玻璃滑杆再加固（遮罩直接写入样式）。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "c93ccf7797f680836b9ba7c66e57b3db8239d6b8075088bc5e6267206a03c818"
+      "sha256": "3fa5ced7ed653430997d0a26a55e44342d6a5ed644d83817e897492afe780d02"
     }
   }
 }

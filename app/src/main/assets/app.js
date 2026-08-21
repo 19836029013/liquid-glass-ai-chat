@@ -1573,7 +1573,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.10';
+const APP_CURRENT_VERSION='2.7.11';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
@@ -1888,11 +1888,13 @@ function applyAppearance(){
   document.documentElement.style.setProperty('--wallpaper-dim',String(dim/100));
   document.documentElement.style.setProperty('--glass-a',String(glass/100));
   document.documentElement.style.setProperty('--glass-a-strong',String(Math.min(.52,glass/100+.06)));
+  const overlay=$('#wallpaperOverlay');
+  if(overlay)overlay.style.background=`rgba(228,236,240,${dim/100})`;
   $('#wallpaperDim').value=dim;$('#dimOutput').textContent=`${dim}%`;
   $('#glassOpacity').value=glass;$('#glassOutput').textContent=`${glass}%`;
 }
-$('#wallpaperDim').addEventListener('input',e=>{const v=Number(e.target.value);localStorage.setItem('appearance.dim',String(v));document.documentElement.style.setProperty('--wallpaper-dim',String(v/100));$('#dimOutput').textContent=`${v}%`});
-$('#glassOpacity').addEventListener('input',e=>{const v=Number(e.target.value);localStorage.setItem('appearance.glass',String(v));document.documentElement.style.setProperty('--glass-a',String(v/100));document.documentElement.style.setProperty('--glass-a-strong',String(Math.min(.52,v/100+.06)));$('#glassOutput').textContent=`${v}%`});
+$('#wallpaperDim').addEventListener('input',e=>{localStorage.setItem('appearance.dim',String(e.target.value));applyAppearance()});
+$('#glassOpacity').addEventListener('input',e=>{localStorage.setItem('appearance.glass',String(e.target.value));applyAppearance()});
 
 /* ---------- tactile feedback ---------- */
 function canVibrate(){

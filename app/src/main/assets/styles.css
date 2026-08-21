@@ -3204,6 +3204,16 @@ body.sidebar-open .sidebar{
   font-weight:500;
 }
 
+/* conversation ends right above the composer: no scrollable blank space */
+.bottom-spacer{height:10px!important}
+.chat-page{padding-bottom:170px!important}
+@media(max-width:700px){
+  .chat-page{padding-bottom:152px!important}
+}
+html,body{
+  overscroll-behavior-y:contain;
+}
+
 /* smoother scrolling: drop heavy blur on message cards while scrolling */
 body.is-scrolling .turn .assistant-bubble,
 body.is-scrolling .turn .user-bubble,
