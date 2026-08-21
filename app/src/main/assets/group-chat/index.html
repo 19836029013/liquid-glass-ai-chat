@@ -11,6 +11,40 @@
   <div class="wallpaper" aria-hidden="true"></div>
   <div class="wallpaper-overlay" aria-hidden="true"></div>
 
+  <aside class="sidebar glass" id="sidebar" aria-hidden="true">
+    <div class="sidebar-head">
+      <div class="sidebar-brand">
+        <span class="sidebar-brand-mark">✦</span>
+        <div><strong>英子起飞</strong><small id="sidebarModelLabel">未选择模型</small></div>
+      </div>
+      <button class="plain-icon" data-sidebar-close aria-label="关闭侧栏">×</button>
+    </div>
+    <label class="sidebar-search">
+      <span>⌕</span>
+      <input id="sidebarSearch" type="search" autocomplete="off" placeholder="搜索对话…" />
+    </label>
+    <div class="sidebar-scroll">
+      <div class="side-subhead section-label">项目</div>
+      <div id="projectList"></div>
+      <div class="side-separator"></div>
+      <section id="groupSection"><h3>群聊</h3><div id="groupChatList"></div></section>
+      <div class="side-separator"></div>
+      <section id="historySection">
+        <h3>对话</h3>
+        <div class="side-subhead">置顶</div>
+        <div id="pinnedChatList"></div>
+        <div class="side-subhead recent-title">最近</div>
+        <div id="recentChatList"></div>
+      </section>
+      <div class="sidebar-bottom">
+        <button class="side-item" id="newGroupButton"><span>◎</span><span>新建群聊</span></button>
+        <button class="side-item" id="joinGroupButton"><span>⇄</span><span>加入群聊</span></button>
+        <button class="side-item" id="sidebarSettings"><span>⚙</span><span>设置</span></button>
+      </div>
+    </div>
+  </aside>
+  <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
   <main class="group-app" id="groupApp">
     <header class="topbar">
       <button class="round-button glass" id="menuButton" aria-label="返回">

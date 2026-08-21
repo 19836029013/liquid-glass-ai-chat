@@ -307,6 +307,97 @@ html,body{height:100%;overflow:hidden}
   cursor:pointer;
 }
 
+/* sidebar inside group chat */
+.sidebar{
+  position:fixed;z-index:60;
+  left:12px;top:14px;bottom:16px;
+  width:min(355px,86vw);
+  padding:24px;border-radius:32px;
+  transform:translateX(calc(-100% - 30px));
+  transition:transform .28s cubic-bezier(.2,.8,.2,1);
+  display:flex;flex-direction:column;overflow:hidden;
+  background:linear-gradient(145deg,rgba(255,255,255,.94),rgba(238,246,248,.9));
+  border:1px solid rgba(255,255,255,.86);
+  box-shadow:0 18px 52px rgba(53,66,76,.12),inset 0 1px 0 rgba(255,255,255,.6);
+  -webkit-backdrop-filter:blur(30px) saturate(130%);
+  backdrop-filter:blur(30px) saturate(130%);
+}
+.sidebar.open{transform:translateX(0)}
+.sidebar-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.sidebar-brand strong{font-size:18px;color:#16222b}
+.sidebar-brand small{font-size:11.5px;color:#76838d}
+.plain-icon{border:0;background:transparent;font-size:26px;color:#44505a}
+.sidebar-search{
+  display:flex;align-items:center;gap:9px;
+  margin:6px 2px 12px;padding:0 13px;height:44px;
+  border-radius:18px;background:rgba(255,255,255,.42);
+  border:1px solid rgba(255,255,255,.66);
+}
+.sidebar-search span{color:#7b8790;font-size:18px}
+.sidebar-search input{min-width:0;width:100%;border:0;outline:0;background:transparent;color:#192630;font-size:14px}
+.sidebar-scroll{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+.side-subhead{font-size:12px;color:#77818a;margin:10px 4px 6px}
+.side-item{
+  width:100%;display:flex;align-items:center;gap:10px;
+  min-height:44px;margin:5px 0;padding:0 14px;
+  border:0;border-radius:17px;background:rgba(255,255,255,.3);
+  color:#1b2630;text-align:left;font-size:14px;
+}
+.side-item.current{background:rgba(116,190,170,.15);color:#2e7d69}
+.sidebar h3{font-size:13px;color:#6e7b84;margin:0 4px 8px;font-weight:750}
+.side-separator{height:1px;background:rgba(90,105,115,.16);margin:12px 0 16px}
+.sidebar-bottom{margin-top:14px;padding-top:10px;border-top:1px solid rgba(90,105,115,.14)}
+.sidebar-backdrop{
+  position:fixed;inset:0;z-index:55;
+  background:rgba(51,62,70,.12);backdrop-filter:blur(5px);
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+.sidebar-backdrop.show{opacity:1;pointer-events:auto}
+.empty-history{font-size:12px;color:#7b858d;padding:8px 12px}
+
+/* squeeze animation when sidebar opens */
+.group-app{transition:transform .28s cubic-bezier(.2,.8,.2,1)}
+body.sidebar-open .group-app{transform:translateX(30px) scale(.985)}
+
+/* emoji / sticker panel */
+.emoji-button{
+  width:40px;height:40px;border-radius:50%;
+  font-size:19px;
+}
+.sticker-panel{
+  position:absolute;
+  left:14px;right:14px;
+  bottom:calc(100% + 8px);
+  z-index:36;
+  padding:10px;
+  border-radius:22px;
+  background:linear-gradient(155deg,rgba(248,251,253,.96),rgba(239,246,248,.92));
+  border:1px solid rgba(255,255,255,.88);
+  box-shadow:0 20px 50px rgba(26,38,48,.18);
+  -webkit-backdrop-filter:blur(30px) saturate(125%);
+  backdrop-filter:blur(30px) saturate(125%);
+  max-height:38vh;
+  overflow-y:auto;
+}
+.sticker-panel[hidden]{display:none}
+.sticker-manage-bar{display:flex;align-items:center;gap:8px;padding:0 2px 8px}
+.sticker-manage-bar button{
+  border:0;border-radius:14px;
+  background:rgba(255,255,255,.35);
+  color:#3a8e7e;font-size:12px;
+  padding:7px 12px;
+}
+.sticker-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px}
+.emoji-item{border:0;background:transparent;font-size:26px;padding:6px;border-radius:12px}
+.emoji-item:active{background:rgba(150,210,196,.18)}
+.sticker-item-wrap{position:relative;display:grid;place-items:center}
+.sticker-item{width:48px;height:48px;object-fit:contain;border-radius:10px}
+.sticker-del{
+  position:absolute;top:-4px;right:-4px;
+  width:20px;height:20px;border-radius:50%;border:0;
+  background:rgba(224,82,82,.9);color:#fff;font-size:11px;line-height:1;
+}
+
 .ai-status{
   align-self:center;margin:2px 0;
   padding:6px 12px;border-radius:999px;

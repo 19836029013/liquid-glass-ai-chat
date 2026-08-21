@@ -1121,6 +1121,7 @@ function renderStickerPanel(){
     <div class="sticker-manage-bar">
       <button type="button" id="stickerAdd">＋ 添加贴纸</button>
       <button type="button" id="stickerManage">${stickerManage?'完成':'管理'}</button>
+      <button type="button" id="stickerClose">收起</button>
     </div>
     <div class="sticker-grid">
       ${EMOJIS.map(e=>`<button type="button" class="emoji-item" data-emoji="${e}">${e}</button>`).join('')}
@@ -1133,14 +1134,20 @@ function renderStickerPanel(){
   panel.hidden=false;
   $('#stickerAdd').addEventListener('click',()=>$('#stickerImageInput').click());
   $('#stickerManage').addEventListener('click',()=>{stickerManage=!stickerManage;renderStickerPanel()});
+  $('#stickerClose').addEventListener('click',()=>{panel.hidden=true});
   panel.querySelectorAll('[data-emoji]').forEach(b=>b.addEventListener('click',()=>{
-    panel.hidden=true;
-    promptInput.value=b.dataset.emoji;
-    sendMessage();
+    promptInput.value+=(promptInput.value&&!promptInput.value.endsWith(' ')?' ':'')+b.dataset.emoji;
+    promptInput.focus();
+    promptInput.dispatchEvent(new Event('input'));
   }));
   panel.querySelectorAll('[data-sticker]').forEach(img=>img.addEventListener('click',()=>{
-    panel.hidden=true;
-    sendStickerImage(img.dataset.sticker);
+    const s=loadStickers().find(x=>x.id===img.dataset.sticker);
+    if(!s)return;
+    fetch(s.url).then(r=>r.blob()).then(blob=>{
+      const file=new File([blob],'sticker.png',{type:'image/png'});
+      panel.hidden=true;
+      pickChatAttachment(file);
+    }).catch(()=>showToast('贴纸读取失败'));
   }));
   panel.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{
     const list=loadStickers().filter(s=>s.id!==b.dataset.del);
@@ -1340,15 +1347,40 @@ async function fetchQueryModels(cfg){
 }
 
 /* ---------- chat ---------- */
-function buildHistory(conv,skipMsg){
+function readVisionCfg(){
+  const base=safeGet('vision.base');
+  const key=safeGet('vision.key');
+  const model=safeGet('vision.model');
+  return (base&&key&&model)?{base_url:base,api_key:key,model}:null;
+}
+async function describeImage(vision,url){
+  const text=await completeChat(vision,[{role:'user',content:[
+    {type:'text',text:'请用中文详细描述这张图片的内容，尽量具体完整，为后续回答提供信息。'},
+    {type:'image_url',image_url:{url}},
+  ]}]);
+  return normalizeText(text).trim();
+}
+async function buildHistory(conv,skipMsg){
   const out=[];
   const visionEnabled=safeGet('ai.visionEnabled','1')!=='0';
+  const vision=readVisionCfg();
   const imageMsgs=conv.messages.filter(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
   const recentImages=new Set(imageMsgs.slice(-3).map(m=>m.id));
+  let descIndex=0;
   for(const m of conv.messages){
     if(m===skipMsg)continue;
     if(m.attachment&&String(m.attachment.type||'').startsWith('image/')&&visionEnabled&&recentImages.has(m.id)){
-      out.push({role:'user',content:[{type:'image_url',image_url:{url:m.attachment.url}}]});
+      descIndex++;
+      if(vision){
+        try{
+          const desc=await describeImage(vision,m.attachment.url);
+          out.push({role:'user',content:`[图片${descIndex}的视觉描述] ${desc}`});
+        }catch(e){
+          out.push({role:'user',content:`[图片${descIndex}：视觉模型描述失败]`});
+        }
+      }else{
+        out.push({role:'user',content:`[图片${descIndex}：未配置视觉模型，无法查看]`});
+      }
     }else if(m.content){
       out.push({role:m.role,content:normalizeText(m.content)});
     }
@@ -1356,7 +1388,7 @@ function buildHistory(conv,skipMsg){
   return out;
 }
 async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
-  const msgs=buildHistory(conv,assistantMsg);
+  const msgs=await buildHistory(conv,assistantMsg);
   const turn=existingTurn||appendTempAssistant(assistantMsg);
   const p0=$('.assistant-bubble p',turn);
   if(p0&&existingTurn)p0.classList.add('streaming-caret');
@@ -1400,6 +1432,10 @@ async function sendMessage(){
   const text=promptInput.value.trim();if(!text){showToast('请输入消息');return}
   const cfg=getClientApi();
   if(!cfg){openSettings('api');showToast('请先配置 AI 接口');return}
+  if(conv.messages&&conv.messages.some(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'))
+     &&safeGet('ai.visionEnabled','1')!=='0'&&!readVisionCfg()){
+    showToast('未配置视觉模型，DeepSeek 无法看图，请在设置里配置');
+  }
   let conv=currentConversation();
   if(!conv)conv=newConversation();
   if(state.draft===conv){
@@ -1937,6 +1973,12 @@ function fillSettings(){
   if(nickInput)nickInput.value=state.account.name;
   const visionToggle=$('#visionEnabled');
   if(visionToggle)visionToggle.checked=safeGet('ai.visionEnabled','1')!=='0';
+  const vBase=$('#visionBaseUrl');
+  if(vBase)vBase.value=safeGet('vision.base');
+  const vKey=$('#visionApiKey');
+  if(vKey)vKey.value=safeGet('vision.key');
+  const vModel=$('#visionModel');
+  if(vModel)vModel.value=safeGet('vision.model');
   const accountInput=$('#accountName');
   if(accountInput)accountInput.value=state.account.name;
   const accountStatus=$('#accountStatus');
@@ -2065,6 +2107,12 @@ $('#saveApiButton').addEventListener('click',()=>{
     state.nickname=nick;
     state.account.name=nick;
   }
+  const vBase=$('#visionBaseUrl');
+  const vKey=$('#visionApiKey');
+  const vModel=$('#visionModel');
+  if(vBase)localStorage.setItem('vision.base',vBase.value.trim());
+  if(vKey)localStorage.setItem('vision.key',vKey.value.trim());
+  if(vModel)localStorage.setItem('vision.model',vModel.value.trim());
   saveClientApi(cfg);
   state.clientApi=cfg;
   state.modelId=cfg.model;
@@ -2129,21 +2177,19 @@ $$('.vision-preset').forEach(btn=>{
   btn.addEventListener('click',()=>{
     const preset=btn.dataset.vision;
     const map={
-      deepseek:['https://api.deepseek.com','deepseek-chat'],
       qwen:['https://dashscope.aliyuncs.com/compatible-mode/v1','qwen-vl-max'],
       glm:['https://open.bigmodel.cn/api/paas/v4','glm-4v-plus'],
     };
     const [base,model]=map[preset]||[];
     if(!base)return;
-    $('#apiBaseUrl').value=base;
-    $('#apiModel').value='';
-    populateApiModelSelect(model,[model]);
-    showToast('已填入 '+btn.textContent+' 预设，填好 Key 后保存');
+    $('#visionBaseUrl').value=base;
+    $('#visionModel').value=model;
+    showToast('已填入视觉模型 '+btn.textContent+'，填好视觉 Key 后保存');
   });
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.19';
+const APP_CURRENT_VERSION='2.8.21';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
@@ -2552,8 +2598,9 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
   loadConfig();
   renderProjects();
   renderHistory();
-  if(new URLSearchParams(location.search).get('openSidebar')==='1'){
-    const returnId=new URLSearchParams(location.search).get('conv');
+  const qs=new URLSearchParams(location.search);
+  if(qs.get('openSidebar')==='1'){
+    const returnId=qs.get('conv');
     if(returnId&&state.conversations.some(c=>c.id===returnId))state.returnConvId=returnId;
     state.conversationId=null;
     messagesEl.innerHTML='';
@@ -2561,6 +2608,16 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
     updateTopTitle('新对话');
     toggleGroupUi(null);
     openSidebar();
+  }else if(qs.get('newgroup')==='1'){
+    newGroupChat();
+  }else if(qs.get('joingroup')==='1'){
+    promptJoinGroup();
+  }else if(qs.get('openSettings')==='1'){
+    openSettings('api');
+  }else if(qs.get('open')){
+    const c=state.conversations.find(x=>x.id===qs.get('open'));
+    if(c)loadConversation(c.id);
+    else newChat();
   }else{
     newChat();
   }

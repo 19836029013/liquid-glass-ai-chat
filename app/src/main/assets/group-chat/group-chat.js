@@ -480,6 +480,7 @@
   }
 
   let pendingStream=null;
+  let pendingComplete=null;
   function apiUrl(cfg){return (cfg.base_url||'https://api.deepseek.com').replace(/\/+$/,'')+'/chat/completions'}
   function buildPayload(cfg,messages){
     const payload={model:cfg.model,messages,stream:true};
@@ -503,9 +504,65 @@
       }
     });
   }
+  function completeChat(cfg,messages){
+    return new Promise((resolve,reject)=>{
+      if(bridge&&bridge.completeChat){
+        pendingComplete={resolve,reject};
+        bridge.completeChat(JSON.stringify({url:(cfg.base_url||'').replace(/\/+$/,'')+'/chat/completions',apiKey:cfg.api_key,payload:{model:cfg.model,messages,stream:false}}));
+      }else{
+        reject(new Error('原生桥接不可用'));
+      }
+    });
+  }
+  function readVisionCfg(){
+    const base=safeGet('vision.base');
+    const key=safeGet('vision.key');
+    const model=safeGet('vision.model');
+    return (base&&key&&model)?{base_url:base,api_key:key,model}:null;
+  }
+  async function describeImage(vision,url){
+    const text=await completeChat(vision,[{role:'user',content:[
+      {type:'text',text:'请用中文详细描述这张图片的内容，尽量具体完整，为后续回答提供信息。'},
+      {type:'image_url',image_url:{url}},
+    ]}]);
+    return normalizeText(text).trim();
+  }
+  async function buildGroupHistory(c,assistantMsg){
+    const out=[];
+    const visionEnabled=safeGet('ai.visionEnabled','1')!=='0';
+    const vision=readVisionCfg();
+    const imageMsgs=c.messages.filter(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
+    const recentImages=new Set(imageMsgs.slice(-3).map(m=>m.id));
+    let descIndex=0;
+    for(const m of c.messages){
+      if(m===assistantMsg)continue;
+      if(m.attachment&&String(m.attachment.type||'').startsWith('image/')&&visionEnabled&&recentImages.has(m.id)){
+        descIndex++;
+        if(vision){
+          try{
+            const desc=await describeImage(vision,m.attachment.url);
+            out.push({role:'user',content:`[图片${descIndex}的视觉描述] ${desc}`});
+          }catch(e){
+            out.push({role:'user',content:`[图片${descIndex}：视觉模型描述失败]`});
+          }
+        }else{
+          out.push({role:'user',content:`[图片${descIndex}：未配置视觉模型，无法查看]`});
+        }
+      }else if(m.content){
+        out.push({role:m.role,content:normalizeText(m.content)});
+      }
+    }
+    return out;
+  }
   function handleEvent(name,data){
     if(typeof data==='string'){try{data=JSON.parse(data)}catch(e){data={}}}
-    if(name==='error'&&pendingStream){const p=pendingStream;pendingStream=null;p.reject(new Error((data&&data.message)||'请求失败'));return}
+    if(name==='complete'&&pendingComplete){const p=pendingComplete;pendingComplete=null;p.resolve((data&&data.text)||'');return}
+    if(name==='error'){
+      const msg=(data&&data.message)||'请求失败';
+      if(pendingStream){const p=pendingStream;pendingStream=null;p.reject(new Error(msg));return}
+      if(pendingComplete){const p=pendingComplete;pendingComplete=null;p.reject(new Error(msg));return}
+      return;
+    }
     if(name==='done'&&pendingStream){const p=pendingStream;pendingStream=null;try{if(p.handlers.done)p.handlers.done()}catch(e){}p.resolve();return}
     if(pendingStream&&pendingStream.handlers&&pendingStream.handlers[name]){
       let payload=data;
@@ -573,21 +630,9 @@
     renderMessages();
     state.sending=true;
     const visionEnabled=safeGet('ai.visionEnabled','1')!=='0';
-    const imageMsgs=c.messages.filter(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
-    const recentImages=new Set(imageMsgs.slice(-3).map(m=>m.id));
-    const history=[];
-    let hasImageContext=false;
-    c.messages.forEach(m=>{
-      if(m===assistantMsg)return;
-      if(m.attachment&&String(m.attachment.type||'').startsWith('image/')){
-        if(visionEnabled&&recentImages.has(m.id)){
-          history.push({role:'user',content:[{type:'image_url',image_url:{url:m.attachment.url}}]});
-          hasImageContext=true;
-        }
-      }else if(m.content){
-        history.push({role:m.role,content:normalizeText(m.content)});
-      }
-    });
+    const hasImages=c.messages.some(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
+    if(hasImages&&visionEnabled&&!readVisionCfg())showToast('未配置视觉模型，DeepSeek 无法看图，请在设置里配置');
+    const history=await buildGroupHistory(c,assistantMsg);
     try{
       await streamChat({...cfg,model:state.model},history,{
         delta(t){
@@ -601,9 +646,7 @@
       });
     }catch(e){
       assistantMsg.content=assistantMsg.content||'（生成失败：'+(e.message||'未知错误')+'）';
-      let hint=e.message||'生成失败';
-      if(hasImageContext&&!/image/i.test(hint))hint+='；模型可能不支持图片，请在设置里切换视觉模型（千问/GLM）';
-      showToast(hint);
+      showToast(e.message||'生成失败');
     }finally{
       assistantMsg.created_at=nowISO();
       state.sending=false;
@@ -615,7 +658,60 @@
   }
 
   /* ---------- events ---------- */
-  $('#menuButton').addEventListener('click',()=>{location.href='../index.html?openSidebar=1&conv='+encodeURIComponent(convId)});
+  /* ---------- local sidebar ---------- */
+  const gSidebar=$('#sidebar'),gBackdrop=$('#sidebarBackdrop');
+  function gOpenSidebar(){
+    loadConversations();
+    renderGSidebar();
+    gSidebar.classList.add('open');
+    gSidebar.setAttribute('aria-hidden','false');
+    gBackdrop.classList.add('show');
+    document.body.classList.add('sidebar-open');
+  }
+  function gCloseSidebar(){
+    gSidebar.classList.remove('open');
+    gSidebar.setAttribute('aria-hidden','true');
+    gBackdrop.classList.remove('show');
+    document.body.classList.remove('sidebar-open');
+  }
+  function gHistoryButton(c,isGroup){
+    const b=document.createElement('button');
+    b.className='side-item chat-history'+(c.id===convId?' current':'');
+    b.innerHTML=`<span>${c.pinned?'⌖':'◷'}</span><span>${escapeHtml(c.title)}</span>`;
+    b.addEventListener('click',()=>{
+      if(isGroup)location.href='index.html?conv='+encodeURIComponent(c.id);
+      else location.href='../index.html?open='+encodeURIComponent(c.id);
+    });
+    return b;
+  }
+  function renderGSidebar(){
+    const pinned=$('#pinnedChatList'),recent=$('#recentChatList'),groups=$('#groupChatList'),projects=$('#projectList');
+    pinned.innerHTML='';recent.innerHTML='';groups.innerHTML='';projects.innerHTML='';
+    $('#sidebarModelLabel').textContent=state.model;
+    conversations.filter(c=>!c.group&&!c.projectId)
+      .sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||'')))
+      .forEach(c=>(c.pinned?pinned:recent).appendChild(gHistoryButton(c,false)));
+    conversations.filter(c=>c.group).forEach(c=>groups.appendChild(gHistoryButton(c,true)));
+    [...projects].forEach(p=>{
+      const d=document.createElement('div');
+      d.className='side-subhead';
+      d.textContent=p.title+'（'+conversations.filter(c=>c.projectId===p.id).length+'）';
+      projects.appendChild(d);
+    });
+    if(!groups.children.length)groups.innerHTML='<div class="empty-history">暂无群聊</div>';
+    if(!pinned.children.length)pinned.innerHTML='<div class="empty-history">暂无置顶</div>';
+    if(!recent.children.length)recent.innerHTML='<div class="empty-history">暂无最近</div>';
+  }
+  $('#menuButton').addEventListener('click',gOpenSidebar);
+  gBackdrop.addEventListener('click',gCloseSidebar);
+  $$('[data-sidebar-close]').forEach(b=>b.addEventListener('click',gCloseSidebar));
+  $('#sidebarSettings').addEventListener('click',()=>{location.href='../index.html?openSettings=1'});
+  $('#newGroupButton').addEventListener('click',()=>{location.href='../index.html?newgroup=1'});
+  $('#joinGroupButton').addEventListener('click',()=>{location.href='../index.html?joingroup=1'});
+  $('#sidebarSearch').addEventListener('input',e=>{
+    const q=String(e.target.value||'').trim().toLowerCase();
+    $$('.chat-history',gSidebar).forEach(item=>{item.hidden=!!q&&!(item.textContent||'').toLowerCase().includes(q)});
+  });
   $('#groupInfoButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#memberDetailsButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#inviteButton').addEventListener('click',()=>{renderInvite();openSheet('#inviteSheet')});
@@ -648,6 +744,7 @@
       <div class="sticker-manage-bar">
         <button type="button" id="stickerAdd">＋ 添加贴纸</button>
         <button type="button" id="stickerManage">${stickerManage?'完成':'管理'}</button>
+        <button type="button" id="stickerClose">收起</button>
       </div>
       <div class="sticker-grid">
         ${EMOJIS.map(e=>`<button type="button" class="emoji-item" data-emoji="${e}">${e}</button>`).join('')}
@@ -660,16 +757,22 @@
     panel.hidden=false;
     $('#stickerAdd').addEventListener('click',()=>$('#stickerImageInput').click());
     $('#stickerManage').addEventListener('click',()=>{stickerManage=!stickerManage;renderStickerPanel()});
+    $('#stickerClose').addEventListener('click',()=>{panel.hidden=true});
     panel.querySelectorAll('[data-emoji]').forEach(b=>b.addEventListener('click',()=>{
-      panel.hidden=true;
       const input=$('#messageInput');
-      input.value=b.dataset.emoji;
+      input.value+=(input.value&&!input.value.endsWith(' ')?' ':'')+b.dataset.emoji;
       mentionIntent=false;
-      sendMessage();
+      input.focus();
+      autosize();
     }));
     panel.querySelectorAll('[data-sticker]').forEach(img=>img.addEventListener('click',()=>{
-      panel.hidden=true;
-      sendStickerImage(img.dataset.sticker);
+      const s=loadStickers().find(x=>x.id===img.dataset.sticker);
+      if(!s)return;
+      fetch(s.url).then(r=>r.blob()).then(blob=>{
+        const file=new File([blob],'sticker.png',{type:'image/png'});
+        panel.hidden=true;
+        pickAttachment(file);
+      }).catch(()=>showToast('贴纸读取失败'));
     }));
     panel.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{
       const list=loadStickers().filter(s=>s.id!==b.dataset.del);

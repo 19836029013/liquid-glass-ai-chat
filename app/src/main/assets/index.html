@@ -199,15 +199,26 @@
             <p class="settings-inline-hint">填好 API 地址和 Key 后点“查询模型”。成功后这里会列出接口真实返回的全部模型；选择一个作为新聊天默认模型。</p>
 
             <div class="settings-row vision-preset-row">
-              <span class="row-label">视觉模型预设</span>
+              <span class="row-label">视觉模型（DeepSeek 的眼睛）</span>
               <div class="vision-presets">
-                <button class="vision-preset" type="button" data-vision="deepseek">DeepSeek</button>
                 <button class="vision-preset" type="button" data-vision="qwen">千问 Qwen-VL</button>
                 <button class="vision-preset" type="button" data-vision="glm">GLM-4V</button>
               </div>
             </div>
+            <label class="settings-row">
+              <span class="row-label">视觉 API 地址</span>
+              <input id="visionBaseUrl" autocomplete="off" placeholder="千问/GLM 的 OpenAI 兼容地址" />
+            </label>
+            <label class="settings-row">
+              <span class="row-label">视觉 API Key</span>
+              <input id="visionApiKey" type="password" autocomplete="new-password" placeholder="视觉模型的 Key" />
+            </label>
+            <label class="settings-row">
+              <span class="row-label">视觉模型名</span>
+              <input id="visionModel" autocomplete="off" placeholder="qwen-vl-max / glm-4v-plus" />
+            </label>
             <label class="settings-row toggle-row">
-              <span class="row-label">把图片发给 AI</span>
+              <span class="row-label">让 DeepSeek 看图（走视觉模型）</span>
               <input type="checkbox" id="visionEnabled" />
             </label>
 

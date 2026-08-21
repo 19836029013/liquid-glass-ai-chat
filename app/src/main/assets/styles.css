@@ -3390,3 +3390,60 @@ body.is-scrolling .turn{
   width:40px;height:40px;border-radius:50%;border:0;
   background:rgba(255,255,255,.18);color:#fff;font-size:24px;
 }
+
+/* emoji / sticker panel */
+.emoji-button{
+  flex:0 0 auto;
+  width:44px;height:44px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.55);
+  background:rgba(255,255,255,.2);
+  font-size:20px;
+  display:grid;place-items:center;
+}
+.sticker-panel{
+  position:absolute;
+  left:14px;right:14px;
+  bottom:calc(100% + 8px);
+  z-index:36;
+  padding:10px;
+  border-radius:22px;
+  background:linear-gradient(155deg,rgba(248,251,253,.96),rgba(239,246,248,.92));
+  border:1px solid rgba(255,255,255,.88);
+  box-shadow:0 20px 50px rgba(26,38,48,.18);
+  -webkit-backdrop-filter:blur(30px) saturate(125%);
+  backdrop-filter:blur(30px) saturate(125%);
+  max-height:38vh;
+  overflow-y:auto;
+}
+.sticker-panel[hidden]{display:none}
+.sticker-manage-bar{
+  display:flex;align-items:center;gap:8px;
+  padding:0 2px 8px;
+}
+.sticker-manage-bar button{
+  border:0;border-radius:14px;
+  background:rgba(255,255,255,.35);
+  color:#3a8e7e;font-size:12px;
+  padding:7px 12px;
+}
+.sticker-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(46px,1fr));
+  gap:6px;
+}
+.emoji-item{
+  border:0;background:transparent;
+  font-size:26px;padding:6px;
+  border-radius:12px;
+}
+.emoji-item:active{background:rgba(150,210,196,.18)}
+.sticker-item-wrap{position:relative;display:grid;place-items:center}
+.sticker-item{
+  width:48px;height:48px;object-fit:contain;
+  border-radius:10px;
+}
+.sticker-del{
+  position:absolute;top:-4px;right:-4px;
+  width:20px;height:20px;border-radius:50%;border:0;
+  background:rgba(224,82,82,.9);color:#fff;font-size:11px;line-height:1;
+}
