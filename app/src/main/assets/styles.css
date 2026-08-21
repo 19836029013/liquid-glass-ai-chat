@@ -3159,6 +3159,45 @@ body.sidebar-open .floating-nav{
   .composer textarea{min-height:44px!important;padding:11px 13px!important;font-size:16px!important}
 }
 
+/* ---------- v2.7.9: rewire glass/dim variables so sliders actually work ---------- */
+.wallpaper-overlay{
+  background:rgba(228,236,240,var(--wallpaper-dim))!important;
+}
+.glass,
+.round-glass,
+.reasoning-toggle,
+.reasoning-panel,
+.select-control,
+.sidebar,
+.settings-card,
+.settings-screen,
+.composer,
+.top-model-pill,
+.nav-right{
+  background:linear-gradient(145deg,rgba(255,255,255,var(--glass-a-strong)),rgba(255,255,255,var(--glass-a)))!important;
+}
+.assistant-bubble{
+  background:linear-gradient(145deg,rgba(255,255,255,var(--glass-a-strong)),rgba(255,255,255,var(--glass-a)))!important;
+}
+.user-bubble{
+  background:linear-gradient(145deg,rgba(210,240,231,calc(var(--glass-a) + .35)),rgba(180,220,208,calc(var(--glass-a) + .22)))!important;
+}
+.reasoning-mini-window .reasoning-toggle{
+  background:linear-gradient(145deg,rgba(248,252,252,var(--glass-a-strong)),rgba(238,247,247,var(--glass-a)))!important;
+}
+.row-menu,.bottom-sheet{
+  background:linear-gradient(155deg,rgba(248,251,253,var(--glass-a-strong)),rgba(239,246,248,var(--glass-a)))!important;
+}
+
+/* sidebar: stop scroll chaining to the chat behind it */
+body.sidebar-open{
+  overflow:hidden!important;
+}
+body.sidebar-open .sidebar{
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch;
+}
+
 /* smoother scrolling: drop heavy blur on message cards while scrolling */
 body.is-scrolling .turn .assistant-bubble,
 body.is-scrolling .turn .user-bubble,

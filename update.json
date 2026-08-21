@@ -1,11 +1,11 @@
 {
-  "version": "2.7.8",
-  "notes": "滑动更丝滑（滚动时暂时关闭消息卡片重模糊）；点自己的消息直接进入编辑，不再长按、不再弹系统复制菜单；编辑框自动变宽、随内容自动长高。",
+  "version": "2.7.9",
+  "notes": "修复壁纸/毛玻璃不透明度/背景遮罩滑杆无效：全部卡片重新接入透明变量，恢复真毛玻璃效果；修复侧边栏滑动时穿透带动背景聊天滚动。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "a7aeabcaa87ba438cb53107a347ef96f1c17bfe0e340922dc715bcd96146416e"
+      "sha256": "ed3ad94d42445c08e61eec60c65c940c4a3968511d7b363f7eacca3d2207ecea"
     }
   }
 }
