@@ -1762,7 +1762,7 @@ async function watchGroup(conv){
         }
       }
     }catch(e){}
-    await new Promise(r=>setTimeout(r,3000));
+    await new Promise(r=>setTimeout(r,1000));
   }
 }
 function newGroupChat(){
@@ -1870,33 +1870,38 @@ async function joinGroupByUrl(urlOrTopic){
   const topic=raw.replace(/\/+$/,'').split('/').pop();
   if(!topic)throw new Error('链接无效');
   const syncUrl=SYNC_BASE+'/'+topic;
-  const res=await fetch(syncUrl+'/json',{cache:'no-store'});
-  if(!res.ok)throw new Error('HTTP '+res.status);
-  const arr=await res.json();
   let remote=null;
-  if(Array.isArray(arr)&&arr.length){
-    const last=arr[arr.length-1];
-    if(last&&typeof last==='object'&&last.message){
-      try{remote=JSON.parse(last.message)}catch(e){}
-    }else if(typeof last==='string'){
-      try{remote=JSON.parse(last)}catch(e){}
+  try{
+    const ctrl=new AbortController();
+    const timer=setTimeout(()=>ctrl.abort(),5000);
+    const res=await fetch(syncUrl+'/json',{cache:'no-store',signal:ctrl.signal});
+    clearTimeout(timer);
+    if(res.ok){
+      const arr=await res.json();
+      if(Array.isArray(arr)&&arr.length){
+        const last=arr[arr.length-1];
+        if(last&&typeof last==='object'&&last.message){
+          try{remote=JSON.parse(last.message)}catch(e){}
+        }else if(typeof last==='string'){
+          try{remote=JSON.parse(last)}catch(e){}
+        }
+      }
     }
-  }
-  if(!remote&&Array.isArray(arr))remote={title:'新群聊',members:[],messages:[],updatedAt:Date.now()};
-  if(!remote||!Array.isArray(remote.messages))throw new Error('不是有效的群聊');
-  if(state.conversations.some(c=>c.id===remote.id))throw new Error('已加入该群聊');
-  remote.syncUrl=syncUrl;
-  remote.updatedAt=Date.now();
-  remote.notifiedId=remote.messages.length?remote.messages[remote.messages.length-1].id:null;
-  state.conversations.push(remote);
-  state.conversationId=remote.id;
+  }catch(e){}
+  const exists=remote&&remote.id&&state.conversations.some(c=>c.id===remote.id);
+  if(exists)throw new Error('已加入该群聊');
+  const conv=remote&&remote.id
+    ? {...remote,syncUrl,updatedAt:Date.now(),notifiedId:(remote.messages&&remote.messages.length)?remote.messages[remote.messages.length-1].id:null}
+    : {id:uid(),title:(remote&&remote.title)||'群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name}],messages:(remote&&Array.isArray(remote.messages))?remote.messages:[],created_at:nowISO(),updatedAt:Date.now(),syncUrl};
+  upsertMember(conv);
+  state.conversations.push(conv);
+  state.conversationId=conv.id;
   saveConversations();
   renderHistory();
-  upsertMember(remote);
-  pushSync(remote);
-  watchGroup(remote);
-  location.href='group-chat/index.html?conv='+encodeURIComponent(remote.id);
-  return remote;
+  pushSync(conv);
+  watchGroup(conv);
+  location.href='group-chat/index.html?conv='+encodeURIComponent(conv.id);
+  return conv;
 }
 window.__autoJoinGroup=async function(topic){
   try{
@@ -2189,7 +2194,7 @@ $$('.vision-preset').forEach(btn=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.21';
+const APP_CURRENT_VERSION='2.8.22';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

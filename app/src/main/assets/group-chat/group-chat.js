@@ -191,7 +191,7 @@
           if(Array.isArray(arr)&&arr.length)adoptRemoteMessage(arr[arr.length-1]);
         }
       }catch(e){}
-      await new Promise(r=>setTimeout(r,3000));
+      await new Promise(r=>setTimeout(r,1000));
     }
   }
 
