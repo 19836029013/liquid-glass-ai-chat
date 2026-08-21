@@ -11,8 +11,8 @@ android {
         applicationId "com.dsapp.liquidglasschat"
         minSdk 26
         targetSdk 35
-        versionCode 48
-        versionName "2.8.14"
+        versionCode 49
+        versionName "2.8.15"
     }
 
     signingConfigs {

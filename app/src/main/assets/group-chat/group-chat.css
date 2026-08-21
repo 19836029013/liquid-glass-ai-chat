@@ -257,6 +257,56 @@ html,body{height:100%;overflow:hidden}
 }
 .attach-menu button:active{background:rgba(150,210,196,.18)}
 
+/* attachment preview before sending */
+.attach-preview{
+  margin-bottom:8px;
+  padding:10px 12px;
+  border-radius:16px;
+  background:rgba(255,255,255,.45);
+  border:1px solid rgba(255,255,255,.7);
+  position:relative;
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.attach-preview[hidden]{display:none}
+.attach-preview img{
+  max-width:120px;
+  max-height:120px;
+  border-radius:12px;
+  object-fit:cover;
+}
+.attach-preview #removeAttachment{
+  position:absolute;
+  top:8px;right:8px;
+  width:26px;height:26px;
+  border-radius:50%;
+  border:0;
+  background:rgba(30,40,48,.55);
+  color:#fff;
+  font-size:14px;
+  line-height:1;
+}
+.preview-file{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  min-width:0;
+  flex:1;
+}
+
+/* send states: spinner -> checks / red ! */
+.send-state{display:inline-block;margin-left:6px;vertical-align:middle}
+.send-state.sending{animation:send-spin 1s linear infinite}
+@keyframes send-spin{to{transform:rotate(360deg)}}
+.send-state.error{
+  width:18px;height:18px;border-radius:50%;
+  background:#e05252;color:#fff;
+  font-size:11px;font-weight:800;
+  display:inline-flex;align-items:center;justify-content:center;
+  cursor:pointer;
+}
+
 .ai-status{
   align-self:center;margin:2px 0;
   padding:6px 12px;border-radius:999px;

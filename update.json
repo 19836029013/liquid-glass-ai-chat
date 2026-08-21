@@ -1,11 +1,11 @@
 {
-  "version": "2.8.14",
-  "notes": "群聊左上角菜单改为返回主界面并直接弹出侧边栏；输入框改微信式加号（＋展开选择图片或文件）；移除 @AI 快捷按钮，手动输入 @ 仍会弹出成员选择。",
+  "version": "2.8.15",
+  "notes": "群聊发送状态微信化：选图/文件先留在输入框预览、可配文字再发送；发送时消息立即显示转圈，成功变 ✓✓，失败显示红色感叹号，点感叹号重发；发送中不再拉取远端覆盖本地消息。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "7fcb2cf2e46f6fd97c159745c474913fe8519a63dee86240370b748afa0c2a38"
+      "sha256": "efdaf3abb27eb163b935c0685a004227ff7d74eb072b3b249bd502f38717dd3a"
     }
   }
 }

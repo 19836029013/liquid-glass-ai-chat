@@ -1756,6 +1756,8 @@ function fillSettings(){
   $('#apiReasoningParam').value=sanitizeReasoningParameter(cfg.reasoning_parameter||'',cfg.models||[]);
   const nickInput=$('#apiNickname');
   if(nickInput)nickInput.value=state.account.name;
+  const visionToggle=$('#visionEnabled');
+  if(visionToggle)visionToggle.checked=safeGet('ai.visionEnabled','1')!=='0';
   const accountInput=$('#accountName');
   if(accountInput)accountInput.value=state.account.name;
   const accountStatus=$('#accountStatus');
@@ -1941,9 +1943,28 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
   }
   showToast('用户名已保存');
 });
+$('#visionEnabled')?.addEventListener('change',e=>{
+  try{localStorage.setItem('ai.visionEnabled',e.target.checked?'1':'0')}catch(err){}
+});
+$$('.vision-preset').forEach(btn=>{
+  btn.addEventListener('click',()=>{
+    const preset=btn.dataset.vision;
+    const map={
+      deepseek:['https://api.deepseek.com','deepseek-chat'],
+      qwen:['https://dashscope.aliyuncs.com/compatible-mode/v1','qwen-vl-max'],
+      glm:['https://open.bigmodel.cn/api/paas/v4','glm-4v-plus'],
+    };
+    const [base,model]=map[preset]||[];
+    if(!base)return;
+    $('#apiBaseUrl').value=base;
+    $('#apiModel').value='';
+    populateApiModelSelect(model,[model]);
+    showToast('已填入 '+btn.textContent+' 预设，填好 Key 后保存');
+  });
+});
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.14';
+const APP_CURRENT_VERSION='2.8.15';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

@@ -131,11 +131,13 @@
   const SYNC_BASE='https://ntfy.sh';
   async function pushSync(){
     const c=conv();
-    if(!c||!c.syncUrl)return;
+    if(!c||!c.syncUrl)return false;
     c.updatedAt=Date.now();
     try{
       await fetch(c.syncUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
+      return true;
     }catch(e){}
+    return false;
   }
   function adoptRemoteMessage(last){
     const c=conv();
@@ -250,6 +252,12 @@
           </article>`;
       }
       const mine=m.authorId===account.id;
+      let sendState='';
+      if(mine){
+        if(m.status==='sending')sendState='<span class="send-state sending">⟳</span>';
+        else if(m.status==='error')sendState='<span class="send-state error" data-retry="'+m.id+'">!</span>';
+        else sendState='<span class="checks">✓✓</span>';
+      }
       const nameRow=mine?'':`<div class="message-name"><span>${escapeHtml(m.authorName||'成员')}</span></div>`;
       return `
         <article class="message ${mine?'mine':''}" data-mid="${m.id}">
@@ -257,7 +265,7 @@
           <div class="message-body">
             ${nameRow}
             <div class="bubble">${bubbleContent}</div>
-            <div class="message-meta">${timeOf(m.created_at)} ${mine?'<span class="checks">✓✓</span>':''}</div>
+            <div class="message-meta">${timeOf(m.created_at)} ${sendState}</div>
           </div>
         </article>`;
     }).join('')||'<div class="ai-status">还没有消息，发一条试试；@AI 可以让英子参与讨论</div>';
@@ -268,7 +276,37 @@
     if(card&&card.dataset.url&&bridge&&bridge.openUrl){
       bridge.openUrl(card.dataset.url);
     }
+    const retry=e.target.closest('[data-retry]');
+    if(retry)retryMessage(retry.dataset.retry);
   });
+  async function retryMessage(id){
+    const c=conv();
+    if(!c)return;
+    const msg=c.messages.find(m=>m.id===id);
+    if(!msg||msg.role!=='user')return;
+    msg.status='sending';
+    renderMessages();
+    try{
+      if(!c.syncUrl){
+        c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
+        saveConversations();
+        watchGroup();
+      }
+      if(msg.attachment&&msg.attachment.local){
+        const remote=await uploadAttachment(c,{name:msg.attachment.name,type:msg.attachment.type,size:msg.attachment.size});
+        msg.attachment={...msg.attachment,url:remote.url,local:false};
+        if(pendingPreviewUrl){try{URL.revokeObjectURL(pendingPreviewUrl)}catch(e){}}
+        pendingPreviewUrl=null;
+        pendingFile=null;
+      }
+      msg.status=(await pushSync())?'sent':'error';
+    }catch(e){
+      msg.status='error';
+    }
+    try{saveConversations()}catch(e){}
+    renderAll();
+    if(msg.status==='error')showToast('发送失败，点红色感叹号重试');
+  }
   function renderAll(){
     const c=conv();
     if(!c)return;
@@ -398,23 +436,32 @@
     const att=j.attachment||{};
     return {url:att.url||'',type:file.type||'',name:file.name||'file',size:file.size||0};
   }
-  async function sendAttachment(file){
-    const c=conv();
-    if(!c)return;
-    commit();
-    try{
-      const attachment=await uploadAttachment(c,file);
-      const userMsg={id:uid(),role:'user',content:'',authorId:account.id,authorName:account.name,mentions:[],attachment,created_at:nowISO()};
-      if(!c.members||!Array.isArray(c.members))c.members=[];
-      if(!c.members.some(m=>m.id===account.id))c.members.push({id:account.id,name:account.name});
-      c.messages.push(userMsg);
-      saveConversations();
-      renderAll();
-      showToast('已发送');
-      pushSync();
-    }catch(e){
-      showToast('发送失败：'+(e.message||'未知错误'));
+  let pendingFile=null;
+  let pendingPreviewUrl=null;
+  function renderAttachmentPreview(){
+    const wrap=$('#attachPreview');
+    if(!pendingFile){wrap.hidden=true;wrap.innerHTML='';return}
+    const isImg=String(pendingFile.type||'').startsWith('image/');
+    if(isImg&&!pendingPreviewUrl){
+      try{pendingPreviewUrl=URL.createObjectURL(pendingFile)}catch(e){}
     }
+    wrap.innerHTML=(isImg&&pendingPreviewUrl)
+      ? `<img src="${pendingPreviewUrl}" alt="预览" /><button id="removeAttachment" type="button">×</button>`
+      : `<div class="preview-file"><span class="file-icon">📄</span><span class="file-copy"><strong>${escapeHtml(pendingFile.name||'文件')}</strong><small>${formatSize(pendingFile.size)}</small></span><button id="removeAttachment" type="button">×</button></div>`;
+    wrap.hidden=false;
+    $('#removeAttachment').addEventListener('click',clearPendingAttachment);
+  }
+  function clearPendingAttachment(){
+    if(pendingPreviewUrl){try{URL.revokeObjectURL(pendingPreviewUrl)}catch(e){}}
+    pendingFile=null;
+    pendingPreviewUrl=null;
+    renderAttachmentPreview();
+  }
+  function pickAttachment(file){
+    clearPendingAttachment();
+    pendingFile=file;
+    renderAttachmentPreview();
+    $('#messageInput').focus();
   }
 
   let pendingStream=null;
@@ -458,7 +505,7 @@
     if(!c)return;
     const input=$('#messageInput');
     const text=input.value.trim();
-    if(!text)return;
+    if(!text&&!pendingFile)return;
     commit();
     const cfg=readClientApi();
     try{
@@ -469,7 +516,12 @@
       }
     }catch(e){}
     const mentions=buildMentions(text);
-    const userMsg={id:uid(),role:'user',content:text,authorId:account.id,authorName:account.name,mentions,created_at:nowISO()};
+    let attachment=null;
+    if(pendingFile){
+      attachment={url:pendingPreviewUrl||'',type:pendingFile.type||'',name:pendingFile.name||'file',size:pendingFile.size||0,local:true};
+    }
+    const userMsg={id:uid(),role:'user',content:text,authorId:account.id,authorName:account.name,mentions,attachment,status:'sending',created_at:nowISO()};
+    if(pendingFile)$('#attachPreview').hidden=true;
     try{
       if(!c.members||!Array.isArray(c.members))c.members=[];
       if(!c.members.some(m=>m.id===account.id))c.members.push({id:account.id,name:account.name});
@@ -483,20 +535,41 @@
     input.value='';mentionIntent=false;autosize();
     try{saveConversations()}catch(e){}
     renderAll();
-    showToast('已发送');
-    try{await fetchRecent()}catch(e){}
-    try{await pushSync()}catch(e){}
+    (async()=>{
+      try{
+        if(attachment&&attachment.local){
+          const remote=await uploadAttachment(c,{name:attachment.name,type:attachment.type,size:attachment.size});
+          userMsg.attachment={...attachment,url:remote.url,local:false};
+          if(pendingPreviewUrl){try{URL.revokeObjectURL(pendingPreviewUrl)}catch(e){}}
+          pendingPreviewUrl=null;
+          pendingFile=null;
+        }
+        userMsg.status=(await pushSync())?'sent':'error';
+      }catch(e){
+        userMsg.status='error';
+      }
+      try{saveConversations()}catch(e){}
+      renderAll();
+      if(userMsg.status==='error')showToast('发送失败，点红色感叹号重试');
+    })();
     if(!mentions.length||!cfg)return;
     const assistantMsg={id:uid(),role:'assistant',content:'',model:state.model,created_at:nowISO()};
     c.messages.push(assistantMsg);
     $('#typingIndicator').hidden=false;
     renderMessages();
     state.sending=true;
+    const visionEnabled=safeGet('ai.visionEnabled','1')!=='0';
+    const imageMsgs=c.messages.filter(m=>m.attachment&&String(m.attachment.type||'').startsWith('image/'));
+    const recentImages=new Set(imageMsgs.slice(-3).map(m=>m.id));
     const history=[];
+    let hasImageContext=false;
     c.messages.forEach(m=>{
       if(m===assistantMsg)return;
       if(m.attachment&&String(m.attachment.type||'').startsWith('image/')){
-        history.push({role:'user',content:[{type:'image_url',image_url:{url:m.attachment.url}}]});
+        if(visionEnabled&&recentImages.has(m.id)){
+          history.push({role:'user',content:[{type:'image_url',image_url:{url:m.attachment.url}}]});
+          hasImageContext=true;
+        }
       }else if(m.content){
         history.push({role:m.role,content:normalizeText(m.content)});
       }
@@ -514,7 +587,9 @@
       });
     }catch(e){
       assistantMsg.content=assistantMsg.content||'（生成失败：'+(e.message||'未知错误')+'）';
-      showToast(e.message||'生成失败');
+      let hint=e.message||'生成失败';
+      if(hasImageContext&&!/image/i.test(hint))hint+='；模型可能不支持图片，请在设置里切换视觉模型（千问/GLM）';
+      showToast(hint);
     }finally{
       assistantMsg.created_at=nowISO();
       state.sending=false;
@@ -546,8 +621,8 @@
   $('#attachImageOption').addEventListener('click',()=>{$('#attachMenu').hidden=true;$('#imageInput').click()});
   $('#attachFileOption').addEventListener('click',()=>{$('#attachMenu').hidden=true;$('#fileInput').click()});
   document.addEventListener('click',()=>{$('#attachMenu').hidden=true});
-  $('#imageInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)sendAttachment(f)});
-  $('#fileInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)sendAttachment(f)});
+  $('#imageInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)pickAttachment(f)});
+  $('#fileInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)pickAttachment(f)});
   $('#sendButton').addEventListener('click',sendMessage);
   $('#messageInput').addEventListener('input',()=>{autosize();refreshMentionMenu()});
   $('#messageInput').addEventListener('keydown',e=>{
