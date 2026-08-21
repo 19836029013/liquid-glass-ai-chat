@@ -1235,8 +1235,7 @@ async function handleAction(action,mid){
     return;
   }
   if(action==='share'){
-    const parts=conv.messages.slice(0,idx+1).map(m=>`${m.role==='user'?'👤':'✦'} ${normalizeText(m.content)}`).join('\n\n');
-    shareText(`【${conv.title||'对话'}】\n\n${parts}`);
+    shareAsCard(conv,conv.messages[idx]);
   }
 }
 function copyText(text){
@@ -1254,6 +1253,117 @@ function copyText(text){
 function shareText(text){
   if(navigator.share){navigator.share({text}).catch(()=>{})}
   else copyText(text);
+}
+function wrapCanvasText(ctx,text,maxWidth){
+  const paragraphs=String(text||'').split('\n');
+  const lines=[];
+  for(const p of paragraphs){
+    if(!p){lines.push('');continue}
+    let line='';
+    for(const ch of p){
+      const test=line+ch;
+      if(ctx.measureText(test).width>maxWidth&&line){lines.push(line);line=ch}
+      else line=test;
+    }
+    lines.push(line);
+  }
+  return lines;
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+function buildShareCard(conv,assistantMsg){
+  const W=1000,PAD=52,LINE_H=50;
+  const userIdx=conv.messages.indexOf(assistantMsg);
+  let userMsg=null;
+  for(let i=userIdx-1;i>=0;i--){
+    if(conv.messages[i].role==='user'){userMsg=conv.messages[i];break}
+  }
+  const userText=normalizeText(userMsg?userMsg.content:'');
+  const asstText=normalizeText(assistantMsg.content);
+  const canvas=document.createElement('canvas');
+  const ctx=canvas.getContext('2d');
+  ctx.font='30px "PingFang SC","Microsoft YaHei",sans-serif';
+  const userLines=userMsg?wrapCanvasText(ctx,userText,W-PAD*2-64):[];
+  const asstLines=wrapCanvasText(ctx,asstText,W-PAD*2-64);
+  const headerH=150;
+  const userBlockH=userMsg?(40+userLines.length*LINE_H+44):0;
+  const asstHeadH=50;
+  const asstBlockH=36+asstHeadH+asstLines.length*LINE_H+44;
+  const footerH=90;
+  const H=headerH+userBlockH+asstBlockH+footerH;
+  canvas.width=W;canvas.height=H;
+  const bg=ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#eef5f4');
+  bg.addColorStop(1,'#d9e8e6');
+  ctx.fillStyle=bg;
+  ctx.fillRect(0,0,W,H);
+  ctx.fillStyle='rgba(139,200,184,.35)';
+  roundRect(ctx,0,0,W,headerH,0);
+  ctx.fill();
+  ctx.textAlign='left';
+  ctx.fillStyle='#1d3a33';
+  ctx.font='700 44px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.fillText('✦ 鲸鱼娘',PAD,86);
+  ctx.font='26px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.fillStyle='#4d6b63';
+  const model=modelDisplayName(assistantMsg);
+  let dateStr='';
+  try{dateStr=new Date(assistantMsg.created_at||Date.now()).toLocaleString('zh-CN',{hour12:false})}catch(e){}
+  ctx.fillText(`${model} · ${dateStr}`,PAD,124);
+  let y=headerH+34;
+  if(userMsg){
+    const bw=W-PAD*2,bh=userLines.length*LINE_H+64;
+    ctx.fillStyle='rgba(215,241,233,.92)';
+    roundRect(ctx,PAD,y,bw,bh,34);
+    ctx.fill();
+    ctx.fillStyle='#1c3a33';
+    ctx.font='30px "PingFang SC","Microsoft YaHei",sans-serif';
+    let ty=y+50;
+    userLines.forEach(l=>{ctx.fillText(l,PAD+32,ty);ty+=LINE_H});
+    y+=bh+26;
+  }
+  const bw=W-PAD*2,bh=asstBlockH;
+  ctx.fillStyle='rgba(255,255,255,.94)';
+  roundRect(ctx,PAD,y,bw,bh,34);
+  ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.95)';
+  ctx.lineWidth=2;
+  roundRect(ctx,PAD,y,bw,bh,34);
+  ctx.stroke();
+  ctx.fillStyle='#2a3f46';
+  ctx.font='700 28px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.fillText('✦ '+model,PAD+32,y+40);
+  ctx.fillStyle='#344b43';
+  ctx.font='30px "PingFang SC","Microsoft YaHei",sans-serif';
+  let ty2=y+40+asstHeadH;
+  asstLines.forEach(l=>{ctx.fillText(l,PAD+32,ty2);ty2+=LINE_H});
+  ctx.textAlign='center';
+  ctx.fillStyle='#5b6f6a';
+  ctx.font='24px "PingFang SC","Microsoft YaHei",sans-serif';
+  ctx.fillText('—— 来自 鲸鱼娘 AI 聊天 ——',W/2,H-34);
+  return canvas.toDataURL('image/png');
+}
+function shareAsCard(conv,assistantMsg){
+  const text=`【${conv.title||'对话'}】\n${normalizeText(assistantMsg.content)}`;
+  try{
+    const dataUrl=buildShareCard(conv,assistantMsg);
+    if(bridge&&bridge.shareImage){
+      bridge.shareImage(dataUrl,String(conv.title||'对话'),text);
+    }else if(navigator.share){
+      navigator.share({text}).catch(()=>{});
+    }else{
+      copyText(text);
+    }
+  }catch(e){
+    shareText(text);
+  }
 }
 
 /* ---------- settings ---------- */
@@ -1442,7 +1552,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.4';
+const APP_CURRENT_VERSION='2.7.5';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

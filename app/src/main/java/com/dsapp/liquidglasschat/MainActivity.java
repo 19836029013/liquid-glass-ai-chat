@@ -12,6 +12,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
+import android.util.Base64;
 import android.view.View;
 import android.webkit.JavascriptInterface;
 import android.webkit.SslErrorHandler;
@@ -562,6 +563,48 @@ public class MainActivity extends Activity {
         }).start();
     }
 
+    private void doShareImage(final String dataUrl, final String title, final String text) {
+        new Thread(() -> {
+            try {
+                if (dataUrl == null || !dataUrl.startsWith("data:image")) {
+                    runOnUiThread(() -> {
+                        try {
+                            Intent i = new Intent(Intent.ACTION_SEND);
+                            i.setType("text/plain");
+                            i.putExtra(Intent.EXTRA_SUBJECT, title == null ? "" : title);
+                            i.putExtra(Intent.EXTRA_TEXT, text == null ? "" : text);
+                            startActivity(Intent.createChooser(i, "分享"));
+                        } catch (Exception ignored) {
+                        }
+                    });
+                    return;
+                }
+                String base64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
+                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+                File dir = new File(getCacheDir(), "share");
+                if (!dir.exists() && !dir.mkdirs()) return;
+                File file = new File(dir, "whale-card.png");
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(bytes);
+                }
+                final Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", file);
+                runOnUiThread(() -> {
+                    try {
+                        Intent send = new Intent(Intent.ACTION_SEND);
+                        send.setType("image/png");
+                        send.putExtra(Intent.EXTRA_STREAM, uri);
+                        send.putExtra(Intent.EXTRA_SUBJECT, title == null ? "" : title);
+                        send.putExtra(Intent.EXTRA_TEXT, text == null ? "" : text);
+                        send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                        startActivity(Intent.createChooser(send, "分享鲸鱼娘卡片"));
+                    } catch (Exception ignored) {
+                    }
+                });
+            } catch (Exception ignored) {
+            }
+        }).start();
+    }
+
     private void updaterInstallApk(final String url, final String version, final String sha256) {
         runOnUiThread(() -> {
             try {
@@ -717,6 +760,11 @@ public class MainActivity extends Activity {
                 } catch (Exception ignored) {
                 }
             });
+        }
+
+        @JavascriptInterface
+        public void shareImage(String dataUrl, String title, String text) {
+            doShareImage(dataUrl, title, text);
         }
     }
 

@@ -1,11 +1,11 @@
 {
-  "version": "2.7.4",
-  "notes": "对话操作改为侧栏内小浮窗（不收起侧栏、不从底部升起）；重命名有可见输入框；侧栏展开时置顶于顶部栏之上；发送按钮与输入区收窄；长按自己发送的消息可复制/编辑；更新下载自动循环切换线路（最多3次）。",
+  "version": "2.7.5",
+  "notes": "分享升级为卡片分享：自动生成鲸鱼娘风格对话卡片图，调起系统分享面板（QQ/微信等可选）；复制保持纯文本复制，不再重复。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "38d9d1a29b3bae3e0f594fdd03655eba9307799204db33cdc9e10e0de12ff613"
+      "sha256": "12227217ca0eff5ab3120e712f0dd925a2622bb49f69b353069773d1635eae4a"
     }
   }
 }
