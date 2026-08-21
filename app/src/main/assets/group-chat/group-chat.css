@@ -198,6 +198,35 @@ html,body{height:100%;overflow:hidden}
 .member-details{font-size:12px!important}
 .member-details span{font-size:18px!important}
 
+/* attachments: image / file cards */
+.attach-buttons{display:flex;align-items:center;gap:8px}
+.attach-btn{
+  flex:0 0 auto;
+  width:38px;height:38px;border-radius:50%;
+  border:1px solid rgba(255,255,255,.55);
+  background:rgba(255,255,255,.2);
+  font-size:17px;
+  display:grid;place-items:center;
+}
+.attach-img{
+  display:block;
+  max-width:min(280px,68vw);
+  max-height:320px;
+  border-radius:14px;
+  object-fit:cover;
+}
+.file-card{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 12px;border-radius:14px;
+  background:rgba(255,255,255,.5);
+  border:1px solid rgba(255,255,255,.6);
+  cursor:pointer;
+}
+.file-card .file-icon{font-size:24px}
+.file-copy{display:flex;flex-direction:column;min-width:0}
+.file-copy strong{font-size:13px;color:#1b2a33;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.file-copy small{font-size:11px;color:#7a8791}
+
 .ai-status{
   align-self:center;margin:2px 0;
   padding:6px 12px;border-radius:999px;

@@ -219,19 +219,32 @@
       : '<div class="member-empty">还没有其他成员加入，点下方邀请朋友</div>';
   }
   function decorateMentions(text){
-    return escapeHtml(text).replaceAll('@AI','<span class="mention">@AI</span>').replaceAll('\n','<br>');
+    return escapeHtml(text).replace(/@[^\s@]+/g,'<span class="mention">$&</span>').replaceAll('\n','<br>');
+  }
+  function formatSize(n){
+    if(!n)return '';
+    if(n<1024)return n+' B';
+    if(n<1024*1024)return (n/1024).toFixed(1)+' KB';
+    return (n/1024/1024).toFixed(1)+' MB';
   }
   function renderMessages(){
     const c=conv();
     const msgs=c&&c.messages||[];
     $('#messageList').innerHTML=msgs.map(m=>{
+      let bubbleContent=decorateMentions(normalizeText(m.content));
+      if(m.attachment){
+        const isImg=String(m.attachment.type||'').startsWith('image/');
+        bubbleContent=isImg
+          ? `<img class="attach-img" src="${escapeHtml(m.attachment.url)}" loading="lazy" alt="图片" />`
+          : `<div class="file-card" data-url="${escapeHtml(m.attachment.url)}"><span class="file-icon">📄</span><span class="file-copy"><strong>${escapeHtml(m.attachment.name||'文件')}</strong><small>${formatSize(m.attachment.size)}</small></span></div>`;
+      }
       if(m.role==='assistant'){
         return `
           <article class="message ai" data-mid="${m.id}">
             <div class="message-avatar ai">✦</div>
             <div class="message-body">
               <div class="message-name"><span>AI 助手</span><span class="model-chip">${escapeHtml(m.model||state.model)}</span></div>
-              <div class="bubble">${decorateMentions(normalizeText(m.content))||'<span class="typing-spark">✦</span>'}</div>
+              <div class="bubble">${bubbleContent||'<span class="typing-spark">✦</span>'}</div>
               <div class="message-meta">${timeOf(m.created_at)}</div>
             </div>
           </article>`;
@@ -243,13 +256,19 @@
           <div class="message-avatar" style="background:${colorFor(m.authorName||'成员')}">${escapeHtml(initials(m.authorName||'成员'))}</div>
           <div class="message-body">
             ${nameRow}
-            <div class="bubble">${decorateMentions(normalizeText(m.content))}</div>
+            <div class="bubble">${bubbleContent}</div>
             <div class="message-meta">${timeOf(m.created_at)} ${mine?'<span class="checks">✓✓</span>':''}</div>
           </div>
         </article>`;
     }).join('')||'<div class="ai-status">还没有消息，发一条试试；@AI 可以让英子参与讨论</div>';
     requestAnimationFrame(()=>{const s=$('#chatScroll');s.scrollTop=s.scrollHeight});
   }
+  document.addEventListener('click',e=>{
+    const card=e.target.closest('.file-card');
+    if(card&&card.dataset.url&&bridge&&bridge.openUrl){
+      bridge.openUrl(card.dataset.url);
+    }
+  });
   function renderAll(){
     const c=conv();
     if(!c)return;
@@ -331,9 +350,71 @@
     input.focus();
     autosize();
   }
-  function asksAI(text){
-    if(mentionIntent)return true;
-    return /@\s*(ai|英子|起飞|deepseek|ds|机器人|助手)/i.test(text||'');
+  function buildMentions(text){
+    const m=[];
+    if(mentionIntent||/@\s*(ai|英子|起飞|deepseek|ds|机器人|助手)/i.test(text||''))m.push({type:'ai',target_id:'ai'});
+    otherMembers().forEach(x=>{
+      const name=String(x.name||'');
+      if(name&&new RegExp('@'+name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'i').test(text||'')){
+        m.push({type:'member',target_id:x.id,name});
+      }
+    });
+    return m;
+  }
+  function refreshMentionMenu(){
+    const input=$('#messageInput');
+    const v=input.value;
+    const menu=$('#mentionMenu');
+    const at=v.lastIndexOf('@');
+    const typing=at>=0&&v.slice(at).trim()==='@';
+    if(!typing){menu.hidden=true;return}
+    const others=otherMembers();
+    menu.innerHTML=`<button type="button" data-mention="ai"><span class="mention-avatar ai-avatar">✦</span><span><strong>@AI 助手</strong><small>只有 @AI 时 AI 才会参与回复</small></span></button>`
+      +others.map(m=>`<button type="button" data-mention="${escapeHtml(m.id)}"><span class="mention-avatar" style="background:${colorFor(m.name||'成员')}">${escapeHtml(initials(m.name||'成员'))}</span><span><strong>@${escapeHtml(m.name||'成员')}</strong><small>@ 群友</small></span></button>`).join('');
+    menu.hidden=false;
+    menu.querySelectorAll('[data-mention]').forEach(b=>b.addEventListener('click',()=>{
+      const id=b.dataset.mention;
+      const name=id==='ai'?'AI':(others.find(x=>x.id===id)||{name:'群友'}).name;
+      input.value=v.slice(0,at)+'@'+name+' ';
+      if(id==='ai')mentionIntent=true;
+      input.focus();
+      autosize();
+      menu.hidden=true;
+    }));
+  }
+  async function uploadAttachment(c,file){
+    if(!c.syncUrl){
+      c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
+      saveConversations();
+      watchGroup();
+    }
+    const res=await fetch(c.syncUrl+'?filename='+encodeURIComponent(file.name),{
+      method:'POST',
+      headers:{'Content-Type':file.type||'application/octet-stream'},
+      body:file,
+    });
+    if(!res.ok)throw new Error('上传失败 HTTP '+res.status);
+    const j=await res.json();
+    const att=j.attachment||{};
+    return {url:att.url||'',type:file.type||'',name:file.name||'file',size:file.size||0};
+  }
+  async function sendAttachment(file){
+    const c=conv();
+    if(!c)return;
+    commit();
+    try{
+      const attachment=await uploadAttachment(c,file);
+      const userMsg={id:uid(),role:'user',content:'',authorId:account.id,authorName:account.name,mentions:[],attachment,created_at:nowISO()};
+      if(!c.members||!Array.isArray(c.members))c.members=[];
+      if(!c.members.some(m=>m.id===account.id))c.members.push({id:account.id,name:account.name});
+      c.messages.push(userMsg);
+      saveConversations();
+      renderAll();
+      showToast('已发送');
+      pushSync();
+    }catch(e){
+      showToast('发送失败：'+(e.message||'未知错误'));
+    }
   }
 
   let pendingStream=null;
@@ -387,7 +468,7 @@
         watchGroup();
       }
     }catch(e){}
-    const mentions=asksAI(text)?[{type:'ai',target_id:'ai'}]:[];
+    const mentions=buildMentions(text);
     const userMsg={id:uid(),role:'user',content:text,authorId:account.id,authorName:account.name,mentions,created_at:nowISO()};
     try{
       if(!c.members||!Array.isArray(c.members))c.members=[];
@@ -411,8 +492,15 @@
     $('#typingIndicator').hidden=false;
     renderMessages();
     state.sending=true;
-    const history=c.messages.filter(m=>m!==assistantMsg&&m.content)
-      .map(m=>({role:m.role,content:normalizeText(m.content)}));
+    const history=[];
+    c.messages.forEach(m=>{
+      if(m===assistantMsg)return;
+      if(m.attachment&&String(m.attachment.type||'').startsWith('image/')){
+        history.push({role:'user',content:[{type:'image_url',image_url:{url:m.attachment.url}}]});
+      }else if(m.content){
+        history.push({role:m.role,content:normalizeText(m.content)});
+      }
+    });
     try{
       await streamChat({...cfg,model:state.model},history,{
         delta(t){
@@ -451,8 +539,12 @@
   $('#modelSelector').addEventListener('click',()=>{renderModelOptions();openSheet('#modelSheet')});
   $('#reasoningSelector').addEventListener('click',()=>{renderReasoningOptions();openSheet('#reasoningSheet')});
   $('#mentionAiButton').addEventListener('click',insertMention);
+  $('#imageButton').addEventListener('click',()=>$('#imageInput').click());
+  $('#fileButton').addEventListener('click',()=>$('#fileInput').click());
+  $('#imageInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)sendAttachment(f)});
+  $('#fileInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)sendAttachment(f)});
   $('#sendButton').addEventListener('click',sendMessage);
-  $('#messageInput').addEventListener('input',autosize);
+  $('#messageInput').addEventListener('input',()=>{autosize();refreshMentionMenu()});
   $('#messageInput').addEventListener('keydown',e=>{
     if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}
   });

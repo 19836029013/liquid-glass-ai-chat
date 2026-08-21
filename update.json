@@ -1,11 +1,11 @@
 {
-  "version": "2.8.12",
-  "notes": "群聊修正：成员人数只算真实用户（去掉占位成员）；从群聊返回停在主页不再自动跳进对话；顶栏与成员条固定不滚动；成员条高度压扁。",
+  "version": "2.8.13",
+  "notes": "群聊新增发送图片/表情包与文件（ntfy 附件同步，对方可查看/下载）；@ 菜单支持 @AI 和 @群友；@AI 时最近的图片会作为视觉输入发给多模态模型（如千问/GLM）。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "ff8f768363975d1740f197df04b6ef49310c507fafe4af2834372de6f1b38344"
+      "sha256": "8243a3a51b96502139e168a23d59c3ac635ffffdca5b6f206fd29c669e1875a5"
     }
   }
 }
