@@ -1,11 +1,11 @@
 {
-  "version": "2.7.6",
-  "notes": "对话操作小浮窗改为毛玻璃拟态样式：四个功能项（重命名/置顶/移动/删除）带细分隔线，与全 App 玻璃风格统一。",
+  "version": "2.7.7",
+  "notes": "修复更新检查读不到新版本：检查更新时强制绕过 GitHub 缓存，确保立即看到最新版本。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "9f96e5111df965a69df323ea7100c074b86e90d562f854e1d1e634167cc83417"
+      "sha256": "05164f02173251063a8bb74817f47de5fd50a5acbb0425fadce5165a51643b3f"
     }
   }
 }

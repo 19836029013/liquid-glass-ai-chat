@@ -1552,7 +1552,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.6';
+const APP_CURRENT_VERSION='2.7.7';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
@@ -1628,7 +1628,8 @@ async function checkForUpdates(){
       setUpdateButton({label:'检查更新'});
       return;
     }
-    const res=await fetch(manifestUrl,{cache:'no-store'});
+    const sep=manifestUrl.includes('?')?'&':'?';
+    const res=await fetch(manifestUrl+sep+'t='+Date.now(),{cache:'no-store'});
     if(!res.ok)throw new Error('HTTP '+res.status);
     const j=await res.json();
     const remote=String(j.version||'').trim();
