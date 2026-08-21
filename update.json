@@ -1,11 +1,11 @@
 {
-  "version": "2.8.24",
-  "notes": "群聊不再依赖 ntfy：新增自建同步服务器（电脑 + Tailscale），WebSocket 实时推送；设置里填写群聊服务器地址，邀请链接自动带上服务器。",
+  "version": "2.8.25",
+  "notes": "群聊支持国内云服务器直连：无需 VPN/Tailscale；设置新增群聊服务器地址与同步密钥，邀请链接自动携带服务器和密钥；服务器端支持一键部署。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "5c91ddf49697701b4252aefa7dd45fb61ecf9475ea38799a0f8bf79ddffb1059"
+      "sha256": "4ddc777555488474f0d012a9b7cdfc12ba6f9bf466ee46a2182889841bf9a361"
     }
   }
 }

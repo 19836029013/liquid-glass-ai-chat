@@ -1662,10 +1662,17 @@ function getSyncBase(){
   const v=(safeGet('sync.serverBase')||'').trim().replace(/\/+$/,'');
   return v;
 }
+function getSyncToken(){return (safeGet('sync.serverToken')||'').trim()}
+function syncHeaders(){
+  const token=getSyncToken();
+  return token?{'X-Sync-Token':token}:{};
+}
 function wsUrlFromBase(base,topic){
   const b=String(base||'').replace(/\/+$/,'');
   const proto=/^https:\/\//i.test(b)?'wss://':'ws://';
-  return proto+b.replace(/^https?:\/\//i,'')+'/ws/'+encodeURIComponent(topic);
+  const token=getSyncToken();
+  const qs=token?'?key='+encodeURIComponent(token):'';
+  return proto+b.replace(/^https?:\/\//i,'')+'/ws/'+encodeURIComponent(topic)+qs;
 }
 function topicFromSyncUrl(u){return String(u||'').split('/').filter(Boolean).pop()||''}
 function baseFromSyncUrl(u){
@@ -1744,7 +1751,7 @@ async function pullSync(conv){
   normalizeSync(conv);
   if(!conv.syncUrl)return;
   try{
-    const res=await fetchWithTimeout(conv.syncUrl,8000);
+    const res=await fetchWithTimeout(conv.syncUrl,8000,{headers:syncHeaders()});
     if(!res.ok)return;
     const j=await res.json();
     if(j&&j.conv)adoptRemoteMessage(conv,j.conv);
@@ -1873,7 +1880,8 @@ async function shareGroup(conv){
   }
   const topic=String(conv.syncUrl||'').replace(/\/+$/,'').split('/').pop();
   const serverBase=getSyncBase();
-  copyText('yingzi://join/'+topic+(serverBase?'?server='+encodeURIComponent(serverBase):''));
+  const token=getSyncToken();
+  copyText('yingzi://join/'+topic+(serverBase?'?server='+encodeURIComponent(serverBase):'')+(serverBase&&token?'&key='+encodeURIComponent(token):''));
   closeRowMenu();
   showToast('群聊专属链接已复制，朋友点击即可加入');
 }
@@ -1881,11 +1889,13 @@ async function joinGroupByUrl(urlOrTopic){
   const raw=String(urlOrTopic||'').trim();
   let topic=raw;
   let server='';
+  let key='';
   try{
     if(/^yingzi:\/\/join\//i.test(raw)){
       const u=new URL(raw);
       topic=decodeURIComponent(u.pathname.split('/').filter(Boolean).pop()||'');
       server=u.searchParams.get('server')||'';
+      key=u.searchParams.get('key')||'';
     }else if(/^https?:\/\//i.test(raw)){
       const u=new URL(raw);
       topic=decodeURIComponent(u.pathname.split('/').filter(Boolean).pop()||'');
@@ -1895,6 +1905,7 @@ async function joinGroupByUrl(urlOrTopic){
   topic=String(topic||'').replace(/\/+$/,'').split('/').pop();
   if(!topic)throw new Error('链接无效');
   if(server)try{localStorage.setItem('sync.serverBase',server.replace(/\/+$/,''))}catch(e){}
+  if(key)try{localStorage.setItem('sync.serverToken',String(key).trim())}catch(e){}
   const base=getSyncBase();
   if(!base)throw new Error('请先在设置里填写群聊服务器地址');
   const syncUrl=base+'/'+topic;
@@ -1903,7 +1914,7 @@ async function joinGroupByUrl(urlOrTopic){
   if(exists)throw new Error('已加入该群聊');
   let remote=null;
   try{
-    const res=await fetchWithTimeout(syncUrl,8000);
+    const res=await fetchWithTimeout(syncUrl,8000,{headers:syncHeaders()});
     if(res.ok){
       const j=await res.json();
       if(j&&j.conv)remote=j.conv;
@@ -1922,8 +1933,9 @@ async function joinGroupByUrl(urlOrTopic){
   location.href='group-chat/index.html?conv='+encodeURIComponent(conv.id);
   return conv;
 }
-window.__autoJoinGroup=async function(topic,server){
+window.__autoJoinGroup=async function(topic,server,key){
   if(server)try{localStorage.setItem('sync.serverBase',String(server).trim().replace(/\/+$/,''))}catch(e){}
+  if(key)try{localStorage.setItem('sync.serverToken',String(key).trim())}catch(e){}
   try{
     await joinGroupByUrl(topic);
     showToast('已加入群聊');
@@ -1999,6 +2011,8 @@ function fillSettings(){
   const accountInput=$('#accountName');
   const syncServerInput=$('#apiSyncServer');
   if(syncServerInput)syncServerInput.value=safeGet('sync.serverBase');
+  const syncTokenInput=$('#apiSyncToken');
+  if(syncTokenInput)syncTokenInput.value=safeGet('sync.serverToken');
   if(accountInput)accountInput.value=state.account.name;
   const accountStatus=$('#accountStatus');
   if(accountStatus)accountStatus.textContent=`账号 ID：${state.account.id.slice(0,10)}…（群聊中以此区分成员）`;
@@ -2129,6 +2143,8 @@ $('#saveApiButton').addEventListener('click',()=>{
   saveClientApi(cfg);
   const syncServerInput=$('#apiSyncServer');
   if(syncServerInput)localStorage.setItem('sync.serverBase',syncServerInput.value.trim().replace(/\/+$/,''));
+  const syncTokenInput=$('#apiSyncToken');
+  if(syncTokenInput)localStorage.setItem('sync.serverToken',syncTokenInput.value.trim());
   state.clientApi=cfg;
   state.modelId=cfg.model;
   state.modelSource='local';
@@ -2186,7 +2202,7 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
   showToast('用户名已保存');
 });
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.24';
+const APP_CURRENT_VERSION='2.8.25';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

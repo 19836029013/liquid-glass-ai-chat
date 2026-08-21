@@ -132,10 +132,14 @@
     const v=(safeGet('sync.serverBase')||'').trim().replace(/\/+$/,'');
     return v;
   }
+  function getSyncToken(){return (safeGet('sync.serverToken')||'').trim()}
+  function syncHeaders(){const token=getSyncToken();return token?{'X-Sync-Token':token}:{}}
   function wsUrlFromBase(base,topic){
     const b=String(base||'').replace(/\/+$/,'');
     const proto=/^https:\/\//i.test(b)?'wss://':'ws://';
-    return proto+b.replace(/^https?:\/\//i,'')+'/ws/'+encodeURIComponent(topic);
+    const token=getSyncToken();
+    const qs=token?'?key='+encodeURIComponent(token):'';
+    return proto+b.replace(/^https?:\/\//i,'')+'/ws/'+encodeURIComponent(topic)+qs;
   }
   function topicFromSyncUrl(u){return String(u||'').split('/').filter(Boolean).pop()||''}
   function baseFromSyncUrl(u){
@@ -181,7 +185,7 @@
     if(!c.syncUrl)return false;
     c.updatedAt=Date.now();
     try{
-      const res=await fetch(c.syncUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
+      const res=await fetch(c.syncUrl,{method:'POST',headers:{'Content-Type':'application/json',...syncHeaders()},body:JSON.stringify(c)});
       return !!res.ok;
     }catch(e){}
     return false;
@@ -219,7 +223,7 @@
     normalizeSync(c);
     if(!c.syncUrl)return;
     try{
-      const res=await fetch(c.syncUrl);
+      const res=await fetch(c.syncUrl,{headers:syncHeaders()});
       if(!res.ok)return;
       const j=await res.json();
       if(j&&j.conv)adoptRemoteMessage(j.conv);
@@ -437,7 +441,8 @@
     }
     const topic=topicFromSyncUrl(c.syncUrl);
     const serverBase=getSyncBase();
-    $('#inviteLink').textContent='yingzi://join/'+topic+(serverBase?'?server='+encodeURIComponent(serverBase):'');
+    const token=getSyncToken();
+    $('#inviteLink').textContent='yingzi://join/'+topic+(serverBase?'?server='+encodeURIComponent(serverBase):'')+(serverBase&&token?'&key='+encodeURIComponent(token):'');
   }
 
   /* ---------- composer / send ---------- */
@@ -490,7 +495,7 @@
     if(!c.syncUrl)ensureSyncUrl(c);
     const res=await fetch(c.syncUrl,{
       method:'PUT',
-      headers:{'Content-Type':file.type||'application/octet-stream','Filename':file.name},
+      headers:{'Content-Type':file.type||'application/octet-stream','Filename':file.name,...syncHeaders()},
       body:file,
     });
     if(!res.ok)throw new Error('上传失败 HTTP '+res.status);

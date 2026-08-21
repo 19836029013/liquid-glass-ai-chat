@@ -15,6 +15,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
 const CONV_DIR = path.join(DATA_DIR, 'convs');
 const ATTACH_DIR = path.join(DATA_DIR, 'attachments');
+const SYNC_TOKEN = (process.env.SYNC_TOKEN || '').trim();
 
 fs.mkdirSync(CONV_DIR, { recursive: true });
 fs.mkdirSync(ATTACH_DIR, { recursive: true });
@@ -54,10 +55,15 @@ function json(res, code, data) {
     'Content-Type': 'application/json; charset=utf-8',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type,Filename',
+    'Access-Control-Allow-Headers': 'Content-Type,Filename,X-Sync-Token',
     'Cache-Control': 'no-store',
   });
   res.end(body);
+}
+
+function authorized(req, url){
+  if(!SYNC_TOKEN)return true;
+  return (req.headers['x-sync-token']||'')===SYNC_TOKEN || (url.searchParams.get('key')||'')===SYNC_TOKEN;
 }
 
 /* ---------- WebSocket ---------- */
@@ -129,6 +135,7 @@ function attachWs(req, socket) {
     return;
   }
   const topic = safeTopic(decodeURIComponent(parts[1]));
+  if(SYNC_TOKEN && url.searchParams.get('key') !== SYNC_TOKEN){ socket.destroy(); return; }
   const key = req.headers['sec-websocket-key'];
   if (!key) {
     socket.destroy();
@@ -196,7 +203,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET,POST,PUT,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type,Filename',
+      'Access-Control-Allow-Headers': 'Content-Type,Filename,X-Sync-Token',
     });
     res.end();
     return;
@@ -208,6 +215,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (parts[0] === 'api' && parts.length >= 2) {
+    if(!authorized(req, url)){ json(res, 401, { ok: false, error: 'unauthorized' }); return; }
     const topic = safeTopic(decodeURIComponent(parts[1]));
 
     if (parts.length === 2) {
