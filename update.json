@@ -1,11 +1,14 @@
 {
-  "version": "2.8.23",
-  "notes": "设置页标题与检查更新卡片重做；更新说明单独展示；移除外接视觉模型，图片直接交给当前 DeepSeek 模型处理。",
+  "version": "2.8.24",
+  "notes": "群聊不再依赖 ntfy：新增自建同步服务器（电脑 + Tailscale），WebSocket 实时推送；设置里填写群聊服务器地址，邀请链接自动带上服务器。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "568b859b578b14ee82fcf2af94335416cac815e30b555eee315daa79c8c86a32"
+      "sha256": "5c91ddf49697701b4252aefa7dd45fb61ecf9475ea38799a0f8bf79ddffb1059"
     }
   }
 }
+
+
+

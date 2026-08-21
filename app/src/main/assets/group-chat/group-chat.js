@@ -127,34 +127,80 @@
     sending:false,
   };
 
-  /* ---------- sync (ntfy long-poll) ---------- */
-  const SYNC_BASE='https://ntfy.sh';
+  /* ---------- sync (self-hosted server + WebSocket) ---------- */
+  function getSyncBase(){
+    const v=(safeGet('sync.serverBase')||'').trim().replace(/\/+$/,'');
+    return v;
+  }
+  function wsUrlFromBase(base,topic){
+    const b=String(base||'').replace(/\/+$/,'');
+    const proto=/^https:\/\//i.test(b)?'wss://':'ws://';
+    return proto+b.replace(/^https?:\/\//i,'')+'/ws/'+encodeURIComponent(topic);
+  }
+  function topicFromSyncUrl(u){return String(u||'').split('/').filter(Boolean).pop()||''}
+  function baseFromSyncUrl(u){
+    const m=String(u||'').match(/^(https?:\/\/[^/]+)\//i);
+    return m?m[1]:'';
+  }
+  function normalizeSync(c){
+    if(!c||!c.group)return;
+    const base=getSyncBase();
+    const old=String(c.syncUrl||'');
+    if(old&&!c.syncWs){
+      c.syncWs=wsUrlFromBase(base||baseFromSyncUrl(old),topicFromSyncUrl(old));
+    }
+    if(base&&/^https:\/\/ntfy\.sh\//i.test(old)){
+      const topic=topicFromSyncUrl(old);
+      c.syncUrl=base+'/'+topic;
+      c.syncWs=wsUrlFromBase(base,topic);
+    }
+    if(/^https:\/\/ntfy\.sh\//i.test(old)&&!base){
+      c.syncUrl='';
+      c.syncWs='';
+    }
+  }
+  function ensureSyncUrl(c){
+    normalizeSync(c);
+    if(c.syncUrl)return c.syncUrl;
+    const base=getSyncBase();
+    if(!base){
+      showToast('请先在设置里填写群聊服务器地址');
+      return '';
+    }
+    const topic='whale-girl-'+uid().slice(0,10);
+    c.syncUrl=base+'/'+topic;
+    c.syncWs=wsUrlFromBase(base,topic);
+    saveConversations();
+    watchGroup();
+    return c.syncUrl;
+  }
   async function pushSync(){
     const c=conv();
-    if(!c||!c.syncUrl)return false;
+    if(!c||!c.group)return false;
+    normalizeSync(c);
+    if(!c.syncUrl)return false;
     c.updatedAt=Date.now();
     try{
-      await fetch(c.syncUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
-      return true;
+      const res=await fetch(c.syncUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(c)});
+      return !!res.ok;
     }catch(e){}
     return false;
   }
-  function adoptRemoteMessage(last){
+  function adoptRemoteMessage(remote){
     const c=conv();
-    if(!c||!last)return false;
-    let remote=null;
-    if(last&&typeof last==='object'&&last.message){try{remote=JSON.parse(last.message)}catch(e){}}
-    else if(typeof last==='string'){try{remote=JSON.parse(last)}catch(e){}}
-    if(!remote||!Array.isArray(remote.messages))return false;
+    if(!c||!remote||!Array.isArray(remote.messages))return false;
     const localUpdated=Number(c.updatedAt||0);
     const remoteUpdated=Number(remote.updatedAt||0);
     const remoteHasMore=remote.messages.length>c.messages.length;
-    if(!(remoteUpdated>localUpdated||remoteHasMore))return false;
+    const membersChanged=(remote.members||[]).length!==(c.members||[]).length;
+    if(!(remoteUpdated>localUpdated||remoteHasMore||membersChanged))return false;
     const before=c.messages.length;
     c.title=remote.title||c.title;
     c.messages=remote.messages;
     c.members=remote.members||c.members;
     c.updatedAt=remoteUpdated||Date.now();
+    c.syncUrl=c.syncUrl||remote.syncUrl;
+    if(remote.syncWs)c.syncWs=remote.syncWs;
     const lastMsg=remote.messages[remote.messages.length-1];
     if(lastMsg&&lastMsg.role==='user'&&lastMsg.authorName&&lastMsg.authorName!==account.name&&c.notifiedId!==lastMsg.id){
       if(bridge&&bridge.notifyGroupMessage){
@@ -162,7 +208,6 @@
       }
     }
     c.notifiedId=lastMsg?lastMsg.id:null;
-    c.syncSince=last.id||c.syncSince;
     saveConversations();
     if(remote.messages.length>before)showToast('收到新消息');
     renderAll();
@@ -171,27 +216,39 @@
   async function fetchRecent(){
     const c=conv();
     if(!c||!c.syncUrl)return;
+    normalizeSync(c);
+    if(!c.syncUrl)return;
     try{
-      const res=await fetch(c.syncUrl+'/json');
+      const res=await fetch(c.syncUrl);
       if(!res.ok)return;
-      const arr=await res.json();
-      if(Array.isArray(arr)&&arr.length)adoptRemoteMessage(arr[arr.length-1]);
+      const j=await res.json();
+      if(j&&j.conv)adoptRemoteMessage(j.conv);
     }catch(e){}
   }
+  function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
   async function watchGroup(){
     const c=conv();
-    if(!c||!c.syncUrl||c._watching)return;
+    if(!c||c._watching)return;
+    normalizeSync(c);
+    if(!c.syncWs){c._watching=false;return}
     c._watching=true;
-    while(conv()&&c.group&&c.syncUrl){
-      try{
-        const url=c.syncUrl+(c.syncSince?'?poll=1&since='+c.syncSince:'');
-        const res=await fetch(url);
-        if(res.ok){
-          const arr=await res.json();
-          if(Array.isArray(arr)&&arr.length)adoptRemoteMessage(arr[arr.length-1]);
-        }
-      }catch(e){}
-      await new Promise(r=>setTimeout(r,1000));
+    while(conv()&&c.group&&c.syncWs){
+      let ws=null;
+      try{ws=new WebSocket(c.syncWs)}catch(e){ws=null}
+      if(!ws){await sleep(2000);continue}
+      c._ws=ws;
+      const closed=new Promise(resolve=>{
+        ws.onclose=()=>resolve();
+        ws.onerror=()=>{try{ws.close()}catch(e){}resolve()};
+      });
+      ws.onmessage=(ev)=>{
+        try{
+          const j=JSON.parse(ev.data);
+          if(j&&j.type==='state'&&j.conv)adoptRemoteMessage(j.conv);
+        }catch(e){}
+      };
+      await closed;
+      await sleep(1200);
     }
   }
 
@@ -300,11 +357,7 @@
     msg.status='sending';
     renderMessages();
     try{
-      if(!c.syncUrl){
-        c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
-        saveConversations();
-        watchGroup();
-      }
+      if(!c.syncUrl)ensureSyncUrl(c);
       if(msg.attachment&&msg.attachment.local){
         const remote=await uploadAttachment(c,{name:msg.attachment.name,type:msg.attachment.type,size:msg.attachment.size});
         msg.attachment={...msg.attachment,url:remote.url,local:false};
@@ -379,12 +432,12 @@
     if(!c)return;
     commit();
     if(!c.syncUrl){
-      c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
-      saveConversations();
+      if(!ensureSyncUrl(c))return;
       pushSync();
     }
-    const topic=c.syncUrl.replace(/\/+$/,'').split('/').pop();
-    $('#inviteLink').textContent='yingzi://join/'+topic;
+    const topic=topicFromSyncUrl(c.syncUrl);
+    const serverBase=getSyncBase();
+    $('#inviteLink').textContent='yingzi://join/'+topic+(serverBase?'?server='+encodeURIComponent(serverBase):'');
   }
 
   /* ---------- composer / send ---------- */
@@ -434,11 +487,7 @@
     }));
   }
   async function uploadAttachment(c,file){
-    if(!c.syncUrl){
-      c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
-      saveConversations();
-      watchGroup();
-    }
+    if(!c.syncUrl)ensureSyncUrl(c);
     const res=await fetch(c.syncUrl,{
       method:'PUT',
       headers:{'Content-Type':file.type||'application/octet-stream','Filename':file.name},
@@ -448,7 +497,6 @@
     const j=await res.json();
     const att=j.attachment||{};
     let url=att.url||'';
-    if(url.startsWith('/'))url=SYNC_BASE+url;
     return {url,type:file.type||'',name:file.name||'file',size:file.size||0};
   }
   let pendingFile=null;
@@ -560,11 +608,7 @@
     commit();
     const cfg=readClientApi();
     try{
-      if(!c.syncUrl){
-        c.syncUrl=SYNC_BASE+'/whale-girl-'+uid().slice(0,10);
-        saveConversations();
-        watchGroup();
-      }
+      if(!c.syncUrl)ensureSyncUrl(c);
     }catch(e){}
     const mentions=buildMentions(text);
     let attachment=null;
@@ -807,3 +851,4 @@
   renderAll();
   watchGroup();
 })();
+

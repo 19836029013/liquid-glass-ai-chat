@@ -1421,7 +1421,7 @@ async function sendMessage(){
   if(conv.group){
     await pullSync(conv);
     if(!conv.syncUrl){
-      try{await createSyncBlob(conv)}catch(e){showToast('群聊同步不可用，仅本机使用')}
+      try{await createSyncBlob(conv)}catch(e){showToast(e.message||'群聊同步不可用')}
     }
     upsertMember(conv);
   }
@@ -1657,43 +1657,70 @@ function shareAsCard(conv,assistantMsg){
   }
 }
 
-/* ---------- group chat sync (jsonblob relay, no account needed) ---------- */
-const SYNC_BASE='https://ntfy.sh';
+/* ---------- group chat sync (self-hosted server + WebSocket) ---------- */
+function getSyncBase(){
+  const v=(safeGet('sync.serverBase')||'').trim().replace(/\/+$/,'');
+  return v;
+}
+function wsUrlFromBase(base,topic){
+  const b=String(base||'').replace(/\/+$/,'');
+  const proto=/^https:\/\//i.test(b)?'wss://':'ws://';
+  return proto+b.replace(/^https?:\/\//i,'')+'/ws/'+encodeURIComponent(topic);
+}
+function topicFromSyncUrl(u){return String(u||'').split('/').filter(Boolean).pop()||''}
+function baseFromSyncUrl(u){
+  const m=String(u||'').match(/^(https?:\/\/[^/]+)\//i);
+  return m?m[1]:'';
+}
+function normalizeSync(conv){
+  if(!conv||!conv.group)return;
+  const base=getSyncBase();
+  const old=String(conv.syncUrl||'');
+  if(old&&!conv.syncWs){
+    conv.syncWs=wsUrlFromBase(base||baseFromSyncUrl(old),topicFromSyncUrl(old));
+  }
+  if(base&&/^https:\/\/ntfy\.sh\//i.test(old)){
+    const topic=topicFromSyncUrl(old);
+    conv.syncUrl=base+'/'+topic;
+    conv.syncWs=wsUrlFromBase(base,topic);
+  }
+  if(/^https:\/\/ntfy\.sh\//i.test(old)&&!base){
+    conv.syncUrl='';
+    conv.syncWs='';
+  }
+}
 async function createSyncBlob(conv){
-  const topic='whale-girl-'+uid().slice(0,10);
-  conv.syncUrl=SYNC_BASE+'/'+topic;
+  normalizeSync(conv);
+  if(!conv.syncUrl)throw new Error('请先在设置里填写群聊服务器地址');
   conv.updatedAt=Date.now();
   await pushSync(conv);
   saveConversations();
   watchGroup(conv);
 }
 async function pushSync(conv){
-  if(!conv||!conv.group||!conv.syncUrl)return;
+  if(!conv||!conv.group)return false;
+  normalizeSync(conv);
+  if(!conv.syncUrl)return false;
   conv.updatedAt=Date.now();
   try{
-    const res=await fetch(conv.syncUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(conv)});
-    if(!res.ok)throw new Error('HTTP '+res.status);
-  }catch(e){}
+    const res=await fetchWithTimeout(conv.syncUrl,8000,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(conv)});
+    return !!res.ok;
+  }catch(e){return false}
 }
-function adoptRemoteMessage(conv,last){
-  if(!last)return false;
-  let remote=null;
-  if(last&&typeof last==='object'&&last.message){
-    try{remote=JSON.parse(last.message)}catch(e){}
-  }else if(typeof last==='string'){
-    try{remote=JSON.parse(last)}catch(e){}
-  }
+function adoptRemoteMessage(conv,remote){
   if(!remote||!Array.isArray(remote.messages))return false;
   const localUpdated=Number(conv.updatedAt||0);
   const remoteUpdated=Number(remote.updatedAt||0);
   const remoteHasMore=remote.messages.length>conv.messages.length;
-  if(!(remoteUpdated>localUpdated||remoteHasMore))return false;
+  const membersChanged=(remote.members||[]).length!==(conv.members||[]).length;
+  if(!(remoteUpdated>localUpdated||remoteHasMore||membersChanged))return false;
   const before=conv.messages.length;
   conv.title=remote.title||conv.title;
   conv.messages=remote.messages;
   conv.members=remote.members||conv.members;
   conv.updatedAt=remoteUpdated||Date.now();
   conv.syncUrl=conv.syncUrl||remote.syncUrl;
+  if(remote.syncWs)conv.syncWs=remote.syncWs;
   const lastMsg=remote.messages[remote.messages.length-1];
   if(lastMsg&&lastMsg.role==='user'&&lastMsg.authorName&&lastMsg.authorName!==state.account.name&&conv.notifiedId!==lastMsg.id){
     if(bridge&&bridge.notifyGroupMessage){
@@ -1701,7 +1728,6 @@ function adoptRemoteMessage(conv,last){
     }
   }
   conv.notifiedId=lastMsg?lastMsg.id:null;
-  conv.syncSince=last.id||conv.syncSince;
   saveConversations();
   if(state.conversationId===conv.id){
     renderMessages(conv.messages);
@@ -1715,30 +1741,40 @@ function adoptRemoteMessage(conv,last){
 }
 async function pullSync(conv){
   if(!conv||!conv.group||!conv.syncUrl)return;
+  normalizeSync(conv);
+  if(!conv.syncUrl)return;
   try{
-    const res=await fetchWithTimeout(conv.syncUrl+'/json',8000);
+    const res=await fetchWithTimeout(conv.syncUrl,8000);
     if(!res.ok)return;
-    const arr=await res.json();
-    if(!Array.isArray(arr)||!arr.length)return;
-    adoptRemoteMessage(conv,arr[arr.length-1]);
+    const j=await res.json();
+    if(j&&j.conv)adoptRemoteMessage(conv,j.conv);
   }catch(e){}
 }
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 async function watchGroup(conv){
   if(!conv||conv._watching)return;
+  normalizeSync(conv);
+  if(!conv.syncWs){conv._watching=false;return}
   conv._watching=true;
   while(conv.group&&state.conversations.includes(conv)){
-    try{
-      const url=conv.syncUrl+(conv.syncSince?'?poll=1&since='+conv.syncSince:'');
-      const res=await fetchWithTimeout(url,50000);
-      if(res.ok){
-        const arr=await res.json();
-        if(Array.isArray(arr)&&arr.length){
-          adoptRemoteMessage(conv,arr[arr.length-1]);
-        }
-      }
-    }catch(e){}
-    await new Promise(r=>setTimeout(r,1000));
+    let ws=null;
+    try{ws=new WebSocket(conv.syncWs)}catch(e){ws=null}
+    if(!ws){await sleep(2000);continue}
+    conv._ws=ws;
+    const closed=new Promise(resolve=>{
+      ws.onclose=()=>resolve();
+      ws.onerror=()=>{try{ws.close()}catch(e){}resolve()};
+    });
+    ws.onmessage=(ev)=>{
+      try{
+        const j=JSON.parse(ev.data);
+        if(j&&j.type==='state'&&j.conv)adoptRemoteMessage(conv,j.conv);
+      }catch(e){}
+    };
+    await closed;
+    await sleep(1200);
   }
+  conv._watching=false;
 }
 function newGroupChat(){
   const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
@@ -1836,38 +1872,46 @@ async function shareGroup(conv){
     try{await createSyncBlob(conv)}catch(e){showToast('同步不可用');closeRowMenu();return}
   }
   const topic=String(conv.syncUrl||'').replace(/\/+$/,'').split('/').pop();
-  copyText('yingzi://join/'+topic);
+  const serverBase=getSyncBase();
+  copyText('yingzi://join/'+topic+(serverBase?'?server='+encodeURIComponent(serverBase):''));
   closeRowMenu();
   showToast('群聊专属链接已复制，朋友点击即可加入');
 }
 async function joinGroupByUrl(urlOrTopic){
   const raw=String(urlOrTopic||'').trim();
-  const topic=raw.replace(/\/+$/,'').split('/').pop();
-  if(!topic)throw new Error('链接无效');
-  const syncUrl=SYNC_BASE+'/'+topic;
-  let remote=null;
+  let topic=raw;
+  let server='';
   try{
-    const ctrl=new AbortController();
-    const timer=setTimeout(()=>ctrl.abort(),5000);
-    const res=await fetch(syncUrl+'/json',{cache:'no-store',signal:ctrl.signal});
-    clearTimeout(timer);
-    if(res.ok){
-      const arr=await res.json();
-      if(Array.isArray(arr)&&arr.length){
-        const last=arr[arr.length-1];
-        if(last&&typeof last==='object'&&last.message){
-          try{remote=JSON.parse(last.message)}catch(e){}
-        }else if(typeof last==='string'){
-          try{remote=JSON.parse(last)}catch(e){}
-        }
-      }
+    if(/^yingzi:\/\/join\//i.test(raw)){
+      const u=new URL(raw);
+      topic=decodeURIComponent(u.pathname.split('/').filter(Boolean).pop()||'');
+      server=u.searchParams.get('server')||'';
+    }else if(/^https?:\/\//i.test(raw)){
+      const u=new URL(raw);
+      topic=decodeURIComponent(u.pathname.split('/').filter(Boolean).pop()||'');
+      server=u.origin;
     }
   }catch(e){}
-  const exists=remote&&remote.id&&state.conversations.some(c=>c.id===remote.id);
+  topic=String(topic||'').replace(/\/+$/,'').split('/').pop();
+  if(!topic)throw new Error('链接无效');
+  if(server)try{localStorage.setItem('sync.serverBase',server.replace(/\/+$/,''))}catch(e){}
+  const base=getSyncBase();
+  if(!base)throw new Error('请先在设置里填写群聊服务器地址');
+  const syncUrl=base+'/'+topic;
+  const syncWs=wsUrlFromBase(base,topic);
+  const exists=state.conversations.some(c=>c.group&&c.syncUrl===syncUrl);
   if(exists)throw new Error('已加入该群聊');
+  let remote=null;
+  try{
+    const res=await fetchWithTimeout(syncUrl,8000);
+    if(res.ok){
+      const j=await res.json();
+      if(j&&j.conv)remote=j.conv;
+    }
+  }catch(e){}
   const conv=remote&&remote.id
-    ? {...remote,syncUrl,updatedAt:Date.now(),notifiedId:(remote.messages&&remote.messages.length)?remote.messages[remote.messages.length-1].id:null}
-    : {id:uid(),title:(remote&&remote.title)||'群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name}],messages:(remote&&Array.isArray(remote.messages))?remote.messages:[],created_at:nowISO(),updatedAt:Date.now(),syncUrl};
+    ? {...remote,syncUrl,syncWs,updatedAt:Date.now(),notifiedId:(remote.messages&&remote.messages.length)?remote.messages[remote.messages.length-1].id:null}
+    : {id:uid(),title:(remote&&remote.title)||'群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name}],messages:(remote&&Array.isArray(remote.messages))?remote.messages:[],created_at:nowISO(),updatedAt:Date.now(),syncUrl,syncWs};
   upsertMember(conv);
   state.conversations.push(conv);
   state.conversationId=conv.id;
@@ -1878,7 +1922,8 @@ async function joinGroupByUrl(urlOrTopic){
   location.href='group-chat/index.html?conv='+encodeURIComponent(conv.id);
   return conv;
 }
-window.__autoJoinGroup=async function(topic){
+window.__autoJoinGroup=async function(topic,server){
+  if(server)try{localStorage.setItem('sync.serverBase',String(server).trim().replace(/\/+$/,''))}catch(e){}
   try{
     await joinGroupByUrl(topic);
     showToast('已加入群聊');
@@ -1952,6 +1997,8 @@ function fillSettings(){
   const nickInput=$('#apiNickname');
   if(nickInput)nickInput.value=state.account.name;
   const accountInput=$('#accountName');
+  const syncServerInput=$('#apiSyncServer');
+  if(syncServerInput)syncServerInput.value=safeGet('sync.serverBase');
   if(accountInput)accountInput.value=state.account.name;
   const accountStatus=$('#accountStatus');
   if(accountStatus)accountStatus.textContent=`账号 ID：${state.account.id.slice(0,10)}…（群聊中以此区分成员）`;
@@ -2080,6 +2127,8 @@ $('#saveApiButton').addEventListener('click',()=>{
     state.account.name=nick;
   }
   saveClientApi(cfg);
+  const syncServerInput=$('#apiSyncServer');
+  if(syncServerInput)localStorage.setItem('sync.serverBase',syncServerInput.value.trim().replace(/\/+$/,''));
   state.clientApi=cfg;
   state.modelId=cfg.model;
   state.modelSource='local';
@@ -2137,7 +2186,7 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
   showToast('用户名已保存');
 });
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.23';
+const APP_CURRENT_VERSION='2.8.24';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
@@ -2159,10 +2208,10 @@ function compareVersions(a,b){
   }
   return 0;
 }
-function fetchWithTimeout(url,ms=8000){
+function fetchWithTimeout(url,ms=8000,options={}){
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(),ms);
-  return fetch(url,{cache:'no-store',signal:ctrl.signal}).finally(()=>clearTimeout(timer));
+  return fetch(url,{...options,cache:'no-store',signal:ctrl.signal}).finally(()=>clearTimeout(timer));
 }
 function setUpdateButton({label='检查更新',mode='check',loading=false}={}){
   const btn=$('#checkUpdateButton');
@@ -2546,7 +2595,7 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
   loadWallpaper();
   loadConversations();
   state.conversations.forEach(c=>{
-    if(c.group&&c.syncUrl)watchGroup(c);
+    if(c.group){normalizeSync(c);if(c.syncUrl)watchGroup(c)}
   });
   loadConfig();
   renderProjects();
@@ -2590,3 +2639,5 @@ document.addEventListener('visibilitychange',()=>{
     updateApiBanner();
   }
 });
+
+

@@ -71,6 +71,7 @@ public class MainActivity extends Activity {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ValueCallback<Uri[]> fileChooserCallback;
     private String pendingJoinTopic = null;
+    private String pendingJoinServer = null;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -188,6 +189,7 @@ public class MainActivity extends Activity {
         }
         if (!topic.isEmpty()) {
             pendingJoinTopic = topic;
+            pendingJoinServer = uri.getQueryParameter("server");
             pushJoinTopicToJs();
         }
     }
@@ -195,9 +197,11 @@ public class MainActivity extends Activity {
     private void pushJoinTopicToJs() {
         if (pendingJoinTopic == null) return;
         final String topic = pendingJoinTopic;
+        final String server = pendingJoinServer == null ? "" : pendingJoinServer;
+        pendingJoinServer = null;
         pendingJoinTopic = null;
         webView.evaluateJavascript(
-                "window.__autoJoinGroup&&window.__autoJoinGroup(" + JSONObject.quote(topic) + ")", null);
+                "window.__autoJoinGroup&&window.__autoJoinGroup(" + JSONObject.quote(topic) + "," + JSONObject.quote(server) + ")", null);
     }
 
     private void openSettingsModal() {
