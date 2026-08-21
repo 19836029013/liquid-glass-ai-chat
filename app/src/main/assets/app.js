@@ -1154,6 +1154,7 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
   const p0=$('.assistant-bubble p',turn);
   if(p0&&existingTurn)p0.classList.add('streaming-caret');
   let finalText='';
+  let reasoningText='';
   try{
     await streamChat(cfg,msgs,{
       delta(t){
@@ -1162,7 +1163,17 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
         if(p)p.insertAdjacentText('beforeend',t);
         scrollBottom(false);
       },
-      reasoning(){},
+      reasoning(t){
+        reasoningText+=t;
+        if(reasoningText.length>30000)reasoningText=reasoningText.slice(0,30000);
+        const rp=$('.reasoning-scroll',turn);
+        if(rp)rp.textContent=reasoningText;
+        const rs=$('.reasoning-state',turn);
+        if(rs)rs.textContent='思考中…';
+        const rt=$('[data-reasoning-toggle]',turn);
+        if(rt&&reasoningText)rt.disabled=false;
+        scrollBottom(false);
+      },
       done(){},
     });
   }finally{
@@ -1170,6 +1181,7 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
     if(p)p.classList.remove('streaming-caret');
   }
   assistantMsg.content=normalizeText(finalText).trim();
+  if(reasoningText)assistantMsg.reasoning_summary=reasoningText;
   assistantMsg.created_at=nowISO();
   if(!assistantMsg.content)throw new Error('模型没有返回内容');
   const turn2=existingTurn||$(`[data-message-id="${assistantMsg.id}"]`);
@@ -1222,6 +1234,7 @@ async function handleAction(action,mid){
     const userMsg=[...conv.messages.slice(0,idx)].reverse().find(m=>m.role==='user');
     const userText=userMsg?userMsg.content:'';
     assistant.content='';
+    assistant.reasoning_summary=null;
     assistant.streaming=true;
     saveConversations();renderMessages(conv.messages);
     const existingTurn=$(`[data-message-id="${mid}"]`);
@@ -1573,7 +1586,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.11';
+const APP_CURRENT_VERSION='2.7.12';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

@@ -1,11 +1,11 @@
 {
-  "version": "2.7.11",
-  "notes": "对话到底不再有空白可滚动区：最后一条消息的动作按钮紧贴输入框上方，滚动到底即停；壁纸/遮罩/玻璃滑杆再加固（遮罩直接写入样式）。",
+  "version": "2.7.12",
+  "notes": "深度思考恢复：直接实时显示模型真实思考过程（边思考边滚动展示，不额外发送任何提示词）；需使用支持思考输出的模型（如 deepseek-reasoner、deepseek-v4 并开启思考）。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "3fa5ced7ed653430997d0a26a55e44342d6a5ed644d83817e897492afe780d02"
+      "sha256": "487d1289ad3cd55cb13df6228338073c50fb5a8fe9b493bc2a0a8534228341ff"
     }
   }
 }
