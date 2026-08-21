@@ -135,6 +135,8 @@ function attachWs(req, socket) {
     return;
   }
   const topic = safeTopic(decodeURIComponent(parts[1]));
+  const wsAuth = !SYNC_TOKEN || url.searchParams.get('key') === SYNC_TOKEN;
+  console.log('[ws] connect', topic, 'auth=' + wsAuth);
   if(SYNC_TOKEN && url.searchParams.get('key') !== SYNC_TOKEN){ socket.destroy(); return; }
   const key = req.headers['sec-websocket-key'];
   if (!key) {
@@ -198,6 +200,8 @@ function attachWs(req, socket) {
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const parts = url.pathname.split('/').filter(Boolean);
+
+  console.log('[http]', new Date().toISOString(), req.method, url.pathname, 'auth=' + authorized(req, url));
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {

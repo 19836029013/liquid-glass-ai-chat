@@ -1,14 +1,15 @@
 {
-  "version": "2.8.25",
-  "notes": "群聊支持国内云服务器直连：无需 VPN/Tailscale；设置新增群聊服务器地址与同步密钥，邀请链接自动携带服务器和密钥；服务器端支持一键部署。",
+  "version": "2.8.26",
+  "notes": "修复群聊页首次点击菜单无响应（进入页面即可打开侧栏）；同步服务增加请求日志便于排查。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "4ddc777555488474f0d012a9b7cdfc12ba6f9bf466ee46a2182889841bf9a361"
+      "sha256": "dd6dfbf215a1dec299eb416bbb3467c153557ea725dbd02e3fc17761f11f35a8"
     }
   }
 }
+
 
 
 

@@ -2202,7 +2202,7 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
   showToast('用户名已保存');
 });
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.25';
+const APP_CURRENT_VERSION='2.8.26';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

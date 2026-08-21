@@ -688,11 +688,12 @@
   const gSidebar=$('#sidebar'),gBackdrop=$('#sidebarBackdrop');
   function gOpenSidebar(){
     loadConversations();
-    renderGSidebar();
     gSidebar.classList.add('open');
     gSidebar.setAttribute('aria-hidden','false');
     gBackdrop.classList.add('show');
     document.body.classList.add('sidebar-open');
+    try{renderGSidebar()}catch(e){}
+    return;
   }
   function gCloseSidebar(){
     gSidebar.classList.remove('open');
@@ -728,7 +729,7 @@
     if(!pinned.children.length)pinned.innerHTML='<div class="empty-history">暂无置顶</div>';
     if(!recent.children.length)recent.innerHTML='<div class="empty-history">暂无最近</div>';
   }
-  $('#menuButton').addEventListener('click',gOpenSidebar);
+  document.addEventListener('click',e=>{if(e.target.closest('#menuButton')){e.preventDefault();gOpenSidebar()}});
   gBackdrop.addEventListener('click',gCloseSidebar);
   $$('[data-sidebar-close]').forEach(b=>b.addEventListener('click',gCloseSidebar));
   $('#sidebarSettings').addEventListener('click',()=>{location.href='../index.html?openSettings=1'});
