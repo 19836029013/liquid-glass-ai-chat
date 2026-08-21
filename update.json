@@ -1,11 +1,11 @@
 {
-  "version": "2.8.6",
-  "notes": "群聊更新：微信式交互（@AI 才触发回复）；群成员人数与加入状态显示；加入失败显示具体原因；同步改用 ntfy 长轮询，修复 HTTP 429 限流。",
+  "version": "2.8.7",
+  "notes": "新增账号系统：设置里注册用户名，App 自动生成唯一账号 ID；群聊消息和成员列表显示真实用户名，能清楚看到谁加入、谁是谁。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "bf0fe0d753e72303bbb5879d9eab61966aa50adcef92abe38ab49798f61d55d1"
+      "sha256": "02d4fd787754b66f6b108249c163867be2fe08e2e0065c3b77be77951f8dd0a4"
     }
   }
 }

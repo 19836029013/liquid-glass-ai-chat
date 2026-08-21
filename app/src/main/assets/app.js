@@ -18,6 +18,7 @@ const state={
   reasoningLevel:safeGet('ai.reasoningLevel','标准'),
   nickname:safeGet('group.nickname','我'),
   deviceId:safeGet('group.deviceId'),
+  account:{id:safeGet('account.id')||uid(),name:(safeGet('account.name')||safeGet('group.nickname')||'我')},
   sending:false,
   shared:false,
   serverModels:[],
@@ -34,6 +35,9 @@ const sheetScrim=$('#sheetScrim');
 if(!state.deviceId){
   state.deviceId=uid();
   try{localStorage.setItem('group.deviceId',state.deviceId)}catch(e){}
+}
+if(!safeGet('account.id')){
+  try{localStorage.setItem('account.id',state.account.id)}catch(e){}
 }
 
 function showToast(text){
@@ -1231,8 +1235,8 @@ async function sendMessage(){
   }
   const userMsg={id:uid(),role:'user',content:text,created_at:nowISO()};
   if(conv.group){
-    userMsg.authorId=state.deviceId;
-    userMsg.authorName=state.nickname||'我';
+    userMsg.authorId=state.account.id;
+    userMsg.authorName=state.account.name;
   }
   if(conv.group&&!isMentionAI(text,cfg)){
     conv.messages.push(userMsg);
@@ -1488,7 +1492,7 @@ function adoptRemoteMessage(conv,last){
   conv.updatedAt=remoteUpdated||Date.now();
   conv.syncUrl=conv.syncUrl||remote.syncUrl;
   const lastMsg=remote.messages[remote.messages.length-1];
-  if(lastMsg&&lastMsg.role==='user'&&lastMsg.authorName&&lastMsg.authorName!==state.nickname&&conv.notifiedId!==lastMsg.id){
+  if(lastMsg&&lastMsg.role==='user'&&lastMsg.authorName&&lastMsg.authorName!==state.account.name&&conv.notifiedId!==lastMsg.id){
     if(bridge&&bridge.notifyGroupMessage){
       bridge.notifyGroupMessage(String(lastMsg.authorName),String(normalizeText(lastMsg.content)).slice(0,120));
     }
@@ -1534,7 +1538,7 @@ async function watchGroup(conv){
   }
 }
 function newGroupChat(){
-  const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:state.deviceId,name:state.nickname||'我'},{id:'friend',name:'朋友'}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
+  const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name},{id:'friend',name:'朋友'}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
   state.conversations.push(conv);
   state.conversationId=conv.id;
   $('#greeting').textContent='群聊';
@@ -1565,20 +1569,21 @@ function isMentionAI(text,cfg){
 }
 function upsertMember(conv){
   if(!conv.members)conv.members=[];
-  const me=conv.members.find(m=>m.id===state.deviceId);
-  if(me)me.name=state.nickname||'我';
-  else conv.members.push({id:state.deviceId,name:state.nickname||'我'});
+  const me=conv.members.find(m=>m.id===state.account.id);
+  if(me)me.name=state.account.name;
+  else conv.members.push({id:state.account.id,name:state.account.name});
 }
 function showGroupSettings(conv){
   closeRowMenu();
   const menu=document.createElement('div');
   menu.className='row-menu glass';
-  const me=conv.members&&conv.members.find(m=>m.id===state.deviceId);
-  const other=conv.members&&conv.members.find(m=>m.id!==state.deviceId);
+  const me=conv.members&&conv.members.find(m=>m.id===state.account.id);
+  const other=conv.members&&conv.members.find(m=>m.id!==state.account.id);
   const memberIds=new Set((conv.members||[]).map(m=>m.id));
   (conv.messages||[]).forEach(m=>{if(m.role==='user'&&m.authorId)memberIds.add(m.authorId)});
-  const hasOther=[...memberIds].some(id=>id!==state.deviceId);
-  const memberLine=`<div class="join-status">群成员 ${memberIds.size} 人 · ${hasOther?'朋友已加入':'等待朋友加入'}</div>`;
+  const hasOther=[...memberIds].some(id=>id!==state.account.id);
+  const otherName=(other&&other.name)||'朋友';
+  const memberLine=`<div class="join-status">群成员 ${memberIds.size} 人（${escapeHTML(state.account.name)}${hasOther?'、'+escapeHTML(otherName):''}）· ${hasOther?'朋友已加入':'等待朋友加入'}</div>`;
   menu.innerHTML=`
     <div class="row-menu-title">群设置</div>
     ${memberLine}
@@ -1592,18 +1597,20 @@ function showGroupSettings(conv){
   positionRowMenu();
   const save=()=>{
     const name=menu.querySelector('.g-name').value.trim();
-    const myName=menu.querySelector('.g-me').value.trim()||'我';
+    const myName=menu.querySelector('.g-me').value.trim()||state.account.name||'我';
     const otherName=menu.querySelector('.g-other').value.trim()||'朋友';
     if(name)conv.title=name;
     if(!conv.members)conv.members=[];
-    const meIdx=conv.members.findIndex(m=>m.id===state.deviceId);
+    const meIdx=conv.members.findIndex(m=>m.id===state.account.id);
     if(meIdx>=0)conv.members[meIdx].name=myName;
-    else conv.members.push({id:state.deviceId,name:myName});
-    const otherIdx=conv.members.findIndex(m=>m.id!==state.deviceId);
+    else conv.members.push({id:state.account.id,name:myName});
+    const otherIdx=conv.members.findIndex(m=>m.id!==state.account.id);
     if(otherIdx>=0)conv.members[otherIdx].name=otherName;
     else conv.members.push({id:'friend',name:otherName});
     localStorage.setItem('group.nickname',myName);
+    localStorage.setItem('account.name',myName);
     state.nickname=myName;
+    state.account.name=myName;
     saveConversations();
     renderHistory();
     if(state.conversationId===conv.id){
@@ -1743,7 +1750,11 @@ function fillSettings(){
   $('#apiKey').value=cfg.api_key||'';
   $('#apiReasoningParam').value=sanitizeReasoningParameter(cfg.reasoning_parameter||'',cfg.models||[]);
   const nickInput=$('#apiNickname');
-  if(nickInput)nickInput.value=safeGet('group.nickname','我');
+  if(nickInput)nickInput.value=state.account.name;
+  const accountInput=$('#accountName');
+  if(accountInput)accountInput.value=state.account.name;
+  const accountStatus=$('#accountStatus');
+  if(accountStatus)accountStatus.textContent=`账号 ID：${state.account.id.slice(0,10)}…（群聊中以此区分成员）`;
   $('#apiModels').value=(cfg.models||[]).join('\n');
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)manifestInput.value=safeGet('app.updateManifestUrl',DEFAULT_UPDATE_MANIFEST);
@@ -1864,7 +1875,9 @@ $('#saveApiButton').addEventListener('click',()=>{
   if(nickInput){
     const nick=nickInput.value.trim()||'我';
     localStorage.setItem('group.nickname',nick);
+    localStorage.setItem('account.name',nick);
     state.nickname=nick;
+    state.account.name=nick;
   }
   saveClientApi(cfg);
   state.clientApi=cfg;
@@ -1901,9 +1914,31 @@ $('#testApiButton').addEventListener('click',async()=>{
     $('#testApiButton').disabled=false;
   }
 });
+$('#saveAccountButton')?.addEventListener('click',()=>{
+  const input=$('#accountName');
+  const status=$('#accountStatus');
+  const name=(input&&input.value.trim())||state.account.name||'我';
+  state.account.name=name;
+  localStorage.setItem('account.name',name);
+  localStorage.setItem('group.nickname',name);
+  state.nickname=name;
+  state.conversations.forEach(c=>{
+    if(c.group&&c.members){
+      const m=c.members.find(x=>x.id===state.account.id);
+      if(m)m.name=name;
+      pushSync(c);
+    }
+  });
+  renderHistory();
+  if(status){
+    status.textContent=`用户名已保存：${name}`;
+    status.className='settings-status ok';
+  }
+  showToast('用户名已保存');
+});
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.6';
+const APP_CURRENT_VERSION='2.8.7';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

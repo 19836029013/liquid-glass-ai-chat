@@ -116,6 +116,27 @@
       </header>
 
       <div class="settings-screen-scroll">
+        <section class="settings-card glass">
+          <div class="settings-section-title">
+            <div class="settings-card-icon account-icon">👤</div>
+            <h3>我的账号</h3>
+          </div>
+          <div class="settings-list">
+            <label class="settings-row">
+              <span class="row-label">用户名</span>
+              <input id="accountName" autocomplete="off" placeholder="群聊中显示的名字" maxlength="12" />
+              <span class="settings-chevron">›</span>
+            </label>
+          </div>
+          <div class="settings-card-footer">
+            <div class="local-key-note">♢ 用户名会显示给群聊里的朋友，随时可改</div>
+            <div class="settings-actions">
+              <button class="settings-pill-button primary" id="saveAccountButton">✓&nbsp; 保存用户名</button>
+            </div>
+          </div>
+          <div class="settings-status" id="accountStatus"></div>
+        </section>
+
         <section class="settings-card glass update-card">
           <div class="settings-card-icon update-icon">⇧</div>
           <div class="update-copy">
