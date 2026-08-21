@@ -16,6 +16,7 @@ const state={
   modelId:safeGet('ai.modelId'),
   modelSource:safeGet('ai.modelSource'),
   reasoningLevel:safeGet('ai.reasoningLevel','标准'),
+  nickname:safeGet('group.nickname','我'),
   sending:false,
   shared:false,
   serverModels:[],
@@ -277,8 +278,13 @@ function actions(message){
 function messageHTML(message){
   const content=normalizeText(message.content);
   if(message.role==='user'){
+    const conv=currentConversation();
+    const author=conv&&conv.group&&message.authorName
+      ? `<div class="user-author" style="color:${message.authorColor||'#2f7c69'}">${escapeHTML(message.authorName)}</div>`
+      : '';
     return `<div class="turn turn-user" data-message-id="${message.id}">
       <div class="user-bubble">
+        ${author}
         <p>${escapeHTML(content).replace(/\n/g,'<br>')}</p>
         <div class="meta user-meta">${timeOf(message.created_at)} <span class="checks">✓✓</span></div>
       </div>
@@ -520,10 +526,12 @@ function showRowMenu(id,anchor){
   if(!conv)return;
   const menu=document.createElement('div');
   menu.className='row-menu glass';
+  const groupItem=conv.group?`<button class="row-menu-item" data-act="sharegroup"><span class="row-menu-item-icon">⇄</span><span class="row-menu-label">分享群聊链接</span></button>`:'';
   menu.innerHTML=`
     <button class="row-menu-item" data-act="rename"><span class="row-menu-item-icon">✎</span><span class="row-menu-label">重命名对话</span></button>
     <button class="row-menu-item" data-act="pin"><span class="row-menu-item-icon">⌖</span><span class="row-menu-label">${conv.pinned?'取消置顶':'置顶对话'}</span></button>
     <button class="row-menu-item" data-act="move"><span class="row-menu-item-icon">▣</span><span class="row-menu-label">移动到项目</span></button>
+    ${groupItem}
     <button class="row-menu-item danger" data-act="delete"><span class="row-menu-item-icon">×</span><span class="row-menu-label">删除对话</span></button>`;
   document.body.appendChild(menu);
   rowMenuEl=menu;
@@ -540,6 +548,8 @@ function showRowMenu(id,anchor){
       showToast(conv.pinned?'已置顶':'已取消置顶');
     }else if(act==='move'){
       showMoveInMenu(conv);
+    }else if(act==='sharegroup'){
+      shareGroup(conv);
     }else if(act==='delete'){
       if(menu.dataset.armed!=='1'){
         menu.dataset.armed='1';
@@ -687,6 +697,7 @@ function editUserMessage(id,turn,conv){
         $('#greeting').textContent=conv.title;
         updateTopTitle(conv.title);
       }
+      if(conv.group)pushSync(conv);
       showToast('消息已更新');
     }else{
       renderMessages(conv.messages);
@@ -1195,7 +1206,14 @@ async function sendMessage(){
   if(!cfg){openSettings('api');showToast('请先配置 AI 接口');return}
   let conv=currentConversation();
   if(!conv)conv=newConversation();
+  if(conv.group){
+    await pullSync(conv);
+    if(!conv.syncUrl){
+      try{await createSyncBlob(conv)}catch(e){showToast('群聊同步不可用，仅本机使用')}
+    }
+  }
   const userMsg={id:uid(),role:'user',content:text,created_at:nowISO()};
+  if(conv.group)userMsg.authorName=state.nickname||'我';
   const assistantMsg={id:uid(),role:'assistant',content:'',model:state.modelId||cfg.model,created_at:nowISO(),streaming:true};
   conv.messages.push(userMsg,assistantMsg);
   if(conv.title==='新对话')conv.title=text.slice(0,18);
@@ -1215,6 +1233,7 @@ async function sendMessage(){
     state.sending=false;sendButton.disabled=false;
     saveConversations();renderHistory();
     if(state.conversationId===conv.id){renderMessages(conv.messages);scrollBottom(false)}
+    if(conv.group)pushSync(conv);
   }
 }
 async function handleAction(action,mid){
@@ -1256,6 +1275,7 @@ async function handleAction(action,mid){
       state.sending=false;sendButton.disabled=false;
       saveConversations();renderHistory();
       if(state.conversationId===conv.id){renderMessages(conv.messages);scrollBottom(false)}
+      if(conv.group)pushSync(conv);
     }
     return;
   }
@@ -1400,6 +1420,121 @@ function shareAsCard(conv,assistantMsg){
   }
 }
 
+/* ---------- group chat sync (jsonblob relay, no account needed) ---------- */
+const SYNC_BASE='https://jsonblob.com/api/jsonBlob';
+async function createSyncBlob(conv){
+  const res=await fetch(SYNC_BASE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(conv)});
+  if(!res.ok)throw new Error('创建同步失败');
+  const loc=res.headers.get('Location');
+  if(!loc)throw new Error('同步地址无效');
+  conv.syncUrl=loc;
+  conv.updatedAt=Date.now();
+  saveConversations();
+}
+async function pushSync(conv){
+  if(!conv||!conv.group||!conv.syncUrl)return;
+  conv.updatedAt=Date.now();
+  try{
+    const res=await fetch(conv.syncUrl,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(conv)});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+  }catch(e){}
+}
+async function pullSync(conv){
+  if(!conv||!conv.group||!conv.syncUrl)return;
+  try{
+    const res=await fetch(conv.syncUrl,{cache:'no-store'});
+    if(!res.ok)return;
+    const remote=await res.json();
+    if(!remote||!Array.isArray(remote.messages))return;
+    const localUpdated=Number(conv.updatedAt||0);
+    const remoteUpdated=Number(remote.updatedAt||0);
+    const remoteHasMore=remote.messages.length>conv.messages.length;
+    if(remoteUpdated>localUpdated||remoteHasMore){
+      const before=conv.messages.length;
+      conv.title=remote.title||conv.title;
+      conv.messages=remote.messages;
+      conv.members=remote.members||conv.members;
+      conv.updatedAt=remoteUpdated||Date.now();
+      conv.syncUrl=conv.syncUrl||remote.syncUrl;
+      saveConversations();
+      if(state.conversationId===conv.id){
+        renderMessages(conv.messages);
+        $('#greeting').textContent=conv.title;
+        updateTopTitle(conv.title);
+        scrollBottom(false);
+        if(remote.messages.length>before)showToast('收到新消息');
+      }
+      renderHistory();
+    }
+  }catch(e){}
+}
+setInterval(async()=>{
+  for(const c of state.conversations){
+    if(c.group&&c.syncUrl)await pullSync(c);
+  }
+},3000);
+function newGroupChat(){
+  const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:'me',name:state.nickname||'我'},{id:'friend',name:'朋友'}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
+  state.conversations.push(conv);
+  state.conversationId=conv.id;
+  $('#greeting').textContent='群聊';
+  updateTopTitle('新群聊');
+  renderMessages([]);
+  renderHistory();
+  closeSidebar();
+  promptInput.focus();
+  showToast('已创建群聊，点 ⋯ 可重命名');
+}
+$('#newGroupButton')?.addEventListener('click',newGroupChat);
+async function shareGroup(conv){
+  if(!conv.syncUrl){
+    try{await createSyncBlob(conv)}catch(e){showToast('同步不可用');closeRowMenu();return}
+  }
+  copyText(conv.syncUrl);
+  closeRowMenu();
+  showToast('群聊链接已复制，发给朋友加入');
+}
+function promptJoinGroup(){
+  closeRowMenu();
+  const menu=document.createElement('div');
+  menu.className='row-menu glass';
+  menu.innerHTML=`<div class="row-menu-title">加入群聊</div><input class="row-menu-input" placeholder="粘贴群聊链接" /><div class="row-menu-actions"><button class="row-menu-btn" data-cancel>取消</button><button class="row-menu-btn primary" data-ok>加入</button></div>`;
+  document.body.appendChild(menu);
+  rowMenuEl=menu;
+  lastMenuAnchor=$('#joinGroupButton');
+  positionRowMenu();
+  const input=menu.querySelector('input');
+  input.focus();
+  const join=async()=>{
+    const url=input.value.trim();
+    if(!url){showToast('请粘贴链接');return}
+    try{
+      const res=await fetch(url,{cache:'no-store'});
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      const remote=await res.json();
+      if(!remote||!Array.isArray(remote.messages))throw new Error('不是有效的群聊');
+      if(state.conversations.some(c=>c.id===remote.id))throw new Error('已加入该群聊');
+      remote.syncUrl=url;
+      remote.updatedAt=Date.now();
+      state.conversations.push(remote);
+      state.conversationId=remote.id;
+      saveConversations();
+      renderHistory();
+      closeRowMenu();
+      $('#greeting').textContent=remote.title;
+      updateTopTitle(remote.title);
+      renderMessages(remote.messages||[]);
+      showToast('已加入群聊');
+    }catch(e){
+      showToast('加入失败：'+(e.message||'未知错误'));
+    }
+  };
+  menu.querySelector('[data-ok]').addEventListener('click',join);
+  menu.querySelector('[data-cancel]').addEventListener('click',closeRowMenu);
+  input.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();join()}});
+}
+$('#joinGroupButton')?.addEventListener('click',promptJoinGroup);
+
 /* ---------- settings ---------- */
 function populateApiModelSelect(selectedValue='',sourceModels=null){
   const select=$('#apiModel');
@@ -1433,6 +1568,8 @@ function fillSettings(){
   $('#apiBaseUrl').value=cfg.base_url||'';
   $('#apiKey').value=cfg.api_key||'';
   $('#apiReasoningParam').value=sanitizeReasoningParameter(cfg.reasoning_parameter||'',cfg.models||[]);
+  const nickInput=$('#apiNickname');
+  if(nickInput)nickInput.value=safeGet('group.nickname','我');
   $('#apiModels').value=(cfg.models||[]).join('\n');
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)manifestInput.value=safeGet('app.updateManifestUrl',DEFAULT_UPDATE_MANIFEST);
@@ -1549,6 +1686,12 @@ $('#saveApiButton').addEventListener('click',()=>{
   if(!cfg.models.includes(cfg.model))cfg.models=normalizeModelList([cfg.model,...cfg.models]);
   const manifestInput=$('#apiUpdateManifest');
   if(manifestInput)localStorage.setItem('app.updateManifestUrl',manifestInput.value.trim());
+  const nickInput=$('#apiNickname');
+  if(nickInput){
+    const nick=nickInput.value.trim()||'我';
+    localStorage.setItem('group.nickname',nick);
+    state.nickname=nick;
+  }
   saveClientApi(cfg);
   state.clientApi=cfg;
   state.modelId=cfg.model;
@@ -1586,7 +1729,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.13';
+const APP_CURRENT_VERSION='2.8.0';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

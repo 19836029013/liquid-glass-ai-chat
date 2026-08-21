@@ -1,11 +1,11 @@
 {
-  "version": "2.7.13",
-  "notes": "国内无 VPN 也能更新：更新清单和安装包都自动走国内镜像回退（gh-proxy / ghfast），直连失败自动切换，无需翻墙。",
+  "version": "2.8.0",
+  "notes": "新增群聊：两个人共用一个聊天框一起和 AI 对话；消息显示发送者昵称；通过分享/加入群聊链接同步（3 秒轮询，无需服务器）。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "15890dd5900ec10c65521c63e39ff7d88ff2e224b3e4efb7858c0a5dcc573245"
+      "sha256": "20745849d0b01f42c6c4f9358dfa3ccf330ce7b50e27bc05b9ec313d82626053"
     }
   }
 }

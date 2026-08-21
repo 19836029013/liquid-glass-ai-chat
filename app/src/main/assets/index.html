@@ -44,6 +44,8 @@
       </section>
 
       <div class="sidebar-bottom">
+        <button class="side-item" id="newGroupButton"><span>◎</span><span>新建群聊</span></button>
+        <button class="side-item" id="joinGroupButton"><span>⇄</span><span>加入群聊</span></button>
         <button class="side-item" id="sidebarSettings"><span>⚙</span><span>设置</span></button>
       </div>
     </aside>
@@ -163,6 +165,10 @@
               <label class="advanced-row">
                 <span>更新清单地址（可选）</span>
                 <input id="apiUpdateManifest" autocomplete="off" placeholder="https://example.com/update.json" />
+              </label>
+              <label class="advanced-row">
+                <span>群聊昵称（本机）</span>
+                <input id="apiNickname" autocomplete="off" placeholder="我" maxlength="12" />
               </label>
               <label class="advanced-row model-catalog-row">
                 <span>可用模型</span>

@@ -3203,6 +3203,12 @@ body.sidebar-open .sidebar{
   color:#0b1118!important;
   font-weight:500;
 }
+.user-author{
+  font-size:12px;
+  font-weight:600;
+  margin-bottom:4px;
+  opacity:.85;
+}
 
 /* conversation ends right above the composer: no scrollable blank space */
 .bottom-spacer{height:10px!important}
