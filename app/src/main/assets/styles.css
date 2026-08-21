@@ -3209,6 +3209,30 @@ body.sidebar-open .sidebar{
   margin-bottom:4px;
   opacity:.85;
 }
+.mention-button{
+  border:1px solid rgba(255,255,255,.55);
+  background:rgba(255,255,255,.2);
+  border-radius:16px;
+  padding:8px 12px;
+  font-size:13px;
+  color:#2f7c69;
+  margin-left:auto;
+  flex:0 0 auto;
+}
+.mention-button[hidden]{display:none}
+.composer.has-mention .send-button{margin-left:8px}
+.join-status{
+  margin:8px 4px 0;
+  font-size:12px;
+  color:#3d8c78;
+  line-height:1.5;
+}
+.group-count{
+  margin-left:auto;
+  font-size:11px;
+  color:#7b858d;
+  flex:0 0 auto;
+}
 
 /* conversation ends right above the composer: no scrollable blank space */
 .bottom-spacer{height:10px!important}

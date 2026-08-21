@@ -17,6 +17,7 @@ const state={
   modelSource:safeGet('ai.modelSource'),
   reasoningLevel:safeGet('ai.reasoningLevel','标准'),
   nickname:safeGet('group.nickname','我'),
+  deviceId:safeGet('group.deviceId'),
   sending:false,
   shared:false,
   serverModels:[],
@@ -30,6 +31,10 @@ const actionSheet=$('#actionSheet');
 const apiBanner=$('#apiBanner');
 const settingsBackdrop=$('#settingsBackdrop');
 const sheetScrim=$('#sheetScrim');
+if(!state.deviceId){
+  state.deviceId=uid();
+  try{localStorage.setItem('group.deviceId',state.deviceId)}catch(e){}
+}
 
 function showToast(text){
   toast.textContent=text;toast.classList.add('show');
@@ -719,7 +724,13 @@ function historyButton(c){
   row.dataset.title=(c.title||'').toLowerCase();
   const b=document.createElement('button');
   b.className='side-item chat-history'+(c.id===state.conversationId?' current':'');
-  b.innerHTML=`<span>${c.pinned?'⌖':'◷'}</span><span>${escapeHTML(c.title)}</span>`;
+  let countBadge='';
+  if(c.group){
+    const ids=new Set((c.members||[]).map(m=>m.id));
+    (c.messages||[]).forEach(m=>{if(m.role==='user'&&m.authorId)ids.add(m.authorId)});
+    countBadge=`<small class="group-count">👥 ${ids.size}</small>`;
+  }
+  b.innerHTML=`<span>${c.pinned?'⌖':'◷'}</span><span>${escapeHTML(c.title)}</span>${countBadge}`;
   b.addEventListener('click',()=>loadConversation(c.id));
   const more=document.createElement('button');
   more.className='history-more';
@@ -966,6 +977,7 @@ function loadConversation(id){
   state.conversationId=id;
   $('#greeting').textContent=conv.title||'对话';
   updateTopTitle(conv.title||'对话');
+  toggleGroupUi(conv);
   renderMessages(conv.messages||[]);
   closeSidebar();
   renderHistory();
@@ -976,6 +988,7 @@ function newChat(){
   messagesEl.innerHTML='';
   $('#greeting').textContent='你好，今天想聊点什么？';
   updateTopTitle('新对话');
+  toggleGroupUi(null);
   promptInput.value='';promptInput.focus();
   closeSidebar();renderHistory();showToast('新建对话');
 }
@@ -1214,9 +1227,23 @@ async function sendMessage(){
     if(!conv.syncUrl){
       try{await createSyncBlob(conv)}catch(e){showToast('群聊同步不可用，仅本机使用')}
     }
+    upsertMember(conv);
   }
   const userMsg={id:uid(),role:'user',content:text,created_at:nowISO()};
-  if(conv.group)userMsg.authorName=state.nickname||'我';
+  if(conv.group){
+    userMsg.authorId=state.deviceId;
+    userMsg.authorName=state.nickname||'我';
+  }
+  if(conv.group&&!isMentionAI(text,cfg)){
+    conv.messages.push(userMsg);
+    promptInput.value='';promptInput.style.height='auto';
+    messagesEl.insertAdjacentHTML('beforeend',messageHTML(userMsg));
+    scrollBottom();
+    saveConversations();renderHistory();
+    pushSync(conv);
+    showToast('已发送到群聊');
+    return;
+  }
   const assistantMsg={id:uid(),role:'assistant',content:'',model:state.modelId||cfg.model,created_at:nowISO(),streaming:true};
   conv.messages.push(userMsg,assistantMsg);
   if(conv.title==='新对话')conv.title=text.slice(0,18);
@@ -1431,70 +1458,88 @@ async function createSyncBlob(conv){
   conv.updatedAt=Date.now();
   await pushSync(conv);
   saveConversations();
+  watchGroup(conv);
 }
 async function pushSync(conv){
   if(!conv||!conv.group||!conv.syncUrl)return;
   conv.updatedAt=Date.now();
   try{
-    const res=await fetch(conv.syncUrl,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(conv)});
+    const res=await fetch(conv.syncUrl,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(conv)});
     if(!res.ok)throw new Error('HTTP '+res.status);
   }catch(e){}
+}
+function adoptRemoteMessage(conv,last){
+  if(!last)return false;
+  let remote=null;
+  if(last&&typeof last==='object'&&last.message){
+    try{remote=JSON.parse(last.message)}catch(e){}
+  }else if(typeof last==='string'){
+    try{remote=JSON.parse(last)}catch(e){}
+  }
+  if(!remote||!Array.isArray(remote.messages))return false;
+  const localUpdated=Number(conv.updatedAt||0);
+  const remoteUpdated=Number(remote.updatedAt||0);
+  const remoteHasMore=remote.messages.length>conv.messages.length;
+  if(!(remoteUpdated>localUpdated||remoteHasMore))return false;
+  const before=conv.messages.length;
+  conv.title=remote.title||conv.title;
+  conv.messages=remote.messages;
+  conv.members=remote.members||conv.members;
+  conv.updatedAt=remoteUpdated||Date.now();
+  conv.syncUrl=conv.syncUrl||remote.syncUrl;
+  const lastMsg=remote.messages[remote.messages.length-1];
+  if(lastMsg&&lastMsg.role==='user'&&lastMsg.authorName&&lastMsg.authorName!==state.nickname&&conv.notifiedId!==lastMsg.id){
+    if(bridge&&bridge.notifyGroupMessage){
+      bridge.notifyGroupMessage(String(lastMsg.authorName),String(normalizeText(lastMsg.content)).slice(0,120));
+    }
+  }
+  conv.notifiedId=lastMsg?lastMsg.id:null;
+  conv.syncSince=last.id||conv.syncSince;
+  saveConversations();
+  if(state.conversationId===conv.id){
+    renderMessages(conv.messages);
+    $('#greeting').textContent=conv.title;
+    updateTopTitle(conv.title);
+    scrollBottom(false);
+    if(remote.messages.length>before)showToast('收到新消息');
+  }
+  renderHistory();
+  return true;
 }
 async function pullSync(conv){
   if(!conv||!conv.group||!conv.syncUrl)return;
   try{
-    const res=await fetch(conv.syncUrl+'/json',{cache:'no-store'});
+    const res=await fetchWithTimeout(conv.syncUrl+'/json',8000);
     if(!res.ok)return;
     const arr=await res.json();
     if(!Array.isArray(arr)||!arr.length)return;
-    const last=arr[arr.length-1];
-    let remote=null;
-    if(last&&typeof last==='object'&&last.message){
-      try{remote=JSON.parse(last.message)}catch(e){}
-    }else if(typeof last==='string'){
-      try{remote=JSON.parse(last)}catch(e){}
-    }
-    if(!remote||!Array.isArray(remote.messages))return;
-    const localUpdated=Number(conv.updatedAt||0);
-    const remoteUpdated=Number(remote.updatedAt||0);
-    const remoteHasMore=remote.messages.length>conv.messages.length;
-    if(remoteUpdated>localUpdated||remoteHasMore){
-      const before=conv.messages.length;
-      conv.title=remote.title||conv.title;
-      conv.messages=remote.messages;
-      conv.members=remote.members||conv.members;
-      conv.updatedAt=remoteUpdated||Date.now();
-      conv.syncUrl=conv.syncUrl||remote.syncUrl;
-      const lastMsg=remote.messages[remote.messages.length-1];
-      if(lastMsg&&lastMsg.role==='user'&&lastMsg.authorName&&lastMsg.authorName!==state.nickname&&conv.notifiedId!==lastMsg.id){
-        if(bridge&&bridge.notifyGroupMessage){
-          bridge.notifyGroupMessage(String(lastMsg.authorName),String(normalizeText(lastMsg.content)).slice(0,120));
-        }
-      }
-      conv.notifiedId=lastMsg?lastMsg.id:null;
-      saveConversations();
-      if(state.conversationId===conv.id){
-        renderMessages(conv.messages);
-        $('#greeting').textContent=conv.title;
-        updateTopTitle(conv.title);
-        scrollBottom(false);
-        if(remote.messages.length>before)showToast('收到新消息');
-      }
-      renderHistory();
-    }
+    adoptRemoteMessage(conv,arr[arr.length-1]);
   }catch(e){}
 }
-setInterval(async()=>{
-  for(const c of state.conversations){
-    if(c.group&&c.syncUrl)await pullSync(c);
+async function watchGroup(conv){
+  if(!conv||conv._watching)return;
+  conv._watching=true;
+  while(conv.group&&state.conversations.includes(conv)){
+    try{
+      const url=conv.syncUrl+(conv.syncSince?'?poll=1&since='+conv.syncSince:'');
+      const res=await fetchWithTimeout(url,50000);
+      if(res.ok){
+        const arr=await res.json();
+        if(Array.isArray(arr)&&arr.length){
+          adoptRemoteMessage(conv,arr[arr.length-1]);
+        }
+      }
+    }catch(e){}
+    await new Promise(r=>setTimeout(r,3000));
   }
-},3000);
+}
 function newGroupChat(){
-  const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:'me',name:state.nickname||'我'},{id:'friend',name:'朋友'}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
+  const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:state.deviceId,name:state.nickname||'我'},{id:'friend',name:'朋友'}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
   state.conversations.push(conv);
   state.conversationId=conv.id;
   $('#greeting').textContent='群聊';
   updateTopTitle('新群聊');
+  toggleGroupUi(conv);
   renderMessages([]);
   renderHistory();
   closeSidebar();
@@ -1502,6 +1547,85 @@ function newGroupChat(){
   showToast('已创建群聊，点 ⋯ 可重命名');
 }
 $('#newGroupButton')?.addEventListener('click',newGroupChat);
+function toggleGroupUi(conv){
+  const btn=$('#mentionButton');
+  const ta=$('#promptInput');
+  const composer=$('#composer');
+  const isGroup=!!(conv&&conv.group);
+  if(btn)btn.hidden=!isGroup;
+  if(composer)composer.classList.toggle('has-mention',isGroup);
+  if(ta)ta.placeholder=isGroup?'输入消息… 输入 @AI 召唤回复':'输入消息…';
+}
+function isMentionAI(text,cfg){
+  const s=String(text||'');
+  if(/@\s*(ai|英子|起飞|deepseek|ds|机器人|助手)/i.test(s))return true;
+  const m=(cfg&&cfg.model)||state.modelId||'';
+  if(m&&s.toLowerCase().includes(m.toLowerCase()))return true;
+  return false;
+}
+function upsertMember(conv){
+  if(!conv.members)conv.members=[];
+  const me=conv.members.find(m=>m.id===state.deviceId);
+  if(me)me.name=state.nickname||'我';
+  else conv.members.push({id:state.deviceId,name:state.nickname||'我'});
+}
+function showGroupSettings(conv){
+  closeRowMenu();
+  const menu=document.createElement('div');
+  menu.className='row-menu glass';
+  const me=conv.members&&conv.members.find(m=>m.id===state.deviceId);
+  const other=conv.members&&conv.members.find(m=>m.id!==state.deviceId);
+  const memberIds=new Set((conv.members||[]).map(m=>m.id));
+  (conv.messages||[]).forEach(m=>{if(m.role==='user'&&m.authorId)memberIds.add(m.authorId)});
+  const hasOther=[...memberIds].some(id=>id!==state.deviceId);
+  const memberLine=`<div class="join-status">群成员 ${memberIds.size} 人 · ${hasOther?'朋友已加入':'等待朋友加入'}</div>`;
+  menu.innerHTML=`
+    <div class="row-menu-title">群设置</div>
+    ${memberLine}
+    <input class="row-menu-input g-name" placeholder="群名称" value="${escapeHTML(conv.title||'')}" />
+    <input class="row-menu-input g-me" placeholder="我的昵称" value="${escapeHTML((me&&me.name)||state.nickname||'我')}" />
+    <input class="row-menu-input g-other" placeholder="朋友昵称" value="${escapeHTML((other&&other.name)||'朋友')}" />
+    <div class="row-menu-actions"><button class="row-menu-btn" data-cancel>取消</button><button class="row-menu-btn primary" data-ok>保存</button></div>`;
+  document.body.appendChild(menu);
+  rowMenuEl=menu;
+  lastMenuAnchor=$('#topModelButton');
+  positionRowMenu();
+  const save=()=>{
+    const name=menu.querySelector('.g-name').value.trim();
+    const myName=menu.querySelector('.g-me').value.trim()||'我';
+    const otherName=menu.querySelector('.g-other').value.trim()||'朋友';
+    if(name)conv.title=name;
+    if(!conv.members)conv.members=[];
+    const meIdx=conv.members.findIndex(m=>m.id===state.deviceId);
+    if(meIdx>=0)conv.members[meIdx].name=myName;
+    else conv.members.push({id:state.deviceId,name:myName});
+    const otherIdx=conv.members.findIndex(m=>m.id!==state.deviceId);
+    if(otherIdx>=0)conv.members[otherIdx].name=otherName;
+    else conv.members.push({id:'friend',name:otherName});
+    localStorage.setItem('group.nickname',myName);
+    state.nickname=myName;
+    saveConversations();
+    renderHistory();
+    if(state.conversationId===conv.id){
+      $('#greeting').textContent=conv.title;
+      updateTopTitle(conv.title);
+    }
+    pushSync(conv);
+    closeRowMenu();
+    showToast('群设置已保存');
+  };
+  menu.querySelector('[data-ok]').addEventListener('click',save);
+  menu.querySelector('[data-cancel]').addEventListener('click',closeRowMenu);
+}
+$('#mentionButton')?.addEventListener('click',()=>{
+  promptInput.value=(promptInput.value?promptInput.value+' ':'')+'@AI ';
+  promptInput.focus();
+  promptInput.dispatchEvent(new Event('input'));
+});
+$('#topModelButton').addEventListener('click',()=>{
+  const conv=currentConversation();
+  if(conv&&conv.group)showGroupSettings(conv);
+});
 async function shareGroup(conv){
   if(!conv.syncUrl){
     try{await createSyncBlob(conv)}catch(e){showToast('同步不可用');closeRowMenu();return}
@@ -1513,7 +1637,7 @@ async function shareGroup(conv){
 }
 async function joinGroupByUrl(urlOrTopic){
   const raw=String(urlOrTopic||'').trim();
-  const topic=raw.split('/').pop();
+  const topic=raw.replace(/\/+$/,'').split('/').pop();
   if(!topic)throw new Error('链接无效');
   const syncUrl=SYNC_BASE+'/'+topic;
   const res=await fetch(syncUrl+'/json',{cache:'no-store'});
@@ -1538,8 +1662,12 @@ async function joinGroupByUrl(urlOrTopic){
   state.conversationId=remote.id;
   saveConversations();
   renderHistory();
+  upsertMember(remote);
+  pushSync(remote);
+  watchGroup(remote);
   $('#greeting').textContent=remote.title;
   updateTopTitle(remote.title);
+  toggleGroupUi(remote);
   renderMessages(remote.messages||[]);
   return remote;
 }
@@ -1555,22 +1683,24 @@ function promptJoinGroup(){
   closeRowMenu();
   const menu=document.createElement('div');
   menu.className='row-menu glass';
-  menu.innerHTML=`<div class="row-menu-title">加入群聊</div><input class="row-menu-input" placeholder="粘贴群聊链接" /><div class="row-menu-actions"><button class="row-menu-btn" data-cancel>取消</button><button class="row-menu-btn primary" data-ok>加入</button></div>`;
+  menu.innerHTML=`<div class="row-menu-title">加入群聊</div><input class="row-menu-input" placeholder="粘贴群聊链接" /><div class="join-status"></div><div class="row-menu-actions"><button class="row-menu-btn" data-cancel>取消</button><button class="row-menu-btn primary" data-ok>加入</button></div>`;
   document.body.appendChild(menu);
   rowMenuEl=menu;
   lastMenuAnchor=$('#joinGroupButton');
   positionRowMenu();
   const input=menu.querySelector('input');
+  const status=menu.querySelector('.join-status');
   input.focus();
   const join=async()=>{
     const url=input.value.trim();
-    if(!url){showToast('请粘贴链接');return}
+    if(!url){status.textContent='请先粘贴群聊链接';return}
+    status.textContent='正在加入…';
     try{
       await joinGroupByUrl(url);
       closeRowMenu();
       showToast('已加入群聊');
     }catch(e){
-      showToast('加入失败：'+(e.message||'未知错误'));
+      status.textContent='加入失败：'+(e.message||'未知错误');
     }
   };
   menu.querySelector('[data-ok]').addEventListener('click',join);
@@ -1773,7 +1903,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.3';
+const APP_CURRENT_VERSION='2.8.6';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;
@@ -2175,6 +2305,9 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
   applyAppearance();
   loadWallpaper();
   loadConversations();
+  state.conversations.forEach(c=>{
+    if(c.group&&c.syncUrl)watchGroup(c);
+  });
   loadConfig();
   renderProjects();
   renderHistory();

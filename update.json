@@ -1,11 +1,11 @@
 {
-  "version": "2.8.3",
-  "notes": "群聊加入方式改为专属链接（yingzi://join/xxx）：朋友点击链接直接唤起 App 并自动加入群聊，不再打开网页。",
+  "version": "2.8.6",
+  "notes": "群聊更新：微信式交互（@AI 才触发回复）；群成员人数与加入状态显示；加入失败显示具体原因；同步改用 ntfy 长轮询，修复 HTTP 429 限流。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "8312bfd97bfbbac7bf807bc9be16a28187a3870907b6935f78505021aa3508b6"
+      "sha256": "bf0fe0d753e72303bbb5879d9eab61966aa50adcef92abe38ab49798f61d55d1"
     }
   }
 }
