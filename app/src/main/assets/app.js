@@ -732,12 +732,15 @@ function historyButton(c){
   return row;
 }
 function renderHistory(){
-  const pinned=$('#pinnedChatList'),recent=$('#recentChatList');
-  pinned.innerHTML='';recent.innerHTML='';
-  const list=state.conversations.filter(c=>!c.projectId);
+  const pinned=$('#pinnedChatList'),recent=$('#recentChatList'),groupList=$('#groupChatList');
+  pinned.innerHTML='';recent.innerHTML='';groupList.innerHTML='';
+  const list=state.conversations.filter(c=>!c.projectId&&!c.group);
   [...list].sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||''))).forEach(c=>(c.pinned?pinned:recent).appendChild(historyButton(c)));
-  if(!pinned.children.length)pinned.innerHTML='<div class="empty-history">暂无置顶聊天</div>';
-  if(!recent.children.length)recent.innerHTML='<div class="empty-history">暂无最近聊天</div>';
+  const groups=state.conversations.filter(c=>c.group);
+  [...groups].sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||''))).forEach(c=>groupList.appendChild(historyButton(c)));
+  if(!pinned.children.length)pinned.innerHTML='<div class="empty-history">暂无置顶对话</div>';
+  if(!recent.children.length)recent.innerHTML='<div class="empty-history">暂无最近对话</div>';
+  if(!groupList.children.length)groupList.innerHTML='<div class="empty-history">暂无群聊 · 点下方新建</div>';
   const q=String($('#sidebarSearch').value||'').trim().toLowerCase();
   $$('.chat-history-row').forEach(row=>{
     row.hidden=!!q&&!(row.dataset.title||'').includes(q);
@@ -1421,14 +1424,12 @@ function shareAsCard(conv,assistantMsg){
 }
 
 /* ---------- group chat sync (jsonblob relay, no account needed) ---------- */
-const SYNC_BASE='https://jsonblob.com/api/jsonBlob';
+const SYNC_BASE='https://ntfy.sh';
 async function createSyncBlob(conv){
-  const res=await fetch(SYNC_BASE,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(conv)});
-  if(!res.ok)throw new Error('创建同步失败');
-  const loc=res.headers.get('Location');
-  if(!loc)throw new Error('同步地址无效');
-  conv.syncUrl=loc;
+  const topic='whale-girl-'+uid().slice(0,10);
+  conv.syncUrl=SYNC_BASE+'/'+topic;
   conv.updatedAt=Date.now();
+  await pushSync(conv);
   saveConversations();
 }
 async function pushSync(conv){
@@ -1442,9 +1443,17 @@ async function pushSync(conv){
 async function pullSync(conv){
   if(!conv||!conv.group||!conv.syncUrl)return;
   try{
-    const res=await fetch(conv.syncUrl,{cache:'no-store'});
+    const res=await fetch(conv.syncUrl+'/json',{cache:'no-store'});
     if(!res.ok)return;
-    const remote=await res.json();
+    const arr=await res.json();
+    if(!Array.isArray(arr)||!arr.length)return;
+    const last=arr[arr.length-1];
+    let remote=null;
+    if(last&&typeof last==='object'&&last.message){
+      try{remote=JSON.parse(last.message)}catch(e){}
+    }else if(typeof last==='string'){
+      try{remote=JSON.parse(last)}catch(e){}
+    }
     if(!remote||!Array.isArray(remote.messages))return;
     const localUpdated=Number(conv.updatedAt||0);
     const remoteUpdated=Number(remote.updatedAt||0);
@@ -1456,6 +1465,13 @@ async function pullSync(conv){
       conv.members=remote.members||conv.members;
       conv.updatedAt=remoteUpdated||Date.now();
       conv.syncUrl=conv.syncUrl||remote.syncUrl;
+      const lastMsg=remote.messages[remote.messages.length-1];
+      if(lastMsg&&lastMsg.role==='user'&&lastMsg.authorName&&lastMsg.authorName!==state.nickname&&conv.notifiedId!==lastMsg.id){
+        if(bridge&&bridge.notifyGroupMessage){
+          bridge.notifyGroupMessage(String(lastMsg.authorName),String(normalizeText(lastMsg.content)).slice(0,120));
+        }
+      }
+      conv.notifiedId=lastMsg?lastMsg.id:null;
       saveConversations();
       if(state.conversationId===conv.id){
         renderMessages(conv.messages);
@@ -1509,13 +1525,27 @@ function promptJoinGroup(){
     const url=input.value.trim();
     if(!url){showToast('请粘贴链接');return}
     try{
-      const res=await fetch(url,{cache:'no-store'});
+      const topic=String(url).replace(/\/+$/,'').split('/').pop();
+      if(!topic)throw new Error('链接无效');
+      const syncUrl=SYNC_BASE+'/'+topic;
+      const res=await fetch(syncUrl+'/json',{cache:'no-store'});
       if(!res.ok)throw new Error('HTTP '+res.status);
-      const remote=await res.json();
+      const arr=await res.json();
+      let remote=null;
+      if(Array.isArray(arr)&&arr.length){
+        const last=arr[arr.length-1];
+        if(last&&typeof last==='object'&&last.message){
+          try{remote=JSON.parse(last.message)}catch(e){}
+        }else if(typeof last==='string'){
+          try{remote=JSON.parse(last)}catch(e){}
+        }
+      }
+      if(!remote&&Array.isArray(arr))remote={title:'新群聊',members:[],messages:[],updatedAt:Date.now()};
       if(!remote||!Array.isArray(remote.messages))throw new Error('不是有效的群聊');
       if(state.conversations.some(c=>c.id===remote.id))throw new Error('已加入该群聊');
-      remote.syncUrl=url;
+      remote.syncUrl=syncUrl;
       remote.updatedAt=Date.now();
+      remote.notifiedId=remote.messages.length?remote.messages[remote.messages.length-1].id:null;
       state.conversations.push(remote);
       state.conversationId=remote.id;
       saveConversations();
@@ -1729,7 +1759,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.0';
+const APP_CURRENT_VERSION='2.8.1';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

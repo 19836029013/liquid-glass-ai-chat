@@ -1,9 +1,14 @@
 package com.dsapp.liquidglasschat;
 
 import android.annotation.SuppressLint;
+import android.Manifest;
 import android.app.Activity;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.net.http.SslError;
@@ -28,6 +33,7 @@ import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.core.content.FileProvider;
+import androidx.core.app.NotificationCompat;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -55,6 +61,7 @@ public class MainActivity extends Activity {
     private static final String KEY_API_CONFIG = "api_config";
     private static final String KEY_APP_STATE = "app_state";
     private static final int FILE_CHOOSER_REQUEST = 1001;
+    private static final int NOTIFY_PERMISSION_REQUEST = 1002;
 
     private WebView webView;
     private ProgressBar loadingBar;
@@ -71,6 +78,7 @@ public class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE);
+        ensureNotifyChannel();
         webView = findViewById(R.id.webView);
         loadingBar = findViewById(R.id.loadingBar);
         errorView = findViewById(R.id.errorView);
@@ -158,6 +166,46 @@ public class MainActivity extends Activity {
 
     private void openSettingsModal() {
         webView.evaluateJavascript("window.__openSettings&&window.__openSettings('api')", null);
+    }
+
+    private void ensureNotifyChannel() {
+        if (Build.VERSION.SDK_INT >= 26) {
+            NotificationChannel channel = new NotificationChannel(
+                    "group_chat", "群聊消息", NotificationManager.IMPORTANCE_HIGH);
+            channel.setDescription("收到群聊新消息时提醒");
+            NotificationManager nm = getSystemService(NotificationManager.class);
+            if (nm != null) nm.createNotificationChannel(channel);
+        }
+    }
+
+    private void doNotifyGroupMessage(final String name, final String text) {
+        runOnUiThread(() -> {
+            try {
+                if (Build.VERSION.SDK_INT >= 33
+                        && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, NOTIFY_PERMISSION_REQUEST);
+                    return;
+                }
+                Intent intent = new Intent(this, MainActivity.class);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                PendingIntent pi = PendingIntent.getActivity(this, 0, intent,
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                NotificationCompat.Builder builder = new NotificationCompat.Builder(this, "group_chat")
+                        .setSmallIcon(R.drawable.ic_notify)
+                        .setContentTitle(name == null || name.isEmpty() ? "群聊消息" : name)
+                        .setContentText(text == null ? "" : text)
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)
+                        .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                        .setAutoCancel(true)
+                        .setContentIntent(pi)
+                        .setDefaults(NotificationCompat.DEFAULT_ALL);
+                NotificationManager nm = getSystemService(NotificationManager.class);
+                if (nm != null) {
+                    nm.notify((int) (System.currentTimeMillis() % 100000), builder.build());
+                }
+            } catch (Exception ignored) {
+            }
+        });
     }
 
     private String errorDescription(WebResourceError error) {
@@ -765,6 +813,11 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void shareImage(String dataUrl, String title, String text) {
             doShareImage(dataUrl, title, text);
+        }
+
+        @JavascriptInterface
+        public void notifyGroupMessage(String name, String text) {
+            doNotifyGroupMessage(name, text);
         }
     }
 
