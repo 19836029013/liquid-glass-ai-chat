@@ -615,7 +615,7 @@
   }
 
   /* ---------- events ---------- */
-  $('#menuButton').addEventListener('click',()=>{location.href='../index.html?openSidebar=1'});
+  $('#menuButton').addEventListener('click',()=>{location.href='../index.html?openSidebar=1&conv='+encodeURIComponent(convId)});
   $('#groupInfoButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#memberDetailsButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#inviteButton').addEventListener('click',()=>{renderInvite();openSheet('#inviteSheet')});
@@ -635,6 +635,78 @@
   $('#attachImageOption').addEventListener('click',()=>{$('#attachMenu').hidden=true;$('#imageInput').click()});
   $('#attachFileOption').addEventListener('click',()=>{$('#attachMenu').hidden=true;$('#fileInput').click()});
   document.addEventListener('click',()=>{$('#attachMenu').hidden=true});
+
+  /* ---------- emoji / sticker panel ---------- */
+  const EMOJIS=['😀','😂','🤣','😊','😍','😘','😎','🤔','😅','😭','😡','👍','👎','👏','🙏','💪','❤️','🔥','🎉','✨','🤝','🍉'];
+  function loadStickers(){try{return JSON.parse(localStorage.getItem('app.stickers')||'[]')}catch(e){return []}}
+  function saveStickers(list){try{localStorage.setItem('app.stickers',JSON.stringify(list))}catch(e){}}
+  let stickerManage=false;
+  function renderStickerPanel(){
+    const panel=$('#stickerPanel');
+    const stickers=loadStickers();
+    panel.innerHTML=`
+      <div class="sticker-manage-bar">
+        <button type="button" id="stickerAdd">＋ 添加贴纸</button>
+        <button type="button" id="stickerManage">${stickerManage?'完成':'管理'}</button>
+      </div>
+      <div class="sticker-grid">
+        ${EMOJIS.map(e=>`<button type="button" class="emoji-item" data-emoji="${e}">${e}</button>`).join('')}
+        ${stickers.map(s=>`
+          <span class="sticker-item-wrap">
+            <img class="sticker-item" src="${s.url}" data-sticker="${s.id}" alt="贴纸" />
+            ${stickerManage?`<button type="button" class="sticker-del" data-del="${s.id}">×</button>`:''}
+          </span>`).join('')}
+      </div>`;
+    panel.hidden=false;
+    $('#stickerAdd').addEventListener('click',()=>$('#stickerImageInput').click());
+    $('#stickerManage').addEventListener('click',()=>{stickerManage=!stickerManage;renderStickerPanel()});
+    panel.querySelectorAll('[data-emoji]').forEach(b=>b.addEventListener('click',()=>{
+      panel.hidden=true;
+      const input=$('#messageInput');
+      input.value=b.dataset.emoji;
+      mentionIntent=false;
+      sendMessage();
+    }));
+    panel.querySelectorAll('[data-sticker]').forEach(img=>img.addEventListener('click',()=>{
+      panel.hidden=true;
+      sendStickerImage(img.dataset.sticker);
+    }));
+    panel.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{
+      const list=loadStickers().filter(s=>s.id!==b.dataset.del);
+      saveStickers(list);
+      renderStickerPanel();
+    }));
+  }
+  function sendStickerImage(id){
+    const s=loadStickers().find(x=>x.id===id);
+    if(!s)return;
+    fetch(s.url).then(r=>r.blob()).then(blob=>{
+      const file=new File([blob],'sticker.png',{type:'image/png'});
+      pickAttachment(file);
+      sendMessage();
+    }).catch(()=>showToast('贴纸读取失败'));
+  }
+  $('#emojiButton').addEventListener('click',e=>{
+    e.stopPropagation();
+    const panel=$('#stickerPanel');
+    if(panel.hidden){renderStickerPanel()}else{panel.hidden=true}
+  });
+  document.addEventListener('click',e=>{const p=$('#stickerPanel');if(p&&!p.hidden&&!p.contains(e.target))p.hidden=true});
+  $('#stickerImageInput').addEventListener('change',e=>{
+    const f=e.target.files&&e.target.files[0];
+    e.target.value='';
+    if(!f)return;
+    if(f.size>400*1024){showToast('贴纸建议小于 400KB');return}
+    const reader=new FileReader();
+    reader.onload=()=>{
+      const list=loadStickers();
+      if(list.length>=30){showToast('贴纸最多 30 个');return}
+      list.push({id:uid(),url:reader.result,created_at:nowISO()});
+      saveStickers(list);
+      renderStickerPanel();
+    };
+    reader.readAsDataURL(f);
+  });
   $('#imageInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)pickAttachment(f)});
   $('#fileInput').addEventListener('change',e=>{const f=e.target.files&&e.target.files[0];e.target.value='';if(f)pickAttachment(f)});
   $('#sendButton').addEventListener('click',sendMessage);

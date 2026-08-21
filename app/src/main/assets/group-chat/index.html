@@ -47,11 +47,14 @@
       <div class="input-shell">
         <textarea id="messageInput" rows="1" placeholder="输入消息… @AI 让英子参与"></textarea>
         <button class="attach-btn plus-button" id="plusButton" type="button" aria-label="添加">＋</button>
+        <button class="attach-btn emoji-button" id="emojiButton" type="button" aria-label="表情">😊</button>
       </div>
       <div class="attach-menu glass" id="attachMenu" hidden>
         <button type="button" id="attachImageOption">🖼 图片</button>
         <button type="button" id="attachFileOption">📎 文件</button>
       </div>
+      <div class="sticker-panel glass" id="stickerPanel" hidden></div>
+      <input id="stickerImageInput" type="file" accept="image/*" hidden />
       <input id="imageInput" type="file" accept="image/*" hidden />
       <input id="fileInput" type="file" hidden />
       <div class="mention-menu glass" id="mentionMenu" hidden></div>

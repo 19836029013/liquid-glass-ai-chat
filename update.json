@@ -1,11 +1,11 @@
 {
-  "version": "2.8.18",
-  "notes": "普通聊天也支持发送图片/文件（本机保存，缩略图点击放大）；群聊图片上传改用正确接口（PUT+Filename）并保留本地预览双保险；从群聊返回侧栏不再自动弹键盘。",
+  "version": "2.8.19",
+  "notes": "新增表情/贴纸面板（普通聊天和群聊都有）：常用 emoji 一键发送，可从相册添加本机贴纸（≤400KB、最多30个）；从群聊点菜单只弹侧边栏，叉掉后自动回到原对话。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "c686df1eade860eff8dc074d1338ae85c68e13202a840f669057ca93d5e7e976"
+      "sha256": "ebccf92fceeb8d1c29fc723da6196fcb1996ee0f0e88920bb1d8b4f9b491bf7c"
     }
   }
 }
