@@ -1,11 +1,11 @@
 {
-  "version": "2.6.1",
-  "notes": "v10.1 真机修复：模型选择遮罩不再强模糊（仅轻微暗化）；每条 AI 回复常驻“深度思考”小窗口（无摘要显示“无摘要”）；修复流式结束阶段的时间显示回归。",
+  "version": "2.7.0",
+  "notes": "对话管理：侧栏每条对话可重命名/置顶/取消置顶/移动到项目/删除；项目功能可用（新建项目文件夹，可把对话放进去）；侧栏新建对话按钮移除。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "5d8d67e7a04ffd2e099d7cb0e4d72307c0d1b74125fc3b07b5898751a8120780"
+      "sha256": "0c283dd0e6eb779cec4ada52bd4abe153c109de4dfce1a8f1a64bde553748855"
     }
   }
 }

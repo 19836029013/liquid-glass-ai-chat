@@ -10,6 +10,8 @@ function safeGet(key,fallback=''){
 
 const state={
   conversations:[],
+  projects:[],
+  activeProject:null,
   conversationId:null,
   modelId:safeGet('ai.modelId'),
   modelSource:safeGet('ai.modelSource'),
@@ -23,6 +25,7 @@ const state={
 const sidebar=$('#sidebar'),backdrop=$('#sidebarBackdrop'),toast=$('#toast');
 const messagesEl=$('#messages'),promptInput=$('#promptInput'),sendButton=$('#sendButton');
 const modelPopover=$('#modelPopover'),reasoningPopover=$('#reasoningPopover');
+const actionSheet=$('#actionSheet');
 const apiBanner=$('#apiBanner');
 const settingsBackdrop=$('#settingsBackdrop');
 const sheetScrim=$('#sheetScrim');
@@ -173,12 +176,24 @@ function loadConversations(){
   let raw='';
   try{if(bridge&&bridge.getState)raw=bridge.getState()||''}catch(e){}
   if(!raw)raw=localStorage.getItem('lgchat_convs')||'';
-  if(raw&&raw.trim()){try{state.conversations=JSON.parse(raw)}catch(e){state.conversations=[]}}
+  if(raw&&raw.trim()){
+    try{
+      const parsed=JSON.parse(raw);
+      if(Array.isArray(parsed)){
+        state.conversations=parsed;
+        state.projects=[];
+      }else{
+        state.conversations=parsed.conversations||[];
+        state.projects=parsed.projects||[];
+      }
+    }catch(e){state.conversations=[];state.projects=[]}
+  }
   if(!Array.isArray(state.conversations))state.conversations=[];
+  if(!Array.isArray(state.projects))state.projects=[];
 }
 let saveTimer=null;
 function saveConversations(){
-  const json=JSON.stringify(state.conversations);
+  const json=JSON.stringify({conversations:state.conversations,projects:state.projects});
   try{localStorage.setItem('lgchat_convs',json)}catch(e){}
   if(bridge&&bridge.saveState){
     clearTimeout(saveTimer);
@@ -187,7 +202,7 @@ function saveConversations(){
 }
 function currentConversation(){return state.conversations.find(c=>c.id===state.conversationId)||null}
 function newConversation(){
-  const c={id:uid(),title:'新对话',pinned:false,created_at:nowISO(),messages:[]};
+  const c={id:uid(),title:'新对话',pinned:false,projectId:state.activeProject||null,created_at:nowISO(),messages:[]};
   state.conversations.push(c);
   state.conversationId=c.id;
   saveConversations();
@@ -425,10 +440,10 @@ function loadConfig(){
 }
 
 function closePopovers(except=null){
-  [modelPopover,reasoningPopover].forEach(p=>{
+  [modelPopover,reasoningPopover,actionSheet].forEach(p=>{
     if(p!==except)p.classList.remove('show');
   });
-  const anyOpen=[modelPopover,reasoningPopover].some(p=>p.classList.contains('show'));
+  const anyOpen=[modelPopover,reasoningPopover,actionSheet].some(p=>p.classList.contains('show'));
   sheetScrim.hidden=!anyOpen;
   document.body.classList.toggle('sheet-open',anyOpen);
 }
@@ -457,15 +472,219 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')closePopovers()});
 
 /* ---------- history / sidebar ---------- */
 function historyButton(c){
-  const b=document.createElement('button');b.className='side-item chat-history'+(c.id===state.conversationId?' current':'');
-  b.innerHTML=`<span>${c.pinned?'⌖':'◷'}</span><span>${escapeHTML(c.title)}</span>`;b.addEventListener('click',()=>loadConversation(c.id));return b;
+  const row=document.createElement('div');
+  row.className='chat-history-row';
+  row.dataset.title=(c.title||'').toLowerCase();
+  const b=document.createElement('button');
+  b.className='side-item chat-history'+(c.id===state.conversationId?' current':'');
+  b.innerHTML=`<span>${c.pinned?'⌖':'◷'}</span><span>${escapeHTML(c.title)}</span>`;
+  b.addEventListener('click',()=>loadConversation(c.id));
+  const more=document.createElement('button');
+  more.className='history-more';
+  more.textContent='⋯';
+  more.dataset.more=c.id;
+  more.setAttribute('aria-label','对话操作');
+  more.addEventListener('click',e=>{e.stopPropagation();openActionSheet(c.id)});
+  row.appendChild(b);
+  row.appendChild(more);
+  return row;
 }
 function renderHistory(){
   const pinned=$('#pinnedChatList'),recent=$('#recentChatList');
   pinned.innerHTML='';recent.innerHTML='';
-  [...state.conversations].sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||''))).forEach(c=>(c.pinned?pinned:recent).appendChild(historyButton(c)));
+  const list=state.conversations.filter(c=>!state.activeProject||c.projectId===state.activeProject);
+  [...list].sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||''))).forEach(c=>(c.pinned?pinned:recent).appendChild(historyButton(c)));
   if(!pinned.children.length)pinned.innerHTML='<div class="empty-history">暂无置顶聊天</div>';
   if(!recent.children.length)recent.innerHTML='<div class="empty-history">暂无最近聊天</div>';
+  const q=String($('#sidebarSearch').value||'').trim().toLowerCase();
+  $$('.chat-history-row').forEach(row=>{
+    row.hidden=!!q&&!(row.dataset.title||'').includes(q);
+  });
+}
+function renderProjects(){
+  const list=$('#projectList');
+  if(!list)return;
+  list.innerHTML='';
+  const all=document.createElement('button');
+  all.className='side-item project-item'+(state.activeProject===null?' current':'');
+  all.innerHTML=`<span>◇</span><span>全部对话</span>`;
+  all.addEventListener('click',()=>{state.activeProject=null;renderProjects();renderHistory()});
+  list.appendChild(all);
+  state.projects.forEach(p=>{
+    const b=document.createElement('button');
+    b.className='side-item project-item'+(state.activeProject===p.id?' current':'');
+    const count=state.conversations.filter(c=>c.projectId===p.id).length;
+    b.innerHTML=`<span>▣</span><span>${escapeHTML(p.title)}</span><small class="project-count">${count}</small>`;
+    b.addEventListener('click',()=>{state.activeProject=p.id;renderProjects();renderHistory()});
+    list.appendChild(b);
+  });
+  if(!state.projects.length){
+    const empty=document.createElement('div');
+    empty.className='empty-projects';
+    empty.textContent='暂无项目 · 点上方新建';
+    list.appendChild(empty);
+  }
+}
+function startNewProject(){
+  const btn=$('#addProjectButton');
+  btn.hidden=true;
+  const wrap=$('#projectList');
+  const input=document.createElement('input');
+  input.className='history-edit-input project-name-input';
+  input.placeholder='项目名称，回车确认';
+  input.maxLength=30;
+  wrap.prepend(input);
+  input.focus();
+  let done=false;
+  const finish=()=>{
+    if(done)return;done=true;
+    const name=input.value.trim();
+    input.remove();
+    btn.hidden=false;
+    if(name){
+      const p={id:uid(),title:name,created_at:nowISO()};
+      state.projects.push(p);
+      state.activeProject=p.id;
+      saveConversations();
+      renderProjects();
+      renderHistory();
+      showToast(`已创建项目「${name}」`);
+    }
+  };
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();finish()}
+    if(e.key==='Escape'){e.preventDefault();finish()}
+  });
+  input.addEventListener('blur',finish);
+}
+let actionTargetId=null;
+let deleteArmed=false;
+function openActionSheet(id){
+  actionTargetId=id;
+  deleteArmed=false;
+  const conv=state.conversations.find(c=>c.id===id);
+  if(!conv)return;
+  actionSheet.innerHTML=`
+    <div class="sheet-head">
+      <div><span class="sheet-kicker">对话</span><strong>${escapeHTML(conv.title||'对话')}</strong></div>
+      <button class="sheet-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="sheet-list" id="actionSheetList"></div>`;
+  const list=$('#actionSheetList',actionSheet);
+  const options=[
+    {label:'重命名对话',icon:'✎',action:'rename'},
+    {label:conv.pinned?'取消置顶':'置顶对话',icon:'⌖',action:'pin'},
+    {label:'移动到项目',icon:'▣',action:'move'},
+    {label:'删除对话',icon:'×',action:'delete',danger:true},
+  ];
+  options.forEach(opt=>{
+    const b=document.createElement('button');
+    b.className='sheet-option'+(opt.danger?' danger':'');
+    b.innerHTML=`<span class="sheet-option-icon">${opt.icon}</span><span class="sheet-option-copy"><strong>${opt.label}</strong></span>`;
+    b.addEventListener('click',()=>handleActionOption(opt.action,conv));
+    list.appendChild(b);
+  });
+  $('.sheet-close',actionSheet)?.addEventListener('click',closePopovers);
+  openSheet(actionSheet);
+}
+function handleActionOption(action,conv){
+  if(action==='rename'){
+    closePopovers();
+    startRenameConversation(conv.id);
+  }else if(action==='pin'){
+    conv.pinned=!conv.pinned;
+    saveConversations();
+    renderHistory();
+    closePopovers();
+    showToast(conv.pinned?'已置顶':'已取消置顶');
+  }else if(action==='move'){
+    showMoveProjectSheet(conv);
+  }else if(action==='delete'){
+    if(!deleteArmed){
+      deleteArmed=true;
+      const confirmBtn=$('#actionSheetList .danger');
+      const strong=confirmBtn&&$('strong',confirmBtn);
+      if(strong)strong.textContent='确认删除？再次点击';
+      return;
+    }
+    state.conversations=state.conversations.filter(c=>c.id!==conv.id);
+    if(state.conversationId===conv.id){
+      state.conversationId=null;
+      messagesEl.innerHTML='';
+      $('#greeting').textContent='你好，今天想聊点什么？';
+    }
+    saveConversations();
+    renderHistory();
+    renderProjects();
+    closePopovers();
+    showToast('对话已删除');
+  }
+}
+function showMoveProjectSheet(conv){
+  actionSheet.innerHTML=`
+    <div class="sheet-head">
+      <div><span class="sheet-kicker">移动</span><strong>选择项目</strong></div>
+      <button class="sheet-close" type="button" aria-label="关闭">×</button>
+    </div>
+    <div class="sheet-list" id="actionSheetList"></div>`;
+  const list=$('#actionSheetList',actionSheet);
+  const none=document.createElement('button');
+  none.className='sheet-option'+(!conv.projectId?' current-model':'');
+  none.innerHTML=`<span class="sheet-option-icon">${!conv.projectId?'✓':'◇'}</span><span class="sheet-option-copy"><strong>无项目（全部对话）</strong></span>`;
+  none.addEventListener('click',()=>{
+    conv.projectId=null;
+    saveConversations();renderHistory();renderProjects();closePopovers();
+    showToast('已移动到全部对话');
+  });
+  list.appendChild(none);
+  state.projects.forEach(p=>{
+    const b=document.createElement('button');
+    b.className='sheet-option'+(conv.projectId===p.id?' current-model':'');
+    b.innerHTML=`<span class="sheet-option-icon">${conv.projectId===p.id?'✓':'▣'}</span><span class="sheet-option-copy"><strong>${escapeHTML(p.title)}</strong></span>`;
+    b.addEventListener('click',()=>{
+      conv.projectId=p.id;
+      saveConversations();renderHistory();renderProjects();closePopovers();
+      showToast(`已移动到「${p.title}」`);
+    });
+    list.appendChild(b);
+  });
+  if(!state.projects.length){
+    const empty=document.createElement('div');
+    empty.className='sheet-empty';
+    empty.innerHTML='暂无项目<br><small>先点侧栏“新建项目”创建。</small>';
+    list.appendChild(empty);
+  }
+  $('.sheet-close',actionSheet)?.addEventListener('click',closePopovers);
+}
+function startRenameConversation(id){
+  const conv=state.conversations.find(c=>c.id===id);
+  if(!conv)return;
+  const more=document.querySelector(`[data-more="${id}"]`);
+  const rowEl=more&&more.closest('.chat-history-row');
+  const titleSpan=rowEl&&rowEl.querySelector('.chat-history span:last-child');
+  if(!titleSpan)return;
+  const input=document.createElement('input');
+  input.className='history-edit-input';
+  input.value=conv.title||'';
+  input.maxLength=30;
+  titleSpan.replaceWith(input);
+  input.focus();
+  input.select();
+  let done=false;
+  const finish=()=>{
+    if(done)return;done=true;
+    const name=input.value.trim();
+    if(name)conv.title=name;
+    saveConversations();
+    renderHistory();
+    if(state.conversationId===conv.id)$('#greeting').textContent=conv.title||'对话';
+    showToast(name?'已重命名':'名称未修改');
+  };
+  input.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();finish()}
+    if(e.key==='Escape'){e.preventDefault();finish()}
+  });
+  input.addEventListener('blur',finish);
 }
 function loadConversation(id){
   const conv=state.conversations.find(c=>c.id===id);if(!conv)return;
@@ -484,15 +703,13 @@ function newChat(){
   closeSidebar();renderHistory();showToast('新建对话');
 }
 $('#newChatButton').addEventListener('click',newChat);
-$('#sidebarNewChat')?.addEventListener('click',newChat);
 $('#sidebarSearch')?.addEventListener('input',e=>{
   const q=String(e.target.value||'').trim().toLowerCase();
-  $$('.chat-history').forEach(item=>{
-    const text=(item.textContent||'').toLowerCase();
-    item.hidden=!!q&&!text.includes(q);
+  $$('.chat-history-row').forEach(row=>{
+    row.hidden=!!q&&!(row.dataset.title||'').includes(q);
   });
 });
-$('#addProjectButton').addEventListener('click',()=>showToast('项目功能等待后续接入'));
+$('#addProjectButton').addEventListener('click',startNewProject);
 
 /* ---------- composer ---------- */
 promptInput.addEventListener('input',()=>{promptInput.style.height='auto';promptInput.style.height=Math.min(promptInput.scrollHeight,145)+'px'});
@@ -982,7 +1199,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.6.1';
+const APP_CURRENT_VERSION='2.7.0';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
@@ -1363,6 +1580,7 @@ interactionObserver.observe(document.body,{childList:true,subtree:true});
   loadWallpaper();
   loadConversations();
   loadConfig();
+  renderProjects();
   renderHistory();
   if(state.conversations.length)loadConversation(state.conversations[0].id);
   else newChat();

@@ -3056,3 +3056,15 @@ body.sheet-open .wallpaper-overlay{
     border-radius:10px;
   }
 }
+
+/* ---------- conversation management ---------- */
+.chat-history-row{display:flex;align-items:center;gap:4px}
+.chat-history-row .chat-history{flex:1;min-width:0}
+.chat-history-row .chat-history span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-more{flex:0 0 auto;width:34px;height:34px;border:0;border-radius:50%;background:transparent;color:#5f6b74;font-size:18px}
+.history-edit-input{width:100%;border:1px solid rgba(120,150,140,.35);border-radius:14px;background:rgba(255,255,255,.55);padding:10px 12px;font-size:14px;color:#1b2630;outline:none}
+.project-item{justify-content:flex-start}
+.project-count{margin-left:auto;font-size:11px;color:#7b858d}
+.project-name-input{margin:6px 0 8px}
+.sheet-option.danger{color:#b0564f}
+.sheet-option.danger .sheet-option-icon{color:#b0564f}

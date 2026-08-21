@@ -31,7 +31,7 @@
 
       <div class="side-subhead section-label">项目</div>
       <button class="side-item add-project" id="addProjectButton"><span class="plus-small">＋</span><span>新建项目</span></button>
-      <div class="empty-projects" id="projectEmptyState">暂无项目</div>
+      <div id="projectList"></div>
 
       <div class="side-separator"></div>
 
@@ -44,7 +44,6 @@
       </section>
 
       <div class="sidebar-bottom">
-        <button class="side-item sidebar-new-chat" id="sidebarNewChat"><span>＋</span><span>新建对话</span></button>
         <button class="side-item" id="sidebarSettings"><span>⚙</span><span>设置</span></button>
       </div>
     </aside>
@@ -93,6 +92,7 @@
         </div>
         <div class="popover glass bottom-sheet" id="modelPopover"></div>
         <div class="popover glass reasoning-popover bottom-sheet" id="reasoningPopover"></div>
+        <div class="popover glass bottom-sheet" id="actionSheet"></div>
       </section>
 
       <div class="sheet-scrim" id="sheetScrim" hidden></div>
