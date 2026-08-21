@@ -11,7 +11,7 @@ function safeGet(key,fallback=''){
 const state={
   conversations:[],
   projects:[],
-  activeProject:null,
+  expandedProject:null,
   conversationId:null,
   modelId:safeGet('ai.modelId'),
   modelSource:safeGet('ai.modelSource'),
@@ -202,7 +202,7 @@ function saveConversations(){
 }
 function currentConversation(){return state.conversations.find(c=>c.id===state.conversationId)||null}
 function newConversation(){
-  const c={id:uid(),title:'新对话',pinned:false,projectId:state.activeProject||null,created_at:nowISO(),messages:[]};
+  const c={id:uid(),title:'新对话',pinned:false,projectId:state.expandedProject||null,created_at:nowISO(),messages:[]};
   state.conversations.push(c);
   state.conversationId=c.id;
   saveConversations();
@@ -492,7 +492,7 @@ function historyButton(c){
 function renderHistory(){
   const pinned=$('#pinnedChatList'),recent=$('#recentChatList');
   pinned.innerHTML='';recent.innerHTML='';
-  const list=state.conversations.filter(c=>!state.activeProject||c.projectId===state.activeProject);
+  const list=state.conversations.filter(c=>!c.projectId);
   [...list].sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||''))).forEach(c=>(c.pinned?pinned:recent).appendChild(historyButton(c)));
   if(!pinned.children.length)pinned.innerHTML='<div class="empty-history">暂无置顶聊天</div>';
   if(!recent.children.length)recent.innerHTML='<div class="empty-history">暂无最近聊天</div>';
@@ -505,18 +505,46 @@ function renderProjects(){
   const list=$('#projectList');
   if(!list)return;
   list.innerHTML='';
-  const all=document.createElement('button');
-  all.className='side-item project-item'+(state.activeProject===null?' current':'');
-  all.innerHTML=`<span>◇</span><span>全部对话</span>`;
-  all.addEventListener('click',()=>{state.activeProject=null;renderProjects();renderHistory()});
-  list.appendChild(all);
   state.projects.forEach(p=>{
+    const expanded=state.expandedProject===p.id;
     const b=document.createElement('button');
-    b.className='side-item project-item'+(state.activeProject===p.id?' current':'');
+    b.className='side-item project-item'+(expanded?' current':'');
     const count=state.conversations.filter(c=>c.projectId===p.id).length;
-    b.innerHTML=`<span>▣</span><span>${escapeHTML(p.title)}</span><small class="project-count">${count}</small>`;
-    b.addEventListener('click',()=>{state.activeProject=p.id;renderProjects();renderHistory()});
+    b.innerHTML=`<span class="project-chevron">${expanded?'▾':'▸'}</span><span class="project-icon">▣</span><span>${escapeHTML(p.title)}</span><small class="project-count">${count}</small>`;
+    b.addEventListener('click',()=>{
+      state.expandedProject=expanded?null:p.id;
+      renderProjects();
+    });
     list.appendChild(b);
+    if(expanded){
+      const children=document.createElement('div');
+      children.className='project-children';
+      const add=document.createElement('button');
+      add.className='side-item project-new-chat';
+      add.innerHTML=`<span class="plus-small">＋</span><span>在此项目新建对话</span>`;
+      add.addEventListener('click',()=>{
+        state.expandedProject=p.id;
+        const conv=newConversation();
+        loadConversation(conv.id);
+        renderProjects();
+        showToast('已新建项目对话');
+      });
+      children.appendChild(add);
+      const items=state.conversations.filter(c=>c.projectId===p.id)
+        .sort((a,b)=>((b.pinned?1:0)-(a.pinned?1:0))||((b.created_at||'').localeCompare(a.created_at||'')));
+      items.forEach(c=>{
+        const row=historyButton(c);
+        row.classList.add('in-project');
+        children.appendChild(row);
+      });
+      if(!items.length){
+        const empty=document.createElement('div');
+        empty.className='empty-projects';
+        empty.textContent='暂无对话';
+        children.appendChild(empty);
+      }
+      list.appendChild(children);
+    }
   });
   if(!state.projects.length){
     const empty=document.createElement('div');
@@ -544,7 +572,7 @@ function startNewProject(){
     if(name){
       const p={id:uid(),title:name,created_at:nowISO()};
       state.projects.push(p);
-      state.activeProject=p.id;
+      state.expandedProject=p.id;
       saveConversations();
       renderProjects();
       renderHistory();
@@ -1200,7 +1228,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.1';
+const APP_CURRENT_VERSION='2.7.2';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;

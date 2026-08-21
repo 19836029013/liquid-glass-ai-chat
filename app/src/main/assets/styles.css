@@ -3068,3 +3068,10 @@ body.sheet-open .wallpaper-overlay{
 .project-name-input{margin:6px 0 8px}
 .sheet-option.danger{color:#b0564f}
 .sheet-option.danger .sheet-option-icon{color:#b0564f}
+
+.project-chevron{width:16px;text-align:center;color:#6d7a83;font-size:12px}
+.project-icon{width:18px;text-align:center;color:#5b8f80}
+.project-children{margin:0 0 6px 14px;padding-left:10px;border-left:1px solid rgba(120,150,140,.28)}
+.project-new-chat{background:rgba(255,255,255,.14);border:1px dashed rgba(120,150,140,.35);padding:10px 12px;font-size:13px}
+.project-children .chat-history-row .chat-history{padding:10px 12px;font-size:13px;margin:4px 0}
+.project-children .history-more{width:30px;height:30px;font-size:16px}

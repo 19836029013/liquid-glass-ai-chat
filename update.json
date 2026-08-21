@@ -1,11 +1,11 @@
 {
-  "version": "2.7.1",
-  "notes": "修复：从侧边栏打开对话操作菜单时弹窗被侧栏遮挡的问题（弹窗层级提升到最顶层，打开时自动收起侧栏）。",
+  "version": "2.7.2",
+  "notes": "项目改为可展开/收起的文件夹：项目内对话只显示在文件夹里，不再混入最近聊天；点项目不再影响最近聊天列表；文件夹内可直接新建对话。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "f78ade9aa855b65c9f79ab17ce0560d9ffc764a82c2141bf4083c587e3adeb20"
+      "sha256": "231e5f63e9adc8651a6159c2b036c8a613f12c23c9d1d3cdff9577dcc4e31995"
     }
   }
 }
