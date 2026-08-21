@@ -1,11 +1,11 @@
 {
-  "version": "2.7.7",
-  "notes": "修复更新检查读不到新版本：检查更新时强制绕过 GitHub 缓存，确保立即看到最新版本。",
+  "version": "2.7.8",
+  "notes": "滑动更丝滑（滚动时暂时关闭消息卡片重模糊）；点自己的消息直接进入编辑，不再长按、不再弹系统复制菜单；编辑框自动变宽、随内容自动长高。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "05164f02173251063a8bb74817f47de5fd50a5acbb0425fadce5165a51643b3f"
+      "sha256": "a7aeabcaa87ba438cb53107a347ef96f1c17bfe0e340922dc715bcd96146416e"
     }
   }
 }

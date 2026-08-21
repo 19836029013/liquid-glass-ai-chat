@@ -3159,6 +3159,48 @@ body.sidebar-open .floating-nav{
   .composer textarea{min-height:44px!important;padding:11px 13px!important;font-size:16px!important}
 }
 
+/* smoother scrolling: drop heavy blur on message cards while scrolling */
+body.is-scrolling .turn .assistant-bubble,
+body.is-scrolling .turn .user-bubble,
+body.is-scrolling .reasoning-mini-window{
+  -webkit-backdrop-filter:none!important;
+  backdrop-filter:none!important;
+}
+body.is-scrolling .turn{
+  transition:none!important;
+  animation:none!important;
+}
+
+/* user messages: tap to edit, no OS text selection */
+.user-bubble{
+  -webkit-user-select:none;
+  user-select:none;
+}
+.assistant-bubble{
+  -webkit-user-select:none;
+  user-select:none;
+}
+.turn-user.editing .user-bubble{
+  max-width:94%!important;
+}
+.user-edit-area{
+  width:100%;
+  min-height:60px;
+  max-height:42vh;
+  resize:none;
+  overflow:hidden;
+  border:1px solid rgba(120,150,140,.35);
+  border-radius:16px;
+  background:rgba(255,255,255,.82);
+  padding:14px 16px;
+  font-size:17px;
+  line-height:1.6;
+  color:#1b2630;
+  outline:none;
+}
+.user-edit-actions{gap:8px}
+.user-edit-actions .cancel,.user-edit-actions .save{border-radius:16px;padding:9px 16px;font-size:13px}
+
 .project-chevron{width:16px;text-align:center;color:#6d7a83;font-size:12px}
 .project-icon{width:18px;text-align:center;color:#5b8f80}
 .project-children{margin:0 0 6px 14px;padding-left:10px;border-left:1px solid rgba(120,150,140,.28)}

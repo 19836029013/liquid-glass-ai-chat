@@ -313,11 +313,10 @@ function bindMessageInteractions(root=messagesEl){
   });
   $$('.turn-user',root).forEach(turn=>{
     if(turn.dataset.msgBound)return;turn.dataset.msgBound='1';
-    let timer=null;
-    const start=()=>{timer=setTimeout(()=>showUserMenu(turn.dataset.messageId,turn),520)};
-    const cancel=()=>{clearTimeout(timer)};
-    turn.addEventListener('pointerdown',start,{passive:true});
-    ['pointerup','pointercancel','pointerleave'].forEach(ev=>turn.addEventListener(ev,cancel,{passive:true}));
+    turn.addEventListener('click',()=>{
+      const conv=currentConversation();
+      if(conv)editUserMessage(turn.dataset.messageId,turn,conv);
+    });
   });
 }
 function renderMessages(items){messagesEl.innerHTML=items.map(messageHTML).join('');bindMessageInteractions()}
@@ -469,6 +468,13 @@ $('#reasoningSelect').addEventListener('click',e=>{
 });
 sheetScrim.addEventListener('click',closePopovers);
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closePopovers()});
+
+let scrollSettleTimer=null;
+document.addEventListener('scroll',()=>{
+  document.body.classList.add('is-scrolling');
+  clearTimeout(scrollSettleTimer);
+  scrollSettleTimer=setTimeout(()=>document.body.classList.remove('is-scrolling'),160);
+},{passive:true});
 
 /* ---------- history / sidebar ---------- */
 function updateTopTitle(title){
@@ -645,19 +651,31 @@ function editUserMessage(id,turn,conv){
   const msg=conv.messages.find(m=>m.id===id);
   const p=turn&&$('.user-bubble p',turn);
   if(!msg||!p)return;
+  turn.classList.add('editing');
   const ta=document.createElement('textarea');
   ta.className='user-edit-area';
   ta.value=normalizeText(msg.content);
   const actions=document.createElement('div');
   actions.className='user-edit-actions';
-  actions.innerHTML=`<button class="cancel" data-cancel>取消</button><button class="save" data-save>保存</button>`;
+  actions.innerHTML=`<button class="cancel" data-copy>复制</button><button class="cancel" data-cancel>取消</button><button class="save" data-save>保存</button>`;
   const wrap=document.createElement('div');
   wrap.appendChild(ta);
   wrap.appendChild(actions);
   p.replaceWith(wrap);
+  const autoGrow=()=>{
+    ta.style.height='auto';
+    ta.style.height=ta.scrollHeight+'px';
+  };
+  ta.addEventListener('input',autoGrow);
+  autoGrow();
   ta.focus();
+  const exit=()=>{
+    turn.classList.remove('editing');
+    renderMessages(conv.messages);
+  };
   const done=()=>{
     const text=ta.value.trim();
+    turn.classList.remove('editing');
     if(text&&text!==normalizeText(msg.content)){
       msg.content=text;
       const idx=conv.messages.findIndex(m=>m.id===id);
@@ -674,11 +692,14 @@ function editUserMessage(id,turn,conv){
       renderMessages(conv.messages);
     }
   };
+  actions.querySelector('[data-copy]').addEventListener('click',()=>{
+    copyText(normalizeText(msg.content));
+  });
   actions.querySelector('[data-save]').addEventListener('click',done);
-  actions.querySelector('[data-cancel]').addEventListener('click',()=>renderMessages(conv.messages));
+  actions.querySelector('[data-cancel]').addEventListener('click',exit);
   ta.addEventListener('keydown',e=>{
     if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();done()}
-    if(e.key==='Escape'){e.preventDefault();renderMessages(conv.messages)}
+    if(e.key==='Escape'){e.preventDefault();exit()}
   });
 }
 function historyButton(c){
@@ -1139,7 +1160,7 @@ async function runStream(conv,assistantMsg,userText,cfg,existingTurn){
         finalText+=t;
         const p=$('.assistant-bubble p',turn);
         if(p)p.insertAdjacentText('beforeend',t);
-        scrollBottom();
+        scrollBottom(false);
       },
       reasoning(){},
       done(){},
@@ -1552,7 +1573,7 @@ $('#testApiButton').addEventListener('click',async()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.7.7';
+const APP_CURRENT_VERSION='2.7.8';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 let availableUpdate=null;
 let updateBusy=false;
