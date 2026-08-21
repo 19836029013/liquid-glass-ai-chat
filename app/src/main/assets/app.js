@@ -979,6 +979,11 @@ function startRenameConversation(id){
 function loadConversation(id){
   const conv=state.conversations.find(c=>c.id===id);if(!conv)return;
   state.conversationId=id;
+  if(conv.group){
+    closeSidebar();
+    location.href='group-chat/index.html?conv='+encodeURIComponent(id);
+    return;
+  }
   $('#greeting').textContent=conv.title||'对话';
   updateTopTitle(conv.title||'对话');
   toggleGroupUi(conv);
@@ -1541,14 +1546,10 @@ function newGroupChat(){
   const conv={id:uid(),title:'新群聊',pinned:false,projectId:null,group:true,members:[{id:state.account.id,name:state.account.name},{id:'friend',name:'朋友'}],messages:[],created_at:nowISO(),updatedAt:Date.now()};
   state.conversations.push(conv);
   state.conversationId=conv.id;
-  $('#greeting').textContent='群聊';
-  updateTopTitle('新群聊');
-  toggleGroupUi(conv);
-  renderMessages([]);
+  saveConversations();
   renderHistory();
   closeSidebar();
-  promptInput.focus();
-  showToast('已创建群聊，点 ⋯ 可重命名');
+  location.href='group-chat/index.html?conv='+encodeURIComponent(conv.id);
 }
 $('#newGroupButton')?.addEventListener('click',newGroupChat);
 function toggleGroupUi(conv){
@@ -1672,10 +1673,7 @@ async function joinGroupByUrl(urlOrTopic){
   upsertMember(remote);
   pushSync(remote);
   watchGroup(remote);
-  $('#greeting').textContent=remote.title;
-  updateTopTitle(remote.title);
-  toggleGroupUi(remote);
-  renderMessages(remote.messages||[]);
+  location.href='group-chat/index.html?conv='+encodeURIComponent(remote.id);
   return remote;
 }
 window.__autoJoinGroup=async function(topic){
@@ -1938,7 +1936,7 @@ $('#saveAccountButton')?.addEventListener('click',()=>{
 });
 
 /* ---------- update ---------- */
-const APP_CURRENT_VERSION='2.8.7';
+const APP_CURRENT_VERSION='2.8.8';
 const DEFAULT_UPDATE_MANIFEST='https://raw.githubusercontent.com/19836029013/liquid-glass-ai-chat/main/update.json';
 const MIRROR_PREFIXES=['https://gh-proxy.com/','https://ghfast.top/'];
 let availableUpdate=null;

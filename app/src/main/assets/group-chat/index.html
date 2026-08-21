@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#eaf2f5" />
+  <title>群聊 · 英子起飞</title>
+  <link rel="stylesheet" href="./group-chat.css" />
+</head>
+<body>
+  <div class="wallpaper" aria-hidden="true"></div>
+  <div class="wallpaper-overlay" aria-hidden="true"></div>
+
+  <main class="group-app" id="groupApp">
+    <header class="topbar">
+      <button class="round-button glass" id="menuButton" aria-label="返回">
+        <span class="hamburger" aria-hidden="true"></span>
+      </button>
+
+      <button class="group-title glass" id="groupInfoButton" type="button">
+        <span class="spark">✦</span>
+        <span class="group-title-copy">
+          <strong id="groupTitle">群聊</strong>
+          <small id="memberCount">成员加载中…</small>
+        </span>
+      </button>
+
+      <button class="round-button glass" id="addMemberButton" aria-label="邀请成员">＋</button>
+    </header>
+
+    <section class="member-strip glass" id="memberStrip">
+      <div class="avatar-stack" id="avatarStack"></div>
+      <div class="member-names" id="memberNames">成员加载中…</div>
+      <button class="member-details" id="memberDetailsButton" type="button">查看成员 <span>›</span></button>
+    </section>
+
+    <section class="chat-scroll" id="chatScroll" aria-live="polite">
+      <div class="message-list" id="messageList"></div>
+      <div class="typing-indicator glass" id="typingIndicator" hidden>
+        <span class="typing-spark">✦</span>
+        <span>AI 正在思考</span>
+        <span class="typing-dots"><i></i><i></i><i></i></span>
+      </div>
+    </section>
+
+    <section class="composer glass">
+      <div class="input-shell">
+        <textarea id="messageInput" rows="1" placeholder="输入消息… @AI 让英子参与"></textarea>
+        <button class="mention-ai-button" id="mentionAiButton" type="button">@ AI</button>
+      </div>
+
+      <div class="composer-controls">
+        <button class="selector" id="modelSelector" type="button">
+          <span class="selector-icon">◇</span>
+          <span class="selector-value ellipsis" id="modelValue">选择模型</span>
+          <span class="chevron">⌄</span>
+        </button>
+
+        <button class="selector reasoning-selector" id="reasoningSelector" type="button">
+          <span class="selector-icon">✦</span>
+          <span class="selector-label">思考等级</span>
+          <span class="selector-value" id="reasoningValue">标准</span>
+          <span class="chevron">⌄</span>
+        </button>
+
+        <button class="send-button" id="sendButton" type="button" aria-label="发送"><span>➤</span></button>
+      </div>
+    </section>
+  </main>
+
+  <div class="sheet-scrim" id="sheetScrim" hidden></div>
+
+  <section class="bottom-sheet glass" id="memberSheet" hidden aria-label="群成员">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><small>群聊</small><h2>成员</h2></div>
+      <button class="sheet-close" type="button" data-close-sheet>×</button>
+    </header>
+    <div class="member-grid" id="memberGrid"></div>
+    <button class="sheet-primary" id="inviteButton" type="button">＋ 邀请朋友加入</button>
+  </section>
+
+  <section class="bottom-sheet glass" id="modelSheet" hidden aria-label="选择模型">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><small>AI 模型</small><h2>选择模型</h2></div>
+      <button class="sheet-close" type="button" data-close-sheet>×</button>
+    </header>
+    <div class="sheet-options" id="modelOptions"></div>
+  </section>
+
+  <section class="bottom-sheet glass" id="reasoningSheet" hidden aria-label="思考等级">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><small>AI 推理</small><h2>思考等级</h2></div>
+      <button class="sheet-close" type="button" data-close-sheet>×</button>
+    </header>
+    <div class="sheet-options" id="reasoningOptions"></div>
+  </section>
+
+  <section class="bottom-sheet glass" id="inviteSheet" hidden aria-label="邀请加入群聊">
+    <div class="sheet-handle"></div>
+    <header class="sheet-header">
+      <div><small>英子起飞</small><h2>邀请朋友</h2></div>
+      <button class="sheet-close" type="button" data-close-sheet>×</button>
+    </header>
+    <p class="sheet-description">把下面的专属链接发给朋友，对方点击后直接唤起 App 加入本群。</p>
+    <div class="invite-link glass" id="inviteLink"></div>
+    <button class="sheet-primary" id="copyInviteButton" type="button">复制邀请链接</button>
+  </section>
+
+  <div class="toast" id="toast" hidden></div>
+  <script src="./group-chat.js"></script>
+</body>
+</html>

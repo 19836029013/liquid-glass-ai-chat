@@ -1,11 +1,11 @@
 {
-  "version": "2.8.7",
-  "notes": "新增账号系统：设置里注册用户名，App 自动生成唯一账号 ID；群聊消息和成员列表显示真实用户名，能清楚看到谁加入、谁是谁。",
+  "version": "2.8.8",
+  "notes": "群聊全新界面：微信式左右消息/头像/成员条/@AI 按钮/邀请链接，全部接入真实逻辑；成员列表只读（不显示自己、不可编辑），点遮罩或×即可关闭。",
   "platforms": {
     "android": {
       "url": "https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
       "mirror_url": "https://gh-proxy.com/https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download/app-release.apk",
-      "sha256": "02d4fd787754b66f6b108249c163867be2fe08e2e0065c3b77be77951f8dd0a4"
+      "sha256": "d04ab8d453b81598dfda14cf57fee9fc65de2055ac4b64efddd3460257c79186"
     }
   }
 }
