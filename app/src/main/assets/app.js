@@ -395,9 +395,9 @@
     if (!sent) {
       history.loading = false;
       history.loadingOlder = false;
-    } else if (history.loadingOlder) {
-      // Do not leave the quiet preload hint on screen forever if a connection
-      // drops between request and response. The next scroll can safely retry.
+    } else {
+      // 首屏与更早页共用同一个超时兜底：连接中途断开时不让 loading 永久卡住，
+      // 用户重进/重试仍可再次发起请求。
       history.loadingTimer = setTimeout(() => {
         if (!history.loading) return;
         history.loading = false;
@@ -929,7 +929,7 @@
     const deviceName = device.name || snapshot.deviceName || 'MagicBook';
     text('settingsDesktopName', deviceName);
     text('settingsDesktopStatus', state.connected ? '已连接' : '未连接');
-    text('settingsVersionNumber', 'v1.12.10');
+    text('settingsVersionNumber', 'v1.12.11');
     text('settingsVersionState', '已是最新版');
     text('settingsVersionNote', '当前已安装最新版本');
   }
@@ -1078,7 +1078,9 @@
     }
     const liveFloor = Number(history?.lastTimestamp || 0);
     const historyFloorSeq = Number(history?.lastSeq || history?.items?.reduce((max, item) => Math.max(max, Number(item.seq || 0)), 0) || 0);
-    if (!history?.items?.length && snapshot.lastMessage && !hasAssistantEvent && (!sessionId || sessionId === String(snapshot.session?.id || ''))) {
+    if (!items.length && history?.loading) {
+      items.push({ kind: 'note', text: '正在加载对话…', timestamp: Date.now(), sequence: sequence++ });
+    } else if (!history?.items?.length && snapshot.lastMessage && !hasAssistantEvent && (!sessionId || sessionId === String(snapshot.session?.id || ''))) {
       items.push({ kind: 'note', text: String(snapshot.lastMessage), timestamp: timeOf(snapshot.updatedAt, 0), sequence: sequence++ });
     }
     sessionEvents.forEach((event, index) => {
@@ -2146,16 +2148,23 @@
         history.loadingOlder = false;
         history.lastTimestamp = history.items.reduce((latest, item) => Math.max(latest, Number(item.timestamp || 0)), 0);
         state.sessionHistory[sessionId] = history;
-        if (state.openingChatSessionId === sessionId) {
-          // The first history page is always the newest page.  Jump straight
-          // to its bottom after the DOM exists, so opening any conversation
-          // never leaves the user stranded in the middle of its transcript.
-          state.openingChatSessionId = '';
-          state.autoFollowChat = true;
+        // 历史响应可能属于任何会话（后台预热/去重的请求都会共用状态对象）。
+        // 只要它属于用户当前正在看的会话就必须渲染，不能依赖 openingChatSessionId
+        // 这一个标记——它可能已被更早到的响应清空，导致后到的合并结果只更新
+        // 状态不重绘（表现为：线程点进去偶发白屏，重开即好）。
+        const viewedSessionId = activeChatSessionId();
+        const isOpening = state.openingChatSessionId === sessionId;
+        if (isOpening || viewedSessionId === sessionId) {
+          if (isOpening) {
+            state.openingChatSessionId = '';
+            state.autoFollowChat = true;
+          }
           requestAnimationFrame(() => {
             renderChat();
             snapChatToLatest();
           });
+        } else {
+          queueRender();
         }
         if (state.historyWarmSessionId === sessionId) {
           state.historyWarmInFlight = false;
