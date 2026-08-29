@@ -75,6 +75,14 @@
       <label class="settings-field">API Key
         <input id="apiKeyInput" type="password" autocomplete="off" placeholder="sk-…">
       </label>
+      <label class="settings-field">费用单价（元 / 百万 tokens）
+        <span class="price-grid">
+          <span class="price-cell"><input id="priceHitInput" type="number" inputmode="decimal" min="0" step="0.001" placeholder="0.02"><em>缓存命中</em></span>
+          <span class="price-cell"><input id="priceMissInput" type="number" inputmode="decimal" min="0" step="0.001" placeholder="1"><em>未命中</em></span>
+          <span class="price-cell"><input id="priceOutputInput" type="number" inputmode="decimal" min="0" step="0.001" placeholder="2"><em>输出</em></span>
+        </span>
+      </label>
+      <p class="settings-field-note">留空按所选模型的 DeepSeek 官方价估算；使用第三方网关时请按实际结算价填写</p>
       <div id="apiSettingsStatus" class="api-settings-status" role="status" aria-live="polite"></div>
       <div class="settings-api-actions">
         <button id="apiTestButton" class="secondary-action" type="button">测试连接</button>
@@ -115,7 +123,7 @@
       </div>
       <div class="settings-version-summary">
         <img src="../icons/settings-generated/version.png?v=selected-set-2" alt="">
-        <div><strong>当前版本</strong><span>v1.12.6</span></div>
+        <div><strong>当前版本</strong><span>v1.12.7</span></div>
         <span class="settings-version-state">已是最新版</span>
       </div>
       <div class="settings-version-rule" aria-hidden="true"></div>
@@ -246,10 +254,11 @@
           </div>
           <div class="context-metric">
             <img src="../icons/context-generated/conversation-cost.png?v=selected-set-2" alt="">
-            <span>本轮费用</span>
+            <span>本对话费用</span>
             <strong id="contextCost">¥0.00</strong>
           </div>
         </div>
+        <p id="contextCostDetail" class="context-popover-foot"></p>
       </section>
     </div>
 
@@ -309,9 +318,41 @@
     </section>
   </div>
 
+  <div id="projectMenuLayer" class="overlay-layer" hidden>
+    <div class="overlay-scrim" data-close-overlay="projectMenuLayer"></div>
+    <section id="projectMenuPopover" class="popover project-menu-popover" role="menu" aria-label="项目操作">
+      <button class="project-menu-row" type="button" data-project-action="pin" role="menuitem"><img src="../icons/menu-generated/pin.png?v=selected-set-3" alt=""><span>置顶项目</span></button>
+      <button class="project-menu-row" type="button" data-project-action="rename" role="menuitem"><img src="../icons/menu-generated/rename.png?v=selected-set-3" alt=""><span>编辑项目</span></button>
+      <button class="project-menu-row" type="button" data-project-action="note" role="menuitem"><img src="../icons/graphic-eq.svg?v=selected-set-3" alt=""><span>编辑说明</span></button>
+      <button class="project-menu-row project-menu-danger" type="button" data-project-action="delete" role="menuitem"><img src="../icons/menu-generated/trash.png?v=selected-set-3" alt=""><span>删除项目</span></button>
+      <div id="projectMenuConfirm" class="project-menu-confirm" hidden>
+        <p id="projectMenuConfirmText">删除后项目内的聊天会移到普通聊天，确定删除？</p>
+        <div class="project-menu-confirm-actions">
+          <button id="projectMenuConfirmCancel" class="project-menu-confirm-cancel" type="button">取消</button>
+          <button id="projectMenuConfirmDelete" class="project-menu-confirm-delete" type="button">删除项目</button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="apiProjectNoteLayer" class="api-project-create-layer" hidden>
+    <div id="apiProjectNoteScrim" class="api-project-create-scrim"></div>
+    <section class="api-project-create-card" role="dialog" aria-modal="true" aria-labelledby="apiProjectNoteTitle">
+      <div class="api-project-create-icon"><img src="../icons/graphic-eq.svg" alt=""></div>
+      <h2 id="apiProjectNoteTitle">项目说明</h2>
+      <p>仅保存在本机，用于备忘</p>
+      <label class="api-project-create-label" for="apiProjectNoteInput">说明内容</label>
+      <textarea id="apiProjectNoteInput" class="api-project-create-input api-project-create-textarea" rows="4" maxlength="500" placeholder="写下这个项目的用途……"></textarea>
+      <div class="api-project-create-actions">
+        <button id="apiProjectNoteCancel" class="api-project-create-cancel" type="button">取消</button>
+        <button id="apiProjectNoteConfirm" class="api-project-create-confirm" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
   <main id="remoteView" class="remote-view" hidden aria-label="Remote 功能">
     <section class="remote-frame-shell" aria-label="DSH Remote 工作台">
-      <iframe id="remoteApp" title="DSH Remote 工作台" src="../index.html?source=deepseek-logo&embedded=1&v=1.12.6&shell=23"></iframe>
+      <iframe id="remoteApp" title="DSH Remote 工作台" src="../index.html?source=deepseek-logo&embedded=1&v=1.12.7&shell=23"></iframe>
     </section>
   </main>
 

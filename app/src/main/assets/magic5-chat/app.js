@@ -36,12 +36,15 @@
   const apiProjectView = $('apiProjectView');
   const apiProjectCreateLayer = $('apiProjectCreateLayer');
   const apiProjectPickerLayer = $('apiProjectPickerLayer');
+  const projectMenuLayer = $('projectMenuLayer');
+  const projectMenuPopover = $('projectMenuPopover');
+  const apiProjectNoteLayer = $('apiProjectNoteLayer');
 
   const DEFAULT_CONFIG = { base_url: 'https://api.deepseek.com', api_key: '', model: 'deepseek-chat', system_prompt: '' };
   const STORAGE_KEY = 'deepseek.chat.conversations.v2';
   const PROJECTS_STORAGE_KEY = 'deepseek.chat.projects.v1';
   const CONFIG_KEY = 'deepseek.chat.api.v1';
-  const state = { conversations: [], projects: [], activeId: 'today', selectedProject: null, api: { ...DEFAULT_CONFIG }, apiModels: ['deepseek-chat', 'deepseek-reasoner'], selectedEffort: 'auto', projectName: '', pendingAttachment: null, request: null, toastTimer: null, pendingRemoteMessages: [], pendingRemoteRoute: '', apiTestPending: false, settingsReturnView: 'chat' };
+  const state = { conversations: [], projects: [], activeId: 'today', selectedProject: null, api: { ...DEFAULT_CONFIG }, apiModels: ['deepseek-chat', 'deepseek-reasoner'], selectedEffort: 'auto', projectName: '', pendingAttachment: null, request: null, toastTimer: null, pendingRemoteMessages: [], pendingRemoteRoute: '', apiTestPending: false, settingsReturnView: 'chat', menuProjectId: '', projectRenameId: '', projectNoteId: '', longPressActive: false };
 
   const safeJson = (value, fallback) => { try { return typeof value === 'string' ? JSON.parse(value) : (value ?? fallback); } catch (_) { return fallback; } };
   const showToast = (message) => { const toast = $('toast'); if (!toast) return; toast.textContent = String(message || ''); toast.classList.add('show'); clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => toast.classList.remove('show'), 2200); };
@@ -158,22 +161,110 @@
     return null;
   };
   const estimateTokens = (conversation) => Math.ceil((conversation?.messages || []).reduce((total, message) => total + String(message?.text || '').trim().length, 0) / 2);
+  // DeepSeek 官方价（元 / 百万 tokens，2026-05 永久降价后生效）；
+  // deepseek-chat / deepseek-reasoner 已并入 V4-Flash 计费。
+  const PRICE_TABLE = [
+    { test: /v4-pro|deepseek-pro/, hit: 0.025, miss: 3, output: 6 },
+    { test: /v4-flash|deepseek-chat|deepseek-reasoner|flash/, hit: 0.02, miss: 1, output: 2 },
+  ];
+  const DEFAULT_PRICE = { hit: 0.02, miss: 1, output: 2 };
+  const priceFor = (model) => {
+    const override = (state.api && state.api.prices) || {};
+    const hit = Number(override.hit); const miss = Number(override.miss); const output = Number(override.output);
+    if ([hit, miss, output].some((value) => Number.isFinite(value) && value > 0)) {
+      return { hit: Number.isFinite(hit) && hit > 0 ? hit : DEFAULT_PRICE.hit, miss: Number.isFinite(miss) && miss > 0 ? miss : DEFAULT_PRICE.miss, output: Number.isFinite(output) && output > 0 ? output : DEFAULT_PRICE.output };
+    }
+    const name = String(model || '').toLowerCase();
+    for (const rule of PRICE_TABLE) if (rule.test.test(name)) return rule;
+    return DEFAULT_PRICE;
+  };
+  const usageTokens = (usage) => {
+    const source = usage && typeof usage === 'object' ? usage : {};
+    const prompt = numericValue(source.prompt_tokens, source.promptTokens) ?? 0;
+    const details = source.prompt_tokens_details || source.promptTokensDetails || {};
+    const hit = numericValue(source.prompt_cache_hit_tokens, source.promptCacheHitTokens, details.cached_tokens, details.cachedTokens) ?? 0;
+    const miss = numericValue(source.prompt_cache_miss_tokens, source.promptCacheMissTokens) ?? Math.max(0, prompt - hit);
+    const output = numericValue(source.completion_tokens, source.completionTokens) ?? 0;
+    const total = numericValue(source.total_tokens, source.totalTokens, source.tokens, source.total) ?? (prompt + output);
+    return { total, input: prompt, hit, miss, output };
+  };
+  const roundCost = (usage, model) => {
+    if (!usage || typeof usage !== 'object') return null;
+    const provided = numericValue(usage.cost, usage.total_cost, usage.totalCost);
+    const tokens = usageTokens(usage);
+    if (provided !== null) return { cost: provided, estimated: false, tokens };
+    const price = priceFor(model);
+    const per = (count, rate) => (count > 0 && rate > 0) ? (count / 1_000_000) * rate : 0;
+    const cost = per(tokens.hit, price.hit) + per(tokens.miss, price.miss) + per(tokens.output, price.output);
+    if (!(cost > 0)) return null;
+    return { cost, estimated: false, tokens };
+  };
+  const assistantMessages = (conversation) => (conversation?.messages || []).filter((message) => message.role === 'assistant');
+  const totalAssistantCost = (conversation) => assistantMessages(conversation).reduce((sum, message) => { const cost = Number(message.cost); return Number.isFinite(cost) && cost > 0 ? sum + cost : sum; }, 0);
+  const lastRoundMessage = (conversation) => { const list = assistantMessages(conversation); for (let i = list.length - 1; i >= 0; i--) { const message = list[i]; if (message.usage || message.estimatedTokens || Number.isFinite(Number(message.cost)) || message.text) return message; } return null; };
+  const conversationTokensTotal = (conversation) => {
+    let total = 0; let measured = false;
+    assistantMessages(conversation).forEach((message) => {
+      if (message.usage && typeof message.usage === 'object') { const tokens = usageTokens(message.usage); total += tokens.total || (tokens.input + tokens.output); measured = true; }
+      else if (message.estimatedTokens) { total += Number(message.estimatedTokens.input || 0) + Number(message.estimatedTokens.output || 0); measured = true; }
+    });
+    const fallbackUsage = (conversation?.usage || {});
+    return measured ? total : (numericValue(fallbackUsage.total_tokens, fallbackUsage.totalTokens, fallbackUsage.tokens, fallbackUsage.total) ?? estimateTokens(conversation));
+  };
   const conversationMetrics = (conversation = activeConversation()) => {
     const usage = conversation?.usage && typeof conversation.usage === 'object' ? conversation.usage : {};
-    const total = numericValue(usage.total_tokens, usage.totalTokens, usage.tokens, usage.total) ?? estimateTokens(conversation);
     const limit = numericValue(usage.context_limit, usage.contextLimit, usage.limit) ?? 65536;
-    const used = Math.min(limit, numericValue(usage.context_used, usage.contextUsed, total, usage.prompt_tokens, usage.promptTokens) ?? total);
-    const cost = numericValue(usage.cost, usage.total_cost, usage.totalCost, conversation?.cost) ?? 0;
-    return { total, limit, used, remaining: Math.max(0, limit - used), cost, percent: limit ? Math.min(100, (used / limit) * 100) : 0 };
+    const total = conversationTokensTotal(conversation);
+    const used = Math.min(limit, total);
+    let roundCostValue = 0; let roundEstimated = false; let roundTokens = null;
+    const round = lastRoundMessage(conversation);
+    if (round) {
+      const priced = Number.isFinite(Number(round.cost))
+        ? { cost: Number(round.cost), estimated: Boolean(round.costEstimated), tokens: round.usage ? usageTokens(round.usage) : (round.estimatedTokens ? { total: Number(round.estimatedTokens.input || 0) + Number(round.estimatedTokens.output || 0), input: Number(round.estimatedTokens.input || 0), hit: 0, miss: Number(round.estimatedTokens.input || 0), output: Number(round.estimatedTokens.output || 0) } : null) }
+        : (round.usage ? roundCost(round.usage, round.model || state.api.model) : null);
+      if (priced) { roundCostValue = priced.cost || 0; roundEstimated = Boolean(priced.estimated); roundTokens = priced.tokens || null; }
+    } else {
+      const fallback = roundCost(usage, state.api.model);
+      if (fallback) { roundCostValue = fallback.cost; roundEstimated = true; roundTokens = fallback.tokens; }
+    }
+    const costTotal = totalAssistantCost(conversation) || Number(conversation?.cost) || 0;
+    let tokensIn = 0; let tokensOut = 0; let anyEstimated = false;
+    assistantMessages(conversation).forEach((message) => {
+      if (message.usage && typeof message.usage === 'object') { const tokens = usageTokens(message.usage); tokensIn += tokens.input; tokensOut += tokens.output; }
+      else if (message.estimatedTokens) { tokensIn += Number(message.estimatedTokens.input || 0); tokensOut += Number(message.estimatedTokens.output || 0); }
+      if (message.costEstimated) anyEstimated = true;
+    });
+    return { total, limit, used, remaining: Math.max(0, limit - used), percent: limit ? Math.min(100, (used / limit) * 100) : 0, roundCost: roundCostValue, roundEstimated, roundTokens, costTotal, tokensIn, tokensOut, costEstimatedAny: anyEstimated };
   };
   const formatNumber = (value) => Number(value || 0).toLocaleString('en-US');
-  const formatCost = (value) => `¥${Number(value || 0).toFixed(2)}`;
+  const formatTokens = (value) => { const n = Number(value || 0); return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '')}k` : String(Math.round(n)); };
+  const formatCost = (value, estimated = false) => { const v = Number(value || 0); return `${estimated ? '≈' : ''}¥${v >= 0.01 ? v.toFixed(2) : v.toFixed(4)}`; };
   const applyUsage = (conversation, payload) => {
     const usage = payload?.usage || payload?.data?.usage;
     if (!conversation || !usage || typeof usage !== 'object') return;
     conversation.usage = { ...(conversation.usage || {}), ...usage };
     const cost = numericValue(usage.cost, usage.total_cost, usage.totalCost);
     if (cost !== null) conversation.cost = cost;
+  };
+  // 一轮结束：把 usage / 费用核算落到这条 assistant 消息上（无 usage 时按字数估算，
+  // allowEstimate=false 用于失败轮次，避免把报错也算成费用）。
+  const finishRound = (request, payload, allowEstimate = true) => {
+    const extra = (payload && (payload.usage || (payload.data && payload.data.usage))) || {};
+    const merged = { ...(request.roundUsage || {}), ...(extra && typeof extra === 'object' ? extra : {}) };
+    if (Object.keys(merged).length) request.assistant.usage = merged;
+    const priced = Object.keys(merged).length ? roundCost(merged, state.api.model) : null;
+    if (priced) {
+      request.assistant.cost = priced.cost; request.assistant.costEstimated = Boolean(priced.estimated);
+    } else if (allowEstimate) {
+      const price = priceFor(state.api.model);
+      const estIn = Math.ceil(Number(request.userChars || 0) / 2);
+      const estOut = Math.ceil(String(request.assistant.text || '').trim().length / 2);
+      if (estIn > 0 || estOut > 0) {
+        const cost = (estIn / 1_000_000) * price.miss + (estOut / 1_000_000) * price.output;
+        if (cost > 0) { request.assistant.cost = cost; request.assistant.costEstimated = true; request.assistant.estimatedTokens = { input: estIn, output: estOut }; }
+      }
+    }
+    request.conversation.cost = totalAssistantCost(request.conversation);
   };
   const renderContextCard = () => {
     const data = conversationMetrics();
@@ -183,7 +274,14 @@
     setText('contextRemaining', `${remainingPercent}%`);
     setText('contextRemainingTokens', formatNumber(data.remaining));
     setText('contextConversationTokens', formatNumber(data.total));
-    setText('contextCost', formatCost(data.cost));
+    setText('contextCost', formatCost(data.costTotal, data.costEstimatedAny));
+    const detail = $('contextCostDetail');
+    if (detail) {
+      const parts = [];
+      if ((data.tokensIn || data.tokensOut) > 0) parts.push(`输入 ${formatTokens(data.tokensIn)} · 输出 ${formatTokens(data.tokensOut)}`);
+      if (data.costEstimatedAny || !(data.tokensIn || data.tokensOut)) parts.push('按单价估算');
+      detail.textContent = parts.join(' · ');
+    }
     const fill = $('contextProgressFill'); if (fill) fill.style.width = `${usedPercent}%`;
     const dot = document.querySelector('.context-button-dot'); if (dot) dot.style.setProperty('--context-percent', `${usedPercent}%`);
     const ring = $('contextUsageRing'); if (ring) ring.style.setProperty('--context-percent', `${usedPercent}%`);
@@ -219,16 +317,28 @@
     [settingsView, remoteView, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
     chatPage.hidden = false; renderMessages();
   };
+  const attachProjectRowPress = (row, project) => {
+    let timer = null; let startX = 0; let startY = 0;
+    const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+    row.addEventListener('pointerdown', (event) => {
+      cancel(); startX = event.clientX; startY = event.clientY;
+      timer = setTimeout(() => { timer = null; state.longPressActive = true; openProjectMenu(project, event.clientX, event.clientY); try { navigator.vibrate?.(25); } catch (_) {} }, 520);
+    });
+    row.addEventListener('pointermove', (event) => { if (timer && Math.hypot(event.clientX - startX, event.clientY - startY) > 14) cancel(); });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach((name) => row.addEventListener(name, cancel));
+    row.addEventListener('contextmenu', (event) => { event.preventDefault(); state.longPressActive = true; openProjectMenu(project, event.clientX, event.clientY); });
+  };
   const renderApiProjects = () => {
     const list = $('apiProjectsList'); const empty = $('apiProjectsEmpty'); if (!list || !empty) return;
     const query = String($('apiProjectsSearch')?.value || '').trim().toLocaleLowerCase();
-    const projects = state.projects.filter((project) => !query || String(project.name || '').toLocaleLowerCase().includes(query));
+    const projects = state.projects.filter((project) => !query || String(project.name || '').toLocaleLowerCase().includes(query)).sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
     list.replaceChildren();
     projects.forEach((project) => {
       const row = document.createElement('button'); row.type = 'button'; row.className = 'api-project-row'; row.dataset.projectId = String(project.id || '');
       row.innerHTML = '<span class="api-project-row-icon"><img src="../icons/folder2.svg" alt=""></span><span class="api-project-row-copy"><strong class="api-project-row-title"></strong><small class="api-project-row-date"></small></span>';
       row.querySelector('.api-project-row-title').textContent = String(project.name || '项目');
       row.querySelector('.api-project-row-date').textContent = apiProjectDate(project);
+      attachProjectRowPress(row, project);
       list.append(row);
     });
     empty.hidden = projects.length > 0;
@@ -254,7 +364,7 @@
   const renderApiProject = () => {
     const project = state.selectedProject; if (!project) return;
     const title = $('apiProjectTitle'); if (title) title.textContent = project.name || '项目';
-    const meta = $('apiProjectMeta'); if (meta) meta.textContent = 'API 对话';
+    const meta = $('apiProjectMeta'); if (meta) meta.textContent = project.note || 'API 对话';
     const root = $('apiProjectChats'); const empty = $('apiProjectEmpty'); if (!root || !empty) return;
     const query = String($('apiProjectSearch')?.value || '').trim().toLocaleLowerCase();
     const projectKey = String(project.name || '').trim().toLocaleLowerCase();
@@ -282,12 +392,70 @@
   };
   const openApiProjectCreate = () => {
     closeOverlays(); if (!apiProjectCreateLayer) return;
+    state.projectRenameId = ''; $('apiProjectCreateTitle').textContent = '新建项目'; $('apiProjectCreateConfirm').textContent = '创建项目';
     apiProjectCreateLayer.hidden = false; const input = $('apiProjectNameInput'); if (input) { input.value = ''; setTimeout(() => input.focus(), 0); }
   };
   const closeApiProjectCreate = () => { if (apiProjectCreateLayer) apiProjectCreateLayer.hidden = true; };
+  const openApiProjectRename = (project) => {
+    closeOverlays(); if (!apiProjectCreateLayer || !project) return;
+    state.projectRenameId = String(project.id); $('apiProjectCreateTitle').textContent = '编辑项目'; $('apiProjectCreateConfirm').textContent = '保存';
+    apiProjectCreateLayer.hidden = false; const input = $('apiProjectNameInput'); if (input) { input.value = project.name || ''; setTimeout(() => input.focus(), 0); }
+  };
+  const closeApiProjectNote = () => { if (apiProjectNoteLayer) apiProjectNoteLayer.hidden = true; };
+  const openApiProjectNote = (project) => {
+    closeOverlays(); if (!apiProjectNoteLayer || !project) return;
+    state.projectNoteId = String(project.id); $('apiProjectNoteInput').value = project.note || '';
+    apiProjectNoteLayer.hidden = false; setTimeout(() => { const input = $('apiProjectNoteInput'); if (input) input.focus(); }, 0);
+  };
+  const saveApiProjectNote = () => {
+    const project = state.projects.find((item) => String(item.id) === String(state.projectNoteId));
+    if (!project) { closeApiProjectNote(); return; }
+    project.note = String($('apiProjectNoteInput')?.value || '').trim(); project.updatedAt = Date.now();
+    saveProjects(); closeApiProjectNote(); showToast('项目说明已保存');
+  };
+  const currentMenuProject = () => state.projects.find((project) => String(project.id) === String(state.menuProjectId)) || null;
+  const openProjectMenu = (project, x, y) => {
+    if (!projectMenuLayer || !projectMenuPopover || !project) return;
+    closeOverlays();
+    state.menuProjectId = String(project.id);
+    const confirmBlock = $('projectMenuConfirm'); if (confirmBlock) confirmBlock.hidden = true;
+    projectMenuLayer.hidden = false;
+    const rect = projectMenuPopover.getBoundingClientRect();
+    const width = rect.width || 252; const height = rect.height || 246;
+    const pad = 10;
+    const left = Math.max(pad, Math.min(x - 34, window.innerWidth - width - pad));
+    const top = y + 14 + height > window.innerHeight - pad ? Math.max(pad, y - height - 14) : y + 14;
+    projectMenuPopover.style.left = `${Math.round(left)}px`; projectMenuPopover.style.top = `${Math.round(top)}px`;
+  };
+  const executeProjectAction = (action) => {
+    const project = currentMenuProject(); if (!project) return;
+    if (action === 'pin') { project.pinned = !project.pinned; project.updatedAt = Date.now(); saveProjects(); renderApiProjects(); closeOverlays(); showToast(project.pinned ? '已置顶项目' : '已取消置顶'); return; }
+    if (action === 'rename') { openApiProjectRename(project); return; }
+    if (action === 'note') { openApiProjectNote(project); return; }
+    if (action === 'delete') { const confirmBlock = $('projectMenuConfirm'); if (confirmBlock) confirmBlock.hidden = false; return; }
+  };
+  const deleteCurrentProject = () => {
+    const project = currentMenuProject(); if (!project) { closeOverlays(); return; }
+    const name = project.name;
+    state.projects = state.projects.filter((item) => item.id !== project.id);
+    state.conversations.forEach((conversation) => { if (conversation.projectName === name) conversation.projectName = ''; });
+    if (state.selectedProject && state.selectedProject.id === project.id) state.selectedProject = null;
+    saveProjects(); saveConversations(); closeOverlays();
+    renderApiProjects(); showApiProjects(); showToast('项目已删除');
+  };
   const createApiProject = () => {
     const input = $('apiProjectNameInput'); const name = String(input?.value || '').trim();
     if (!name) { showToast('请输入项目名称'); input?.focus(); return; }
+    if (state.projectRenameId) {
+      const project = state.projects.find((item) => String(item.id) === String(state.projectRenameId));
+      if (!project) { state.projectRenameId = ''; closeApiProjectCreate(); return; }
+      const oldName = project.name;
+      if (name !== oldName && state.projects.some((item) => item.id !== project.id && item.name === name)) { showToast('已存在同名项目'); return; }
+      project.name = name; project.updatedAt = Date.now();
+      state.conversations.forEach((conversation) => { if (conversation.projectName === oldName) conversation.projectName = name; });
+      if (state.selectedProject && state.selectedProject.id === project.id) { state.selectedProject = project; renderApiProject(); }
+      saveProjects(); saveConversations(); state.projectRenameId = ''; closeApiProjectCreate(); renderApiProjects(); showToast('项目已重命名'); return;
+    }
     const existing = apiProjectByName(name);
     if (existing) { closeApiProjectCreate(); showApiProject(existing); showToast('已打开这个项目'); return; }
     const now = Date.now(); const project = { id: `api-project-${now}`, name, createdAt: now, updatedAt: now };
@@ -305,7 +473,7 @@
     state.activeId = id; saveConversations(); showChatPage(); messageInput?.focus(); showToast('已打开新对话');
   };
 
-  const closeOverlays = () => { attachmentLayer.hidden = true; featureLayer.hidden = true; if (apiProjectPickerLayer) apiProjectPickerLayer.hidden = true; if (chatSelectorLayer) chatSelectorLayer.hidden = true; if (contextLayer) contextLayer.hidden = true; closeApiProjectCreate(); $('attachmentButton')?.setAttribute('aria-expanded', 'false'); $('featureButton')?.setAttribute('aria-expanded', 'false'); $('chatModelButton')?.setAttribute('aria-expanded', 'false'); $('chatEffortButton')?.setAttribute('aria-expanded', 'false'); $('contextButton')?.setAttribute('aria-expanded', 'false'); };
+  const closeOverlays = () => { attachmentLayer.hidden = true; featureLayer.hidden = true; if (apiProjectPickerLayer) apiProjectPickerLayer.hidden = true; if (chatSelectorLayer) chatSelectorLayer.hidden = true; if (contextLayer) contextLayer.hidden = true; if (projectMenuLayer) projectMenuLayer.hidden = true; closeApiProjectCreate(); closeApiProjectNote(); $('attachmentButton')?.setAttribute('aria-expanded', 'false'); $('featureButton')?.setAttribute('aria-expanded', 'false'); $('chatModelButton')?.setAttribute('aria-expanded', 'false'); $('chatEffortButton')?.setAttribute('aria-expanded', 'false'); $('contextButton')?.setAttribute('aria-expanded', 'false'); };
   const closeSidebar = () => { sidebarLayer.hidden = true; $('menuButton')?.setAttribute('aria-expanded', 'false'); };
   const openSidebar = () => { closeOverlays(); sidebarLayer.hidden = false; $('menuButton')?.setAttribute('aria-expanded', 'true'); };
   const showRemoteView = (route = 'remote') => { closeOverlays(); closeSidebar(); closeApiProjectCreate(); [settingsView, chatPage, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; }); remoteView.hidden = false; syncRemoteFrameInsets(); requestRemoteRoute(route); };
@@ -322,6 +490,7 @@
     const effortLabelNode = $('chatEffortLabel'); if (effortLabelNode) effortLabelNode.textContent = effortLabel(state.selectedEffort);
     document.querySelectorAll('[data-chat-model]').forEach((button) => button.classList.toggle('is-selected', button.dataset.chatModel === model));
     document.querySelectorAll('[data-chat-effort]').forEach((button) => button.classList.toggle('is-selected', button.dataset.chatEffort === (state.selectedEffort || 'auto')));
+    applyPricePlaceholders();
   };
   const renderApiModels = () => {
     const root = $('chatModelOptions'); if (!root) return;
@@ -339,9 +508,13 @@
     let stored = null; try { stored = native?.getApiConfig?.() || localStorage.getItem(CONFIG_KEY); } catch (_) {}
     const config = safeJson(stored, {}); state.api = { ...DEFAULT_CONFIG, ...(config && typeof config === 'object' ? config : {}) }; if (!state.api.base_url) state.api.base_url = DEFAULT_CONFIG.base_url; state.selectedEffort = String(config?.effort || 'auto'); if (state.api.model) state.apiModels = [...new Set([...state.apiModels, String(state.api.model)])]; renderApiModels();
   };
-  const loadConfigIntoForm = () => { $('apiBaseInput').value = state.api.base_url || DEFAULT_CONFIG.base_url; $('apiKeyInput').value = state.api.api_key || ''; updateApiDot(state.api.api_key ? 'online' : 'offline'); syncChatSelectors(); if (!$('apiSettingsStatus').textContent) setApiStatus(state.api.api_key ? '已配置 DeepSeek API' : '尚未配置 API Key'); };
+  const parsePriceValue = (node) => { const value = Number(String(node?.value || '').trim()); return Number.isFinite(value) && value > 0 ? value : 0; };
+  const readPriceInputs = () => ({ hit: parsePriceValue($('priceHitInput')), miss: parsePriceValue($('priceMissInput')), output: parsePriceValue($('priceOutputInput')) });
+  const applyPricePlaceholders = () => { const price = priceFor(state.api.model); const set = (id, value) => { const node = $(id); if (node) node.placeholder = String(value); }; set('priceHitInput', price.hit); set('priceMissInput', price.miss); set('priceOutputInput', price.output); };
+  const loadConfigIntoForm = () => { $('apiBaseInput').value = state.api.base_url || DEFAULT_CONFIG.base_url; $('apiKeyInput').value = state.api.api_key || ''; const price = state.api.prices || {}; $('priceHitInput').value = price.hit || ''; $('priceMissInput').value = price.miss || ''; $('priceOutputInput').value = price.output || ''; updateApiDot(state.api.api_key ? 'online' : 'offline'); syncChatSelectors(); if (!$('apiSettingsStatus').textContent) setApiStatus(state.api.api_key ? '已配置 DeepSeek API' : '尚未配置 API Key'); };
   const saveApiConfig = () => {
     const config = { base_url: normalizeApiBase($('apiBaseInput').value || ''), api_key: String($('apiKeyInput').value || '').trim(), model: String(state.api.model || 'deepseek-chat').trim(), system_prompt: state.api.system_prompt || '', effort: state.selectedEffort || 'auto' };
+    const prices = readPriceInputs(); if (prices.hit || prices.miss || prices.output) config.prices = prices;
     if (!config.base_url) { setApiStatus('请填写 API 地址', 'error'); return false; }
     if (!/^https?:\/\//i.test(config.base_url)) { setApiStatus('API 地址必须以 http:// 或 https:// 开头', 'error'); return false; }
     state.api = config; try { native?.saveApiConfig?.(JSON.stringify(config)); localStorage.setItem(CONFIG_KEY, JSON.stringify(config)); } catch (_) {}
@@ -375,17 +548,18 @@
     const data = safeJson(raw, raw || {}); const request = state.request; if (!request) return;
     applyUsage(request.conversation, data);
     const finish = () => { if (request.watchdog) { clearTimeout(request.watchdog); request.watchdog = null; } };
+    if (name === 'usage') { const usage = (data.usage && typeof data.usage === 'object') ? data.usage : {}; request.roundUsage = { ...(request.roundUsage || {}), ...usage }; return; }
     if (name === 'delta' || name === 'reasoning') { if (name === 'delta') request.assistant.text += String(data.text || ''); request.assistant.pending = false; renderMessages(); return; }
-    if (name === 'done' || name === 'complete') { finish(); if (name === 'complete') request.assistant.text = String(data.text || request.assistant.text || ''); request.assistant.pending = false; state.request = null; request.conversation.updatedAt = Date.now(); saveConversations(); renderMessages(); showToast('DeepSeek 已回复'); return; }
-    if (name === 'error') { finish(); request.assistant.pending = false; request.assistant.error = true; request.assistant.text = request.assistant.text || `生成失败：${String(data.message || '请检查 API 配置')}`; state.request = null; saveConversations(); renderMessages(); showToast(String(data.message || 'DeepSeek 请求失败')); }
+    if (name === 'done' || name === 'complete') { finish(); if (name === 'complete') request.assistant.text = String(data.text || request.assistant.text || ''); finishRound(request, data); request.assistant.pending = false; state.request = null; request.conversation.updatedAt = Date.now(); saveConversations(); renderMessages(); renderContextCard(); showToast('DeepSeek 已回复'); return; }
+    if (name === 'error') { finish(); finishRound(request, data, false); request.assistant.pending = false; request.assistant.error = true; request.assistant.text = request.assistant.text || `生成失败：${String(data.message || '请检查 API 配置')}`; state.request = null; saveConversations(); renderMessages(); renderContextCard(); showToast(String(data.message || 'DeepSeek 请求失败')); }
   };
   window.DeepSeekEvents = { onEvent: handleApiEvent };
-  const sendNativeApi = (conversation) => { if (!native || typeof native.streamChat !== 'function') return false; native.streamChat(JSON.stringify({ url: apiEndpoint(), apiKey: state.api.api_key, payload: { model: state.api.model || 'deepseek-chat', messages: buildMessages(conversation), stream: true } })); return true; };
+  const sendNativeApi = (conversation) => { if (!native || typeof native.streamChat !== 'function') return false; native.streamChat(JSON.stringify({ url: apiEndpoint(), apiKey: state.api.api_key, payload: { model: state.api.model || 'deepseek-chat', messages: buildMessages(conversation), stream: true, stream_options: { include_usage: true } } })); return true; };
   const sendBrowserApi = async (conversation, request) => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 180000);
     try {
-      const response = await fetch(apiEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json', ...(state.api.api_key ? { Authorization: `Bearer ${state.api.api_key}` } : {}) }, body: JSON.stringify({ model: state.api.model || 'deepseek-chat', messages: buildMessages(conversation), stream: true }), signal: controller.signal });
+      const response = await fetch(apiEndpoint(), { method: 'POST', headers: { 'Content-Type': 'application/json', ...(state.api.api_key ? { Authorization: `Bearer ${state.api.api_key}` } : {}) }, body: JSON.stringify({ model: state.api.model || 'deepseek-chat', messages: buildMessages(conversation), stream: true, stream_options: { include_usage: true } }), signal: controller.signal });
       if (!response.ok) { const detail = (await response.text().catch(() => '')).replace(/\s+/g, ' ').trim(); throw new Error(`API ${response.status}${detail ? `：${detail.slice(0, 240)}` : ''}`); }
       if (!response.body) { const json = await response.json(); applyUsage(conversation, json); request.assistant.text = json?.choices?.[0]?.message?.content || ''; return; }
       const reader = response.body.getReader(); const decoder = new TextDecoder(); let buffer = ''; let finished = false;
@@ -459,7 +633,7 @@
     if (conversation.messages.filter((item) => item.role === 'user').length === 1 || conversation.title === '今天的灵感') conversation.title = formatTitle(value || attachment?.name || '图片对话');
     conversation.updatedAt = Date.now(); const assistant = { role: 'assistant', text: '', pending: true }; conversation.messages.push(assistant); state.pendingAttachment = null; attachmentInput.value = ''; messageInput.value = ''; messageInput.style.height = '42px'; renderAttachment(); renderMessages();
     if (!state.api.api_key) { assistant.pending = false; assistant.error = true; assistant.text = '还没有配置 API Key，请到设置中完成配置后再发送。'; saveConversations(); renderMessages(); showToast('请先配置 API Key'); showSettingsView(); return; }
-    const request = { conversation, assistant }; state.request = request; saveConversations();
+    const request = { conversation, assistant, userChars: (value || '').length }; state.request = request; saveConversations();
     try {
       if (sendNativeApi(conversation)) {
         // 原生流式通道是异步的：Java 侧稍后通过 DeepSeekEvents.onEvent 回传
@@ -512,6 +686,13 @@
   document.querySelectorAll('[data-feature-action]').forEach((button) => { button.onclick = () => handleFeatureAction(button.dataset.featureAction || ''); });
   $('apiProjectPickerList')?.addEventListener('click', (event) => { const row = event.target.closest('.api-project-picker-row'); if (!row) return; addActiveChatToApiProject(state.projects.find((project) => String(project.id) === String(row.dataset.projectId))); });
   $('apiProjectPickerCreate')?.addEventListener('click', () => { closeOverlays(); openApiProjectCreate(); });
+  projectMenuPopover?.addEventListener('click', (event) => { const button = event.target.closest('[data-project-action]'); if (button) executeProjectAction(button.dataset.projectAction || ''); });
+  $('projectMenuConfirmCancel')?.addEventListener('click', () => { const block = $('projectMenuConfirm'); if (block) block.hidden = true; });
+  $('projectMenuConfirmDelete')?.addEventListener('click', deleteCurrentProject);
+  $('apiProjectNoteCancel')?.addEventListener('click', closeApiProjectNote);
+  $('apiProjectNoteConfirm')?.addEventListener('click', saveApiProjectNote);
+  $('apiProjectNoteScrim')?.addEventListener('click', closeApiProjectNote);
+  $('apiProjectNoteInput')?.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeApiProjectNote(); if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') saveApiProjectNote(); });
   $('chatModelOptions')?.addEventListener('click', (event) => { const button = event.target.closest('[data-chat-model]'); if (!button) return; state.api.model = button.dataset.chatModel || 'deepseek-chat'; persistChatSelection(); syncChatSelectors(); closeOverlays(); showToast(`已切换到 ${state.api.model}`); });
   document.querySelectorAll('[data-chat-effort]').forEach((button) => { button.onclick = () => { state.selectedEffort = button.dataset.chatEffort || 'auto'; persistChatSelection(); syncChatSelectors(); closeOverlays(); showToast(`思考等级：${effortLabel(state.selectedEffort)}`); }; });
   document.querySelectorAll('[data-attachment-kind]').forEach((button) => { button.onclick = () => { closeOverlays(); attachmentInput.accept = button.dataset.attachmentKind === 'image' ? 'image/*' : '*/*'; attachmentInput.click(); }; });
@@ -521,7 +702,7 @@
   $('apiProjectsBackButton')?.addEventListener('click', showChatPage);
   $('apiProjectsAddButton')?.addEventListener('click', openApiProjectCreate);
   $('apiProjectsSearch')?.addEventListener('input', renderApiProjects);
-  $('apiProjectsList')?.addEventListener('click', (event) => { const row = event.target.closest('.api-project-row'); if (!row) return; showApiProject(state.projects.find((project) => String(project.id) === String(row.dataset.projectId))); });
+  $('apiProjectsList')?.addEventListener('click', (event) => { if (state.longPressActive) { state.longPressActive = false; return; } const row = event.target.closest('.api-project-row'); if (!row) return; showApiProject(state.projects.find((project) => String(project.id) === String(row.dataset.projectId))); });
   $('apiProjectBackButton')?.addEventListener('click', showApiProjects);
   $('apiProjectSearch')?.addEventListener('input', renderApiProject);
   $('apiProjectChats')?.addEventListener('click', (event) => { const row = event.target.closest('.api-project-chat-row'); if (!row) return; state.activeId = String(row.dataset.conversationId || ''); showChatPage(); });
