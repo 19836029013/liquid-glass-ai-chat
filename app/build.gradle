@@ -1,3 +1,6 @@
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+
 plugins {
     id 'com.android.application'
 }
@@ -8,11 +11,11 @@ android {
     buildToolsVersion '35.0.0'
 
     defaultConfig {
-        applicationId "com.dsapp.liquidglasschat"
+        applicationId "com.dsapp.dshremote"
         minSdk 26
         targetSdk 35
-        versionCode 61
-        versionName "2.8.27"
+        versionCode 214
+        versionName "1.12.6"
     }
 
     signingConfigs {
@@ -46,3 +49,31 @@ dependencies {
     implementation 'androidx.core:core:1.13.1'
 }
 
+tasks.register('publishRelease') {
+    dependsOn 'assembleRelease'
+    doLast {
+        def sourceApk = file("$buildDir/outputs/apk/release/app-release.apk")
+        def outputDir = file("$rootDir/dist")
+        if (!sourceApk.isFile()) throw new GradleException("Release APK was not generated: $sourceApk")
+        outputDir.mkdirs()
+        def metadataFile = file("$outputDir/update.json")
+        if (metadataFile.isFile()) {
+            def previous = new JsonSlurper().parse(metadataFile)
+            def previousCode = previous?.versionCode as Integer
+            if (previousCode != null && android.defaultConfig.versionCode <= previousCode) {
+                throw new GradleException("versionCode must increase before publishing: current=${android.defaultConfig.versionCode}, previous=${previousCode}")
+            }
+        }
+        copy {
+            from sourceApk
+            into outputDir
+            rename { 'DSH-Remote.apk' }
+        }
+        def metadata = [
+            versionCode: android.defaultConfig.versionCode,
+            versionName: android.defaultConfig.versionName,
+            apk: 'DSH-Remote.apk',
+        ]
+        metadataFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(metadata)) + System.lineSeparator()
+    }
+}

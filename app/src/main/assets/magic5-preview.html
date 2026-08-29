@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>荣耀 Magic5 Pro · 通用聊天</title>
+  <style>
+    @font-face { font-family: "HONOR Sans CN"; src: url("./fonts/HONORSansVFCN.ttf") format("truetype"); font-style: normal; font-weight: 100 900; font-display: block; }
+    @font-face { font-family: "HONOR Sans"; src: url("./fonts/HONORSansVFNormal.ttf") format("truetype"); font-style: normal; font-weight: 100 900; font-display: block; }
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+    body { display: grid; place-items: center; background: #090b0e; font-family: "HONOR Sans CN", "HONOR Sans", system-ui, -apple-system, "Noto Sans SC", sans-serif; font-synthesis: none; text-rendering: optimizeLegibility; }
+    .phone { position: relative; width: min(375px, calc((100vh - 24px) * .4608)); height: min(814px, calc(100vh - 24px)); overflow: hidden; border-radius: 42px; background: #17181b; box-shadow: 0 24px 80px rgba(0,0,0,.52), 0 0 0 1px rgba(255,255,255,.12); }
+    .phone iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+    .statusbar { position: absolute; z-index: 5; top: 0; left: 0; right: 0; height: 30px; display: flex; align-items: center; padding: 3px 14px 0; color: #111; pointer-events: none; font-family: "HONOR Sans CN", "HONOR Sans", system-ui, -apple-system, "Noto Sans SC", sans-serif; font-weight: 700; font-synthesis: none; text-rendering: optimizeLegibility; }
+    .carrier { width: 61px; display: grid; gap: 0; font-size: 5.6px; line-height: 6.2px; letter-spacing: -.04em; }
+    .clock { margin-left: 7px; font-size: 14px; line-height: 18px; letter-spacing: -.05em; }
+    .status-icons { margin-left: auto; display: flex; align-items: center; gap: 4px; font-size: 7px; line-height: 10px; }
+  </style>
+</head>
+<body>
+  <main class="phone" aria-label="荣耀 Magic5 Pro 通用聊天模拟手机">
+    <!--
+      This phone preview deliberately uses its own copied web surface.
+      Keep it isolated from the main app page so visual experiments here do
+      not change the production-facing web surface by accident.
+    -->
+    <iframe id="realApp" title="荣耀 Magic5 Pro 上运行的通用聊天" src="./magic5-chat/index.html?preview=magic5pro&v=backend-api-1"></iframe>
+    <div class="statusbar" aria-label="模拟状态栏">
+      <span class="carrier"><span>中国移动</span><span>中国电信</span></span>
+      <span class="clock">17:52</span>
+      <span class="status-icons"><span>VPN</span><span>289<br><small>B/s</small></span><span>5G</span><span>4G</span></span>
+    </div>
+  </main>
+  <script>
+    const realApp = document.getElementById('realApp');
+    realApp.addEventListener('load', () => {
+      const root = realApp.contentDocument?.documentElement;
+      if (!root) return;
+      root.style.setProperty('--native-safe-top', '30px');
+      root.style.setProperty('--native-safe-bottom', '0px');
+      root.style.setProperty('--native-keyboard-bottom', '0px');
+    });
+  </script>
+</body>
+</html>

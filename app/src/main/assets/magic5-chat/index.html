@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>今天的灵感 · 通用聊天</title>
+  <link rel="stylesheet" href="./styles.css?v=backend-api-1">
+</head>
+<body>
+  <div id="sidebarLayer" class="sidebar-layer" hidden>
+    <div class="sidebar-scrim" data-close-sidebar></div>
+    <aside class="sidebar" aria-label="主导航侧边栏">
+      <header class="sidebar-brand">
+        <img class="sidebar-wordmark" src="./icons/deepseek-wordmark.svg" alt="deepseek">
+      </header>
+
+      <nav class="sidebar-nav" aria-label="功能导航">
+        <button class="sidebar-item" id="sidebarProjectsButton" type="button">
+          <img src="../icons/folder2.svg" alt="">
+          <span>项目</span>
+        </button>
+        <button class="sidebar-item" id="sidebarRemoteButton" type="button">
+          <img src="../icons/laptop-with-cursor.svg" alt="">
+          <span>Remote</span>
+        </button>
+      </nav>
+
+      <section class="sidebar-recent" aria-labelledby="recentChatsHeading">
+        <h2 id="recentChatsHeading">最近聊天</h2>
+        <div class="sidebar-recent-list">
+          <button class="sidebar-recent-item" type="button" data-recent-title="美版价格对比 siun​​ners?">美版价格对比 siun​​ners?</button>
+          <button class="sidebar-recent-item" type="button" data-recent-title="Codex模拟器开发流程">Codex模拟器开发流程</button>
+          <button class="sidebar-recent-item" type="button" data-recent-title="DeepSeek Agent内测严苛性">DeepSeek Agent内测严苛性</button>
+          <button class="sidebar-recent-item" type="button" data-recent-title="编码是否消耗额度">编码是否消耗额度</button>
+          <button class="sidebar-recent-item" type="button" data-recent-title="排查Clash Meta断网">排查Clash Meta断网</button>
+          <button class="sidebar-recent-item" type="button" data-recent-title="Technical Art Practice Plan">Technical Art Practice Plan</button>
+        </div>
+      </section>
+
+      <div class="sidebar-bottom-actions" aria-label="快捷操作">
+        <button id="sidebarNewChatButton" class="sidebar-new-chat" type="button" aria-label="新建对话">
+          <img src="../icons/new-chat.svg" alt="">
+        </button>
+        <button id="sidebarSettingsButton" class="sidebar-settings" type="button" aria-label="设置">
+          <img src="./icons/gear.svg" alt="">
+        </button>
+      </div>
+    </aside>
+  </div>
+
+  <main id="settingsView" class="settings-view" hidden aria-label="设置">
+    <header class="settings-header">
+      <button id="settingsBackButton" class="header-button" type="button" aria-label="返回聊天">
+        <img src="./icons/arrow-back.svg" alt="">
+      </button>
+      <h1>设置</h1>
+    </header>
+
+    <div class="settings-intro">
+      <span class="settings-eyebrow">DSH Remote</span>
+      <p>管理密钥、设备连接与版本</p>
+    </div>
+
+    <section class="settings-api-card settings-panel" aria-labelledby="apiSettingsHeading">
+      <div class="settings-api-heading">
+        <div>
+          <h2 id="apiSettingsHeading">DeepSeek API</h2>
+          <p id="apiSettingsHint">密钥仅保存在本机，用于聊天回复</p>
+        </div>
+        <span id="apiStatusDot" class="api-status-dot offline" aria-label="未配置"></span>
+      </div>
+      <label class="settings-field">API 地址
+        <input id="apiBaseInput" type="url" autocomplete="url" placeholder="https://api.deepseek.com">
+      </label>
+      <label class="settings-field">API Key
+        <input id="apiKeyInput" type="password" autocomplete="off" placeholder="sk-…">
+      </label>
+      <div id="apiSettingsStatus" class="api-settings-status" role="status" aria-live="polite"></div>
+      <div class="settings-api-actions">
+        <button id="apiTestButton" class="secondary-action" type="button">测试连接</button>
+        <button id="apiSaveButton" class="primary-action" type="button">保存配置</button>
+      </div>
+    </section>
+
+    <section class="settings-device-card settings-panel" aria-labelledby="settingsDeviceHeading">
+      <div class="settings-panel-heading">
+        <div>
+          <h2 id="settingsDeviceHeading">设备连接</h2>
+          <p>查看当前手机与 DSH Desktop 的连接状态</p>
+        </div>
+        <span class="settings-panel-badge online">已连接</span>
+      </div>
+      <div class="settings-device-pair">
+        <div class="settings-device-entry">
+          <div class="settings-device-icon-wrap"><img src="../icons/iphone14-pro.svg" alt=""></div>
+          <strong>Magic5 Pro</strong>
+          <span>当前设备 · 在线</span>
+        </div>
+        <div class="settings-device-link" aria-hidden="true"><span></span><i></i><span></span></div>
+        <div class="settings-device-entry">
+          <div class="settings-device-icon-wrap"><img src="../icons/laptop-with-cursor.svg" alt=""></div>
+          <strong>MagicBook</strong>
+          <span>DSH Desktop · 已连接</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="settings-version-card settings-panel" aria-labelledby="settingsVersionHeading">
+      <div class="settings-panel-heading">
+        <div>
+          <h2 id="settingsVersionHeading">版本信息</h2>
+          <p>保持 DSH Remote 使用最新版本</p>
+        </div>
+        <button id="shellSettingsCheckUpdateButton" class="settings-update-button" type="button" aria-label="检查更新"><img src="../icons/settings-generated/update.png?v=selected-set-2" alt=""></button>
+      </div>
+      <div class="settings-version-summary">
+        <img src="../icons/settings-generated/version.png?v=selected-set-2" alt="">
+        <div><strong>当前版本</strong><span>v1.12.6</span></div>
+        <span class="settings-version-state">已是最新版</span>
+      </div>
+      <div class="settings-version-rule" aria-hidden="true"></div>
+      <p class="settings-version-note">当前已安装最新版本</p>
+    </section>
+
+  </main>
+
+  <main id="chatPage" class="chat-page" aria-label="聊天主页">
+    <header class="chat-header">
+      <button id="menuButton" class="header-button" type="button" aria-label="打开侧边栏" aria-expanded="false">
+        <img src="./icons/menu.svg" alt="">
+      </button>
+      <div class="conversation-heading conversation-title-pill no-project">
+        <h1 id="conversationTitle">今天的灵感</h1>
+        <div id="conversationFolder" class="conversation-folder" data-folder="" hidden>
+          <img src="../icons/folder2.svg" alt="">
+          <span></span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <button id="contextButton" class="context-button" type="button" aria-label="上下文用量" aria-expanded="false">
+          <span class="context-button-dot" aria-hidden="true"></span>
+        </button>
+        <button id="featureButton" class="header-button" type="button" aria-label="更多功能" aria-expanded="false">
+          <img src="./icons/more-vert.svg" alt="">
+        </button>
+      </div>
+    </header>
+
+    <section id="messageScroll" class="message-scroll" aria-label="聊天消息">
+      <div id="conversationContent" class="conversation-content" aria-live="polite" aria-atomic="false">
+        <div class="user-message">帮我整理一下今天的想法</div>
+        <p class="assistant-message">好的，我先把你的想法整理成几个清晰的方向。</p>
+      </div>
+    </section>
+
+    <form id="composer" class="composer" novalidate>
+      <div class="composer-input-row">
+        <textarea id="messageInput" rows="1" autocomplete="off" placeholder="输入消息" aria-label="输入消息"></textarea>
+      </div>
+      <div class="composer-actions-row">
+        <button id="attachmentButton" class="composer-icon-button" type="button" aria-label="添加附件" aria-expanded="false">
+          <img src="./icons/chat-plus.png" alt="">
+        </button>
+        <button id="chatModelButton" class="composer-select-button" type="button" aria-label="模型选择" aria-expanded="false"><span id="chatModelLabel">deepseek-chat</span></button>
+        <button id="chatEffortButton" class="composer-select-button composer-effort-button" type="button" aria-label="思考等级" aria-expanded="false"><span id="chatEffortLabel">自动</span></button>
+        <span class="composer-actions-spacer" aria-hidden="true"></span>
+        <button id="sendButton" class="send-button" type="submit" aria-label="发送">
+          <img src="./icons/arrow-back.svg" alt="">
+        </button>
+      </div>
+    </form>
+
+    <div id="attachmentPreview" class="attachment-preview" hidden aria-live="polite"></div>
+
+    <input id="attachmentInput" type="file" hidden multiple accept="image/*,.pdf,.txt,.doc,.docx">
+    <div id="attachmentLayer" class="overlay-layer" hidden>
+      <div class="overlay-scrim" data-close-overlay="attachmentLayer"></div>
+      <section class="popover attachment-popover" role="menu" aria-label="添加附件">
+        <button class="popover-row" type="button" data-attachment-kind="image" role="menuitem">
+          <img src="./icons/picture-icons8.png" alt="">
+          <span>添加照片</span>
+        </button>
+        <button class="popover-row" type="button" data-attachment-kind="file" role="menuitem">
+          <img src="../icons/menu-generated/paperclip.png?v=1" alt="">
+          <span>添加文件</span>
+        </button>
+      </section>
+    </div>
+
+    <div id="featureLayer" class="overlay-layer" hidden>
+      <div class="overlay-scrim" data-close-overlay="featureLayer"></div>
+      <section class="popover feature-popover" role="menu" aria-label="更多功能">
+        <div id="featureMenuTitle" class="feature-menu-title">今天的灵感</div>
+        <button class="feature-row" type="button" data-feature-action="pin" role="menuitem"><img src="../icons/menu-generated/pin.png?v=selected-set-3" alt=""><span>置顶</span></button>
+        <button class="feature-row" type="button" data-feature-action="project" role="menuitem"><img src="../icons/menu-generated/project.png?v=selected-set-3" alt=""><span>添加到项目</span><img class="feature-arrow" src="../icons/arrow-back.svg" alt=""></button>
+        <button class="feature-row" type="button" data-feature-action="files" role="menuitem"><img src="../icons/menu-generated/paperclip.png?v=selected-set-3" alt=""><span>已上传文件</span></button>
+        <button class="feature-row" type="button" data-feature-action="find" role="menuitem"><img src="../icons/menu-generated/search.png?v=selected-set-3" alt=""><span>在聊天中查找</span></button>
+        <button class="feature-row feature-danger" type="button" data-feature-action="archive" role="menuitem"><img src="../icons/menu-generated/archive.png?v=selected-set-3" alt=""><span>归档</span></button>
+        <button class="feature-row feature-danger" type="button" data-feature-action="delete" role="menuitem"><img src="../icons/menu-generated/trash.png?v=selected-set-3" alt=""><span>删除</span></button>
+      </section>
+    </div>
+
+    <div id="apiProjectPickerLayer" class="overlay-layer" hidden>
+      <div class="overlay-scrim" data-close-overlay="apiProjectPickerLayer"></div>
+      <section class="popover api-project-picker" role="dialog" aria-modal="true" aria-label="添加到项目">
+        <h2>添加到项目</h2>
+        <div id="apiProjectPickerList" class="api-project-picker-list"></div>
+        <button id="apiProjectPickerCreate" class="api-project-picker-create" type="button">+ 新建项目</button>
+      </section>
+    </div>
+
+    <div id="chatSelectorLayer" class="overlay-layer" hidden>
+      <div class="overlay-scrim" data-close-overlay="chatSelectorLayer"></div>
+      <section class="popover chat-selector-popover" role="dialog" aria-modal="true" aria-label="选择模型与思考等级">
+        <h2 data-selector-group="model">模型</h2>
+        <div id="chatModelOptions" class="chat-model-options" data-selector-group="model"></div>
+        <div class="selector-divider" data-selector-group="effort" aria-hidden="true"></div>
+        <h2 data-selector-group="effort">思考等级</h2>
+        <button class="selector-row" type="button" data-selector-group="effort" data-chat-effort="auto"><span>自动</span><i aria-hidden="true">✓</i></button>
+        <button class="selector-row" type="button" data-selector-group="effort" data-chat-effort="high"><span>高</span><i aria-hidden="true">✓</i></button>
+        <button class="selector-row" type="button" data-selector-group="effort" data-chat-effort="max"><span>最高</span><i aria-hidden="true">✓</i></button>
+      </section>
+    </div>
+
+    <div id="contextLayer" class="overlay-layer" hidden>
+      <div class="overlay-scrim" data-close-overlay="contextLayer"></div>
+      <section class="popover context-popover" role="dialog" aria-modal="true" aria-label="上下文用量">
+        <div class="context-popover-head">
+          <div>
+            <span class="context-eyebrow">本对话</span>
+            <h2>上下文用量</h2>
+          </div>
+          <strong id="contextRemaining">—</strong>
+        </div>
+        <div class="context-progress" aria-hidden="true"><span id="contextProgressFill"></span></div>
+        <div class="context-metrics">
+          <div class="context-metric">
+            <span id="contextUsageRing" class="context-usage-ring" aria-hidden="true"></span>
+            <span>上下文剩余</span>
+            <strong id="contextRemainingTokens">—</strong>
+          </div>
+          <div class="context-metric">
+            <img src="../icons/context-generated/conversation-tokens.png?v=selected-set-2" alt="">
+            <span>本对话 token</span>
+            <strong id="contextConversationTokens">0</strong>
+          </div>
+          <div class="context-metric">
+            <img src="../icons/context-generated/conversation-cost.png?v=selected-set-2" alt="">
+            <span>本轮费用</span>
+            <strong id="contextCost">¥0.00</strong>
+          </div>
+        </div>
+      </section>
+    </div>
+
+  </main>
+
+  <main id="apiProjectsView" class="api-projects-view" hidden aria-label="API 项目">
+    <header class="api-projects-topbar">
+      <button id="apiProjectsBackButton" class="api-project-circle-button" type="button" aria-label="返回聊天"><img src="./icons/arrow-back.svg" alt=""></button>
+      <h1>项目</h1>
+      <button id="apiProjectsAddButton" class="api-project-circle-button api-project-add-button" type="button" aria-label="新建项目"><span aria-hidden="true">+</span></button>
+    </header>
+    <section class="api-projects-scroll" aria-label="API 项目列表">
+      <div id="apiProjectsList" class="api-projects-list"></div>
+      <div id="apiProjectsEmpty" class="api-projects-empty" hidden>暂无项目</div>
+    </section>
+    <div class="api-projects-bottom-bar">
+      <label class="api-projects-search">
+        <img src="../icons/search.svg" alt="">
+        <input id="apiProjectsSearch" type="search" autocomplete="off" placeholder="搜索" aria-label="搜索项目">
+      </label>
+    </div>
+  </main>
+
+  <main id="apiProjectView" class="api-project-view" hidden aria-label="API 项目会话">
+    <header class="api-project-topbar">
+      <button id="apiProjectBackButton" class="api-project-back-button" type="button" aria-label="返回项目"><img src="./icons/arrow-back.svg" alt=""></button>
+      <div class="api-project-heading">
+        <h1 id="apiProjectTitle">项目</h1>
+        <span id="apiProjectMeta">API 对话</span>
+      </div>
+    </header>
+    <section class="api-project-chats-scroll" aria-label="项目聊天列表">
+      <div id="apiProjectChats" class="api-project-chats"></div>
+      <div id="apiProjectEmpty" class="api-project-empty">这个项目还没有对话</div>
+    </section>
+    <div class="api-project-bottom-bar">
+      <label class="api-project-search">
+        <img src="../icons/search.svg" alt="">
+        <input id="apiProjectSearch" type="search" autocomplete="off" placeholder="搜索聊天" aria-label="搜索项目聊天">
+      </label>
+      <button id="apiProjectComposeButton" class="api-project-compose-button" type="button"><img src="../icons/new-chat.svg" alt=""><span>聊天</span></button>
+    </div>
+  </main>
+
+  <div id="apiProjectCreateLayer" class="api-project-create-layer" hidden>
+    <div id="apiProjectCreateScrim" class="api-project-create-scrim"></div>
+    <section class="api-project-create-card" role="dialog" aria-modal="true" aria-labelledby="apiProjectCreateTitle">
+      <div class="api-project-create-icon"><img src="../icons/folder2.svg" alt=""></div>
+      <h2 id="apiProjectCreateTitle">新建项目</h2>
+      <p>项目中的聊天只会显示在项目内</p>
+      <label class="api-project-create-label" for="apiProjectNameInput">项目名称</label>
+      <input id="apiProjectNameInput" class="api-project-create-input" type="text" maxlength="48" autocomplete="off" placeholder="例如：我的项目">
+      <div class="api-project-create-actions">
+        <button id="apiProjectCreateCancel" class="api-project-create-cancel" type="button">取消</button>
+        <button id="apiProjectCreateConfirm" class="api-project-create-confirm" type="button">创建项目</button>
+      </div>
+    </section>
+  </div>
+
+  <main id="remoteView" class="remote-view" hidden aria-label="Remote 功能">
+    <section class="remote-frame-shell" aria-label="DSH Remote 工作台">
+      <iframe id="remoteApp" title="DSH Remote 工作台" src="../index.html?source=deepseek-logo&embedded=1&v=1.12.6&shell=23"></iframe>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="./app.js?v=backend-api-1"></script>
+</body>
+</html>

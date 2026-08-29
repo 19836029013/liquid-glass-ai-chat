@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MagicOS uses this only when the normal DSH reply notification is expanded.
+  The system-supplied decorated header above it retains the app/project/time;
+  this view deliberately starts at the conversation name and has nine body
+  rows so the answer's readable area never collapses into a two-line style.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingTop="4dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:id="@+id/reply_notification_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#F7F8FA"
+        android:textSize="16sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_1"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_2"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_3"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_4"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_5"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_6"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_7"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_8"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+
+    <TextView
+        android:id="@+id/reply_notification_line_9"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textColor="#E4E7ED"
+        android:textSize="14sp" />
+</LinearLayout>

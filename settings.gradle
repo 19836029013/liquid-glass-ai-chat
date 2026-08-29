@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "LiquidGlassChat"
+rootProject.name = "DSHRemote"
 include ':app'

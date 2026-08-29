@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <style>
+    .icon-stroke { stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+    .circle-fill { fill: #fff; }
+    .arrow-group { animation: dshArrowBob 1.5s ease-in-out infinite; transform-origin: 12px 12px; }
+    @keyframes dshArrowBob {
+      0%, 100% { transform: translateY(0); opacity: .95; }
+      50% { transform: translateY(1.4px); opacity: 1; }
+    }
+  </style>
+  <circle class="circle-fill" cx="12" cy="12" r="8.5"/>
+  <circle class="icon-stroke" cx="12" cy="12" r="8.5"/>
+  <g class="arrow-group">
+    <path class="icon-stroke" d="M12 7.4v8"/>
+    <path class="icon-stroke" d="m8.7 12.5 3.3 3.3 3.3-3.3"/>
+  </g>
+</svg>

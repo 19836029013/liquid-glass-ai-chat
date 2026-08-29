@@ -1,299 +1,351 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#dfe7eb" />
-  <title>英子起飞</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>DSH Remote</title>
+  <link rel="stylesheet" href="./styles.css?v=remote-return-211">
 </head>
-<body>
-  <div id="wallpaperLayer" class="wallpaper-layer" aria-hidden="true"></div>
-  <div id="wallpaperOverlay" class="wallpaper-overlay" aria-hidden="true"></div>
-
+<body class="home-mode">
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
   <div class="app-shell">
-    <aside class="sidebar glass" id="sidebar" aria-hidden="true">
-      <div class="sidebar-head">
-        <div class="sidebar-brand">
-          <span class="sidebar-brand-mark">✦</span>
-          <div>
-            <strong>英子起飞</strong>
-            <small id="sidebarModelLabel">未选择模型</small>
-          </div>
-        </div>
-        <button class="plain-icon" data-sidebar-close aria-label="关闭侧栏">×</button>
+    <aside id="drawer" class="drawer glass" aria-hidden="true">
+      <div class="drawer-head">
+        <div class="brand"><span class="brand-mark">✦</span><div><b>DSH Remote</b><small>远程工作台</small></div></div>
+        <button id="closeDrawer" class="icon-button" aria-label="关闭">×</button>
       </div>
-
-      <label class="sidebar-search">
-        <span>⌕</span>
-        <input id="sidebarSearch" type="search" autocomplete="off" placeholder="搜索对话…" />
-      </label>
-
-      <div class="sidebar-scroll">
-        <div class="side-subhead section-label">项目</div>
-        <button class="side-item add-project" id="addProjectButton"><span class="plus-small">＋</span><span>新建项目</span></button>
-        <div id="projectList"></div>
-
-        <div class="side-separator"></div>
-
-        <section id="groupSection">
-          <h3>群聊</h3>
-          <div id="groupChatList"></div>
-        </section>
-
-        <div class="side-separator"></div>
-
-        <section id="historySection">
-          <h3>对话</h3>
-          <div class="side-subhead">置顶</div>
-          <div id="pinnedChatList"></div>
-          <div class="side-subhead recent-title">最近</div>
-          <div id="recentChatList"></div>
-        </section>
-
-        <div class="sidebar-bottom">
-          <button class="side-item" id="newGroupButton"><span>◎</span><span>新建群聊</span></button>
-          <button class="side-item" id="joinGroupButton"><span>⇄</span><span>加入群聊</span></button>
-          <button class="side-item" id="sidebarSettings"><span>⚙</span><span>设置</span></button>
-        </div>
-      </div>
+      <div class="drawer-section-title">设备</div>
+      <div class="device-row"><span id="drawerDot" class="device-dot"></span><span id="drawerDevice">MagicBook</span><span id="drawerState" class="muted">未连接</span></div>
+      <div class="drawer-section-title">项目</div>
+      <button id="drawerProjects" class="drawer-item drawer-nav-item" type="button"><img src="./icons/folder2.svg" alt=""><span>项目</span></button>
+      <button id="drawerRemote" class="drawer-item drawer-nav-item is-active" type="button"><img src="./icons/laptop-with-cursor.svg" alt=""><span>Remote</span></button>
+      <div class="drawer-section-title">快捷操作</div>
+      <button class="drawer-item" id="drawerRefresh">↻&nbsp; 刷新状态</button>
+      <button class="drawer-item" id="drawerSettings">⚙&nbsp; 连接设置</button>
+      <div class="drawer-note">状态来自电脑上的真实 DSH 事件。手机端不生成假进度。</div>
     </aside>
-    <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+    <div id="drawerScrim" class="scrim" hidden></div>
 
-    <nav class="floating-nav" aria-label="聊天操作">
-      <button class="round-glass" id="menuButton" aria-label="打开侧栏">☰</button>
-
-      <button class="top-model-pill glass" id="topModelButton" type="button" aria-label="当前对话">
-        <span class="top-model-dot">✦</span>
-        <span class="pill-marquee"><span id="topModelLabel">新对话</span></span>
-      </button>
-    </nav>
-
-    <main class="chat-page">
-      <section class="conversation-wrap">
-        <h1 id="greeting">你好，今天想聊点什么？</h1>
-
-        <div class="api-banner" id="apiBanner" hidden>
-          <span>还没有配置 AI 接口</span>
-          <button id="bannerSettings">去设置</button>
-        </div>
-
-        <div id="messages"></div>
-        <div class="bottom-spacer"></div>
-      </section>
-
-      <section class="composer glass" id="composer">
-        <div class="attach-preview" id="chatAttachPreview" hidden></div>
-        <textarea id="promptInput" rows="1" placeholder="输入消息…"></textarea>
-        <div class="composer-row">
-          <button class="select-control" id="modelSelect" aria-label="选择模型">
-            <span class="model-mark">◇</span><span id="modelLabel">选择模型</span><span class="tiny-chevron">⌄</span>
-          </button>
-          <button class="select-control grow reasoning-control" id="reasoningSelect" aria-label="思考等级">
-            <span class="reasoning-mark">✺</span>
-            <span class="reasoning-caption">思考等级</span>
-            <span class="reasoning-value" id="reasoningLabel">标准</span>
-            <span class="tiny-chevron">⌄</span>
-          </button>
-          <button class="mention-button" id="mentionButton" type="button" hidden>@AI</button>
-          <button class="mention-button plus-button" id="chatPlusButton" type="button">＋</button>
-          <button class="mention-button emoji-button" id="emojiButton" type="button">😊</button>
-          <button class="send-button" id="sendButton" aria-label="发送"><span aria-hidden="true">➤</span></button>
-        </div>
-        <div class="attach-menu glass" id="chatAttachMenu" hidden>
-          <button type="button" id="chatImageOption">🖼 图片</button>
-          <button type="button" id="chatFileOption">📎 文件</button>
-        </div>
-        <input id="chatImageInput" type="file" accept="image/*" hidden />
-        <input id="chatFileInput" type="file" hidden />
-        <div class="sticker-panel glass" id="stickerPanel" hidden></div>
-        <input id="stickerImageInput" type="file" accept="image/*" hidden />
-      </section>
-
-      <div class="sheet-scrim" id="sheetScrim" hidden></div>
-
-      <div class="toast" id="toast"></div>
-      <div class="image-viewer" id="chatImageViewer" hidden>
-        <button id="chatImageViewerClose" type="button" aria-label="关闭">×</button>
-        <img id="chatImageViewerImg" alt="图片" />
-      </div>
-    </main>
-  </div>
-
-  <div class="modal-backdrop settings-screen-backdrop" id="settingsBackdrop" hidden>
-    <section class="settings-screen" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-      <header class="settings-screen-header">
-        <span class="settings-header-spacer" aria-hidden="true"></span>
-        <h2 id="settingsTitle">设置</h2>
-        <button class="settings-header-button glass" id="settingsClose" aria-label="关闭">×</button>
+    <section id="homeView" class="home-view" aria-label="Remote 首页">
+      <header class="home-topbar">
+        <button id="homeBackButton" class="home-circle-button" aria-label="返回"><img src="./icons/arrow-back.svg" alt=""></button>
+        <h1>Remote</h1>
+        <button id="homeMoreButton" class="home-circle-button home-more" aria-label="更多" hidden><img src="./icons/more-vert.svg" alt=""></button>
       </header>
 
-      <div class="settings-screen-scroll">
-        <section class="settings-card glass">
-          <div class="settings-section-title">
-            <div class="settings-card-icon account-icon">👤</div>
-            <h3>我的账号</h3>
-          </div>
-          <div class="settings-list">
-            <label class="settings-row">
-              <span class="row-label">用户名</span>
-              <input id="accountName" autocomplete="off" placeholder="群聊中显示的名字" maxlength="12" />
-              <span class="settings-chevron">›</span>
-            </label>
-          </div>
-          <div class="settings-card-footer">
-            <div class="local-key-note">♢ 用户名会显示给群聊里的朋友，随时可改</div>
-            <div class="settings-actions">
-              <button class="settings-pill-button primary" id="saveAccountButton">✓&nbsp; 保存用户名</button>
-            </div>
-          </div>
-          <div class="settings-status" id="accountStatus"></div>
-        </section>
+      <div class="home-brand-label" aria-label="HONOR">HONOR</div>
 
-        <section class="settings-card glass update-card">
-          <div class="update-head">
-            <div class="settings-card-icon update-icon">⇧</div>
-            <div class="update-copy">
-              <h3>软件更新</h3>
-              <p id="currentVersionText">当前版本 —</p>
+      <section class="home-device-row" aria-label="设备状态">
+        <span id="homeDeviceDot" class="home-online-dot"></span>
+        <img class="home-device-icon" src="./icons/laptop-with-cursor.svg" alt="">
+        <strong id="homeDevice">MagicBook</strong>
+      </section>
+
+      <section class="home-section">
+        <h2 class="home-section-title">项目</h2>
+        <div id="homeProjects" class="home-list project-list"></div>
+      </section>
+
+      <div class="home-bottom-bar">
+        <label class="home-search">
+          <img class="home-search-icon" src="./icons/search.svg" alt="">
+          <input id="homeSearch" type="search" autocomplete="off" placeholder="搜索项目" aria-label="搜索项目">
+        </label>
+        <button id="homeComposeButton" class="home-action-button" aria-label="新聊天"><img src="./icons/new-chat.svg" alt=""></button>
+      </div>
+    </section>
+
+    <section id="projectsView" class="projects-view" aria-label="项目" hidden>
+      <header class="projects-topbar">
+        <button id="projectsBackButton" class="projects-circle-button" aria-label="返回 Remote"><img src="./icons/arrow-back.svg" alt=""></button>
+        <h1>项目</h1>
+        <button id="projectsAddButton" class="projects-circle-button projects-add-button" aria-label="新建项目"><span aria-hidden="true">+</span></button>
+      </header>
+      <main class="projects-page-scroll">
+        <div id="projectsList" class="projects-list"></div>
+        <div id="projectsEmpty" class="projects-empty-state" hidden>暂无项目</div>
+      </main>
+      <div class="projects-bottom-bar">
+        <label class="projects-search">
+          <img src="./icons/search.svg" alt="">
+          <input id="projectsSearch" type="search" autocomplete="off" placeholder="搜索" aria-label="搜索项目">
+        </label>
+      </div>
+    </section>
+
+    <section id="settingsView" class="settings-view" aria-label="设置" hidden>
+      <header class="settings-topbar">
+        <button id="settingsBackButton" class="home-circle-button" aria-label="返回"><img src="./icons/arrow-back.svg" alt=""></button>
+        <h1>设置</h1>
+        <button id="settingsMoreButton" class="home-circle-button home-more" aria-label="连接设置"><img src="./icons/more-vert.svg" alt=""></button>
+      </header>
+      <main class="settings-page-scroll">
+        <div class="settings-honor">HONOR</div>
+        <h2 class="settings-section-title">设备连接</h2>
+        <section class="settings-card settings-devices-card">
+          <div class="settings-device-entry">
+            <img class="settings-device-icon phone" src="./icons/iphone14-pro.svg" alt="">
+            <strong class="settings-device-name">Magic5 Pro</strong>
+            <span class="settings-device-role">当前设备</span>
+            <span class="settings-device-status" id="settingsPhoneStatus">在线</span>
+          </div>
+          <div class="settings-connection-line" aria-hidden="true"></div>
+          <div class="settings-device-entry">
+            <img class="settings-device-icon laptop" src="./icons/laptop-with-cursor.svg" alt="">
+            <strong id="settingsDesktopName" class="settings-device-name">MagicBook</strong>
+            <span class="settings-device-role">DSH Desktop</span>
+            <span id="settingsDesktopStatus" class="settings-device-status">已连接</span>
+          </div>
+        </section>
+        <h2 class="settings-section-title version-heading">版本信息</h2>
+        <section class="settings-card settings-version-card">
+          <div class="settings-version-row">
+              <img class="settings-version-icon" src="./icons/settings-generated/version.png?v=selected-set-2" alt="">
+            <div class="settings-version-copy">
+              <strong class="settings-version-label">当前版本</strong>
+              <span id="settingsVersionNumber" class="settings-version-number">v1.12.6</span>
             </div>
-            <button class="settings-pill-button update-action-button" id="checkUpdateButton" type="button">
-              <span class="button-icon" aria-hidden="true">↻</span>
-              <span class="button-label">检查更新</span>
+            <div class="settings-version-state">
+              <button id="settingsCheckUpdateButton" class="settings-update-button" type="button" aria-label="检查更新"><img src="./icons/settings-generated/update.png?v=selected-set-2" alt=""></button>
+              <span id="settingsVersionState">已是最新版</span>
+            </div>
+          </div>
+          <div class="settings-version-rule" aria-hidden="true"></div>
+          <div id="settingsVersionNote" class="settings-version-note">当前已安装最新版本</div>
+        </section>
+      </main>
+    </section>
+
+    <section id="projectView" class="project-view" aria-label="项目会话" hidden>
+      <header class="project-topbar">
+        <button id="projectBackButton" class="project-back-button" aria-label="返回首页"><img src="./icons/arrow-back.svg" alt=""></button>
+        <div class="project-heading">
+          <h1 id="projectTitle">项目</h1>
+          <div class="project-device-row">
+            <img src="./icons/laptop-with-cursor.svg" alt="">
+            <span id="projectDevice">DSH Desktop</span>
+            <span>·</span>
+            <span id="projectConnection">已连接</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="project-session-area">
+        <div id="projectChats" class="project-session-list"></div>
+        <div id="projectEmpty" class="project-empty-state">没有更多线程</div>
+      </main>
+
+      <div class="project-bottom-bar">
+        <label class="project-search">
+          <img src="./icons/search.svg" alt="">
+          <input id="projectSearch" type="search" autocomplete="off" placeholder="搜索聊天" aria-label="搜索项目聊天">
+        </label>
+        <button id="projectComposeButton" class="project-compose-button" type="button"><img src="./icons/new-chat.svg" alt=""><span>聊天</span></button>
+      </div>
+    </section>
+
+    <section id="dashboardView" class="dashboard-view" hidden>
+      <section class="chat-view" aria-label="聊天详情">
+        <header class="chat-topbar">
+          <button id="chatBackButton" class="chat-circle-button" aria-label="返回首页"><img src="./icons/arrow-back.svg" alt=""></button>
+          <div class="chat-title-pill">
+            <strong id="chatTitle">确认编码是否消耗额度</strong>
+            <div class="chat-subtitle">
+              <img class="chat-folder-icon" src="./icons/folder2.svg" alt="">
+              <span id="chatProject">dsAPP</span>
+              <span class="chat-device-group">
+                <img class="chat-device-icon" src="./icons/laptop-with-cursor.svg" alt="">
+                <span id="chatDeviceDot" class="chat-device-dot" role="status" aria-label="已连接"></span>
+                <span id="chatDevice">MagicBook</span>
+                <span id="chatRetryText" class="chat-retry-text" aria-hidden="true"></span>
+              </span>
+            </div>
+          </div>
+          <div class="chat-actions-pill">
+            <button id="contextUsageButton" class="context-usage-button" type="button" aria-label="上下文用量" aria-expanded="false">
+              <span id="contextUsageRing" class="context-usage-ring" aria-hidden="true"></span>
+            </button>
+            <button id="settingsButton" class="chat-more-button" aria-label="更多"><img src="./icons/more-vert.svg" alt=""></button>
+          </div>
+        </header>
+
+        <main id="chatScroll" class="chat-scroll">
+          <div id="chatHistoryLoading" class="chat-history-loading" role="status" aria-live="polite" hidden><span>正在加载更早消息</span></div>
+          <div id="chatItems" class="chat-items"></div>
+        </main>
+
+        <button id="chatScrollBottom" class="chat-scroll-bottom" type="button" aria-label="回到底部" aria-hidden="true">
+          <img src="./icons/scroll-bottom.svg?v=runtime-context-filter-1" alt="">
+        </button>
+
+        <form id="chatComposer" class="chat-composer" novalidate>
+          <div id="chatComposerImages" class="chat-composer-images" hidden></div>
+          <div class="chat-composer-input-row">
+            <textarea id="promptInput" rows="1" autocomplete="off" placeholder="在 DSH Desktop 上工作" aria-label="给 DSH 发消息"></textarea>
+          </div>
+          <div class="chat-composer-options-row" aria-label="输入选项">
+            <button id="sendButton" class="chat-plus-button" type="button" aria-label="添加资料或 DSH 命令"><img src="./icons/chat-plus.svg" alt=""></button>
+            <button id="permissionButton" class="chat-composer-option chat-permission-button" type="button" aria-label="权限选择" aria-expanded="false">
+              <img id="permissionIconSlot" class="chat-permission-icon" src="data:image/png;base64,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" alt="权限">
+            </button>
+            <span class="chat-composer-spacer" aria-hidden="true"></span>
+            <button id="modelButton" class="chat-composer-option chat-model-button" type="button" aria-label="模型选择" aria-expanded="false">
+              <span id="modelLabel">hy3</span>
+            </button>
+            <button id="stopButton" class="chat-stop-button" type="button" aria-label="发送消息">
+              <svg class="chat-action-send" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 18V6m0 0-5.5 5.5M12 6l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              <img class="chat-action-reply" src="./icons/dsh-reply-spinner.png" alt="DSH 正在回复">
             </button>
           </div>
-          <div class="update-state" id="updateState">准备就绪</div>
-          <div class="update-notes" id="updateNotes">点击“检查更新”查看版本说明。</div>
-          <div class="update-progress" id="updateProgress" hidden>
-            <div class="update-progress-track">
-              <div class="update-progress-bar" id="updateProgressBar"></div>
+        </form>
+        <input id="chatAttachmentInput" type="file" accept="image/*" multiple hidden>
+        <div id="chatAttachmentLayer" class="chat-attachment-layer" hidden>
+          <div id="chatAttachmentScrim" class="chat-attachment-scrim"></div>
+          <section class="chat-attachment-card" role="menu" aria-label="添加资料和 DSH 命令">
+            <button class="chat-attachment-row chat-upload-row" data-attachment-action="image" role="menuitem">
+              <img class="chat-attachment-icon" src="./icons/picture-icons8.png" alt="">
+              <span>上传照片</span>
+            </button>
+            <div class="chat-attachment-divider" aria-hidden="true"></div>
+            <div class="chat-command-scroll-wrap">
+              <div id="chatCommandScroll" class="chat-command-scroll" aria-label="DSH 命令列表">
+                <button class="chat-dsh-command" data-chat-command="compact" role="menuitem">
+                  <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                  <span class="chat-command-copy"><span class="chat-command-name">compact</span><span class="chat-command-description">Compact older conversation history</span></span>
+                </button>
+                <button class="chat-dsh-command" data-chat-command="export" role="menuitem">
+                  <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                  <span class="chat-command-copy"><span class="chat-command-name">export</span><span class="chat-command-description">Download this Session log as a ZIP archive</span></span>
+                </button>
+                <button class="chat-dsh-command" data-chat-command="feedback" role="menuitem">
+                  <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                  <span class="chat-command-copy"><span class="chat-command-name">feedback</span><span class="chat-command-description">record feedback about this session</span></span>
+                </button>
+                <button class="chat-dsh-command" data-chat-command="goal" role="menuitem">
+                  <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                  <span class="chat-command-copy"><span class="chat-command-name">goal</span><span class="chat-command-description">set or view the goal for a long-running task</span></span>
+                </button>
+                <button class="chat-dsh-command" data-chat-command="permission" role="menuitem">
+                  <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                  <span class="chat-command-copy"><span class="chat-command-name">permission</span><span class="chat-command-description">Switch the permission preset (sandbox mode + approval policy)</span></span>
+                </button>
+                <button class="chat-dsh-command" data-chat-command="plan" role="menuitem">
+                  <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                  <span class="chat-command-copy"><span class="chat-command-name">plan</span><span class="chat-command-description">Enter or leave plan mode</span></span>
+                </button>
+              </div>
+              <div id="chatCommandScrollbar" class="chat-list-scrollbar" aria-hidden="true"><span id="chatCommandScrollbarThumb"></span></div>
             </div>
-            <span id="updateProgressText">准备更新</span>
-          </div>
-        </section>
-
-        <section class="settings-card glass">
-          <div class="settings-section-title">
-            <div class="settings-card-icon ai-icon">✺</div>
-            <h3>AI 设置</h3>
-          </div>
-
-          <div class="settings-list">
-            <label class="settings-row">
-              <span class="row-label">API 地址</span>
-              <input id="apiBaseUrl" autocomplete="off" placeholder="https://api.deepseek.com" />
-              <span class="settings-chevron">›</span>
-            </label>
-
-            <label class="settings-row api-key-row">
-              <span class="row-label">API Key</span>
-              <input id="apiKey" type="password" autocomplete="new-password" name="api_key" spellcheck="false" placeholder="sk-…" />
-              <button id="toggleKey" class="inline-text-button" type="button" aria-label="显示 API Key">显示</button>
-              <button id="clearApiKey" class="inline-text-button danger" type="button">清空</button>
-              <span class="settings-chevron">›</span>
-            </label>
-
-            <label class="settings-row model-select-row">
-              <span class="row-label">默认模型</span>
-              <select id="apiModel" aria-label="默认模型" disabled><option value="">先查询模型</option></select>
-              <button id="fetchModelsButton" class="inline-action-button" type="button">查询模型</button>
-            </label>
-            <p class="settings-inline-hint">填好 API 地址和 Key 后点“查询模型”。成功后这里会列出接口真实返回的全部模型；选择一个作为新聊天默认模型。</p>
-
-            <details class="advanced-settings">
-              <summary>高级兼容设置（一般不用改）</summary>
-              <label class="advanced-row">
-                <span>兼容参数名（高级）</span>
-                <input id="apiReasoningParam" autocomplete="off" placeholder="一般留空，不要填模型名" />
-              </label>
-              <label class="advanced-row">
-                <span>更新清单地址（可选）</span>
-                <input id="apiUpdateManifest" autocomplete="off" placeholder="https://example.com/update.json" />
-              </label>
-              <label class="advanced-row">
-                <span>群聊昵称（本机）</span>
-                <input id="apiNickname" autocomplete="off" placeholder="我" maxlength="12" />
-              </label>
-              <label class="advanced-row">
-                <span>群聊服务器地址（可选）</span>
-                <input id="apiSyncServer" autocomplete="off" placeholder="http://100.x.x.x:8787" />
-              </label>
-              <label class="advanced-row">
-                <span>群聊同步密钥（可选）</span>
-                <input id="apiSyncToken" autocomplete="off" placeholder="服务器设置的访问密钥" />
-              </label>
-              <label class="advanced-row model-catalog-row">
-                <span>可用模型</span>
-                <textarea id="apiModels" rows="4" autocomplete="off" placeholder="测试连接后自动读取；也可手动填写，一行一个模型"></textarea>
-              </label>
-              <p class="advanced-hint">模型列表来自你的 API /models 接口。若中转站不提供 /models，可在这里手动加入 Flash、Pro、Sol、Luna 等实际模型 ID。</p>
-            </details>
-          </div>
-
-          <div class="settings-card-footer">
-            <div class="local-key-note">♢ API Key 仅保存在本机设备</div>
-            <div class="settings-actions">
-              <button class="settings-pill-button" id="testApiButton">↻&nbsp; 测试当前模型</button>
-              <button class="settings-pill-button primary" id="saveApiButton">✓&nbsp; 保存</button>
+          </section>
+        </div>
+        <div id="chatSelectorLayer" class="chat-selector-layer" hidden>
+          <div id="chatSelectorScrim" class="chat-selector-scrim"></div>
+          <section id="chatSelectorCard" class="chat-selector-card" role="dialog" aria-modal="true" aria-label="选择输入选项">
+            <div id="chatSelectorTitle" class="chat-selector-title">选择</div>
+            <div class="chat-selector-options-wrap">
+              <div id="chatSelectorOptions" class="chat-selector-options"></div>
+              <div id="chatSelectorScrollbar" class="chat-list-scrollbar" aria-hidden="true"><span id="chatSelectorScrollbarThumb"></span></div>
             </div>
-          </div>
-          <div class="settings-status" id="apiStatus"></div>
-        </section>
+          </section>
+        </div>
+      </section>
+    </section>
+  </div>
 
-        <section class="settings-card glass">
-          <div class="settings-section-title">
-            <div class="settings-card-icon appearance-icon">◒</div>
-            <h3>外观</h3>
-          </div>
+  <div id="newChatLayer" class="new-chat-layer" hidden>
+    <div id="newChatScrim" class="new-chat-scrim"></div>
+    <section class="new-chat-card" role="dialog" aria-modal="true" aria-label="新建对话">
+      <div class="new-chat-handle" aria-hidden="true"></div>
+      <h2>新建对话</h2>
+      <button class="new-chat-option new-chat-create-option" data-new-chat-action="new-project" type="button">
+        <span class="new-chat-folder-plus"><img class="new-chat-option-icon" src="./icons/folder2.svg" alt=""><span>+</span></span>
+        <span class="new-chat-option-copy"><strong>新建项目</strong><small>创建项目并开始新对话</small></span>
+        <span class="new-chat-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="new-chat-section-label">历史项目</div>
+      <div id="newChatProjectList" class="new-chat-project-list" aria-label="历史项目"></div>
+    </section>
+  </div>
 
-          <div class="wallpaper-presets" id="wallpaperPresets" aria-label="预设壁纸">
-            <button class="wallpaper-preset preset-dawn" data-wallpaper-preset="dawn" aria-label="晨光"></button>
-            <button class="wallpaper-preset preset-forest" data-wallpaper-preset="forest" aria-label="森林"></button>
-            <button class="wallpaper-preset preset-night" data-wallpaper-preset="night" aria-label="夜空"></button>
-            <button class="wallpaper-preset preset-mountain" data-wallpaper-preset="mountain" aria-label="山谷"></button>
-            <button class="wallpaper-preset preset-cloud" data-wallpaper-preset="cloud" aria-label="云霞"></button>
-            <button class="wallpaper-preset preset-mist" data-wallpaper-preset="mist" aria-label="薄雾"></button>
-          </div>
-
-          <div class="settings-list appearance-list">
-            <div class="settings-row wallpaper-row">
-              <span class="row-label">更换壁纸</span>
-              <div class="wallpaper-preview" id="wallpaperPreview" aria-hidden="true"></div>
-              <label class="settings-pill-button choose-wallpaper">
-                选择图片 <span class="settings-chevron">›</span>
-                <input id="wallpaperInput" type="file" accept="image/jpeg,image/png,image/webp" hidden />
-              </label>
-            </div>
-
-            <label class="slider-row">
-              <span class="slider-label">毛玻璃不透明度</span>
-              <input id="glassOpacity" type="range" min="6" max="42" value="12" />
-              <output id="glassOutput">12%</output>
-            </label>
-
-            <label class="slider-row">
-              <span class="slider-label">背景遮罩</span>
-              <input id="wallpaperDim" type="range" min="0" max="55" value="8" />
-              <output id="dimOutput">8%</output>
-            </label>
-          </div>
-
-          <div class="appearance-bottom-row">
-            <p class="appearance-note">壁纸与外观参数仅保存在当前设备。</p>
-            <button class="settings-pill-button" id="resetWallpaper">↻&nbsp; 恢复默认</button>
-          </div>
-        </section>
-
-        <div class="settings-safe-space"></div>
+  <div id="projectCreateLayer" class="project-create-layer" hidden>
+    <div id="projectCreateScrim" class="project-create-scrim"></div>
+    <section class="project-create-card" role="dialog" aria-modal="true" aria-labelledby="projectCreateTitle">
+      <div class="project-create-icon"><img src="./icons/folder2.svg" alt=""></div>
+      <h2 id="projectCreateTitle">新建项目</h2>
+      <p>为新的工作区起一个名称</p>
+      <label class="project-create-label" for="projectNameInput">项目名称</label>
+      <input id="projectNameInput" class="project-create-input" type="text" maxlength="48" autocomplete="off" placeholder="例如：我的项目">
+      <div class="project-create-actions">
+        <button id="projectCreateCancel" class="project-create-cancel" type="button">取消</button>
+        <button id="projectCreateConfirm" class="project-create-confirm" type="button">创建项目</button>
       </div>
     </section>
   </div>
 
-  <div class="popover glass bottom-sheet" id="modelPopover"></div>
-  <div class="popover glass reasoning-popover bottom-sheet" id="reasoningPopover"></div>
-  <div class="popover glass bottom-sheet" id="actionSheet"></div>
+  <div id="chatMenuLayer" class="chat-menu-layer" hidden>
+    <div id="chatMenuScrim" class="chat-menu-scrim"></div>
+    <section class="chat-menu-card" role="menu" aria-label="会话菜单">
+      <div id="chatMenuTitle" class="chat-menu-title">Remote DSH</div>
+      <button class="chat-menu-item" data-chat-menu="pin" role="menuitem">
+        <img src="./icons/menu-generated/pin.png?v=selected-set-3" alt="">
+        <span>置顶</span>
+      </button>
+      <button class="chat-menu-item" data-chat-menu="copy" role="menuitem">
+        <img src="./icons/menu-generated/copy.png?v=selected-set-3" alt="">
+        <span>复制会话 ID</span>
+      </button>
+      <button class="chat-menu-item" data-chat-menu="rename" role="menuitem">
+        <img src="./icons/menu-generated/rename.png?v=selected-set-3" alt="">
+        <span>重命名</span>
+      </button>
+      <button class="chat-menu-item chat-menu-danger" data-chat-menu="archive" role="menuitem">
+        <img src="./icons/menu-generated/archive.png?v=selected-set-3" alt="">
+        <span>归档</span>
+      </button>
+    </section>
+  </div>
 
-  <script src="./app.js"></script>
+  <div id="contextUsageLayer" class="context-usage-layer" hidden>
+    <div id="contextUsageScrim" class="context-usage-scrim"></div>
+    <section class="context-usage-card" role="dialog" aria-modal="true" aria-label="上下文用量">
+      <div class="context-usage-head">
+        <div class="context-usage-head-left"><span>上下文已用</span><strong id="contextUsagePercent">0%</strong></div>
+        <strong id="contextUsageTotal">—</strong>
+      </div>
+      <div class="context-usage-track" aria-hidden="true"><span id="contextUsageTrackFill"></span></div>
+      <div class="context-usage-rows">
+        <div class="context-usage-row">
+          <img class="context-usage-icon context-usage-wrench" src="./icons/maintenance-icons8.png" alt="">
+          <span>系统提示词</span><strong id="contextSystemPrompt">—</strong>
+        </div>
+        <div class="context-usage-row">
+          <img class="context-usage-icon context-usage-tools" src="./icons/tools-icons8.png" alt="">
+          <span>工具</span><strong id="contextTools">—</strong>
+        </div>
+        <div class="context-usage-row">
+          <img class="context-usage-icon context-usage-no-chat" src="./icons/no-chat-icons8.png" alt="">
+          <span>对话消息</span><strong id="contextMessages">—</strong>
+        </div>
+      </div>
+      <div id="contextProviderInfo" class="context-provider-info" hidden></div>
+    </section>
+  </div>
+
+  <div id="settingsModal" class="modal-layer" hidden>
+    <section class="settings-modal glass" role="dialog" aria-modal="true">
+      <div class="modal-head"><div><span class="eyebrow">连接配置</span><h2>连接 DSH</h2></div><button id="closeSettings" class="icon-button">×</button></div>
+      <label>Bridge WebSocket 地址<input id="endpointInput" autocomplete="off" placeholder="ws://192.168.1.5:8788/ws"></label>
+      <label>Bridge Token<input id="tokenInput" type="password" autocomplete="off" placeholder="输入电脑端 Bridge Token"></label>
+      <p class="settings-hint">电脑端 Bridge 默认端口是 8788。地址可以填 ws://、http:// 或 https://，App 会自动补全 /ws。</p>
+      <div id="settingsStatus" class="settings-status"></div>
+      <div class="modal-actions"><button id="updateButton" class="secondary-button">检查更新</button><button id="disconnectButton" class="secondary-button">断开</button><button id="saveConnectButton" class="primary-button">保存并连接</button></div>
+    </section>
+  </div>
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <script src="./browser-bridge.js?v=runtime-context-filter-1"></script>
+  <script src="./app.js?v=remote-return-211"></script>
 </body>
 </html>
-

@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>DSH Remote</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body class="home-mode">
+  <div class="ambient ambient-a"></div><div class="ambient ambient-b"></div>
+  <div class="app-shell">
+    <aside id="drawer" class="drawer glass" aria-hidden="true">
+      <div class="drawer-head">
+        <div class="brand"><span class="brand-mark">✦</span><div><b>DSH Remote</b><small>远程工作台</small></div></div>
+        <button id="closeDrawer" class="icon-button" aria-label="关闭">×</button>
+      </div>
+      <div class="drawer-section-title">设备</div>
+      <div class="device-row"><span id="drawerDot" class="device-dot"></span><span id="drawerDevice">DSH Desktop</span><span id="drawerState" class="muted">未连接</span></div>
+      <div class="drawer-section-title">项目</div>
+      <div id="drawerProject" class="drawer-project">DSH</div>
+      <div class="drawer-section-title">快捷操作</div>
+      <button class="drawer-item" id="drawerRefresh">↻&nbsp; 刷新状态</button>
+      <button class="drawer-item" id="drawerSettings">⚙&nbsp; 连接设置</button>
+      <div class="drawer-note">状态来自电脑上的真实 DSH 事件。手机端不生成假进度。</div>
+    </aside>
+    <div id="drawerScrim" class="scrim" hidden></div>
+
+    <section id="homeView" class="home-view" aria-label="Remote 首页">
+      <header class="home-topbar">
+        <button id="homeBackButton" class="home-circle-button" aria-label="返回"><img src="./icons/arrow-back.svg" alt=""></button>
+        <h1>Remote</h1>
+        <button id="homeMoreButton" class="home-circle-button home-more" aria-label="更多"><img src="./icons/more-vert.svg" alt=""></button>
+      </header>
+
+      <section class="home-device-row" aria-label="设备状态">
+        <span id="homeDeviceDot" class="home-online-dot"></span>
+        <img class="home-device-icon" src="./icons/laptop-with-cursor.svg" alt="">
+        <strong id="homeDevice">DSH Desktop</strong>
+      </section>
+
+      <section class="home-section">
+        <h2>项目</h2>
+        <div id="homeProjects" class="home-list project-list"></div>
+      </section>
+
+      <section class="home-section home-recent-section">
+        <h2>最近</h2>
+        <div id="homeRecent" class="home-list recent-list"></div>
+      </section>
+
+      <div class="home-bottom-bar">
+        <label class="home-search">
+          <img class="home-search-icon" src="./icons/search.svg" alt="">
+          <input id="homeSearch" type="search" autocomplete="off" placeholder="搜索聊天" aria-label="搜索聊天">
+        </label>
+        <button id="homeComposeButton" class="home-action-button" aria-label="新聊天"></button>
+      </div>
+    </section>
+
+    <section id="projectView" class="project-view" aria-label="项目会话" hidden>
+      <header class="project-topbar">
+        <button id="projectBackButton" class="project-back-button" aria-label="返回首页"><img src="./icons/arrow-back.svg" alt=""></button>
+        <div class="project-heading">
+          <h1 id="projectTitle">项目</h1>
+          <div class="project-device-row">
+            <img src="./icons/laptop-with-cursor.svg" alt="">
+            <span id="projectDevice">DSH Desktop</span>
+            <span>·</span>
+            <span id="projectConnection">已连接</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="project-session-area">
+        <div id="projectChats" class="project-session-list"></div>
+        <div id="projectEmpty" class="project-empty-state">没有更多线程</div>
+      </main>
+
+      <div class="project-bottom-bar">
+        <label class="project-search">
+          <img src="./icons/search.svg" alt="">
+          <input id="projectSearch" type="search" autocomplete="off" placeholder="搜索聊天" aria-label="搜索项目聊天">
+        </label>
+        <button id="projectComposeButton" class="project-compose-button" type="button"><img src="./icons/compose.png" alt=""><span>聊天</span></button>
+      </div>
+    </section>
+
+    <section id="dashboardView" class="dashboard-view" hidden>
+      <section class="chat-view" aria-label="聊天详情">
+        <header class="chat-topbar">
+          <button id="chatBackButton" class="chat-circle-button" aria-label="返回首页"><img src="./icons/arrow-back.svg" alt=""></button>
+          <div class="chat-title-pill">
+            <strong id="chatTitle">确认编码是否消耗额度</strong>
+            <div class="chat-subtitle">
+              <img class="chat-folder-icon" src="./icons/folder2.svg" alt="">
+              <span id="chatProject">dsAPP</span>
+              <span class="chat-device-group">
+                <img class="chat-device-icon" src="./icons/laptop-with-cursor.svg" alt="">
+                <span id="chatDeviceDot" class="chat-device-dot" role="status" aria-label="已连接"></span>
+                <span id="chatDevice">MagicBook</span>
+                <span id="chatRetryText" class="chat-retry-text" aria-hidden="true"></span>
+              </span>
+            </div>
+          </div>
+          <div class="chat-actions-pill">
+            <button id="contextUsageButton" class="context-usage-button" type="button" aria-label="上下文用量" aria-expanded="false">
+              <span id="contextUsageRing" class="context-usage-ring" aria-hidden="true"></span>
+            </button>
+            <button id="settingsButton" class="chat-more-button" aria-label="更多"><img src="./icons/more-vert.svg" alt=""></button>
+          </div>
+        </header>
+
+        <main id="chatScroll" class="chat-scroll">
+          <div id="chatItems" class="chat-items"></div>
+        </main>
+
+        <form id="chatComposer" class="chat-composer" novalidate>
+          <div id="chatComposerImages" class="chat-composer-images" hidden></div>
+          <div class="chat-composer-input-row">
+            <textarea id="promptInput" rows="1" autocomplete="off" placeholder="在 DSH Desktop 上工作" aria-label="给 DSH 发消息"></textarea>
+          </div>
+          <div class="chat-composer-options-row" aria-label="输入选项">
+            <button id="sendButton" class="chat-plus-button" type="button" aria-label="添加资料或 DSH 命令"><img src="./icons/chat-plus.png" alt=""></button>
+            <button id="permissionButton" class="chat-composer-option chat-permission-button" type="button" aria-label="权限选择" aria-expanded="false">
+              <img id="permissionIconSlot" class="chat-permission-icon" src="data:image/png;base64,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" alt="权限">
+            </button>
+            <span class="chat-composer-spacer" aria-hidden="true"></span>
+            <button id="modelButton" class="chat-composer-option chat-model-button" type="button" aria-label="模型选择" aria-expanded="false">
+              <span id="modelLabel">hy3</span>
+            </button>
+            <button id="stopButton" class="chat-stop-button" type="button" aria-label="发送消息">
+              <svg class="chat-action-send" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 18V6m0 0-5.5 5.5M12 6l5.5 5.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+              <img class="chat-action-reply" src="./icons/dsh-reply-spinner.png" alt="DSH 正在回复">
+            </button>
+          </div>
+        </form>
+        <input id="chatAttachmentInput" type="file" accept="image/*" multiple hidden>
+        <div id="chatAttachmentLayer" class="chat-attachment-layer" hidden>
+          <div id="chatAttachmentScrim" class="chat-attachment-scrim"></div>
+          <section class="chat-attachment-card" role="menu" aria-label="添加资料和 DSH 命令">
+            <button class="chat-attachment-row chat-upload-row" data-attachment-action="image" role="menuitem">
+              <img class="chat-attachment-icon" src="./icons/picture-icons8.png" alt="">
+              <span>上传照片</span>
+            </button>
+            <div class="chat-attachment-divider" aria-hidden="true"></div>
+            <div class="chat-command-scroll" aria-label="DSH 命令列表">
+              <button class="chat-dsh-command" data-chat-command="compact" role="menuitem">
+                <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                <span class="chat-command-copy"><span class="chat-command-name">compact</span><span class="chat-command-description">Compact older conversation history</span></span>
+              </button>
+              <button class="chat-dsh-command" data-chat-command="export" role="menuitem">
+                <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                <span class="chat-command-copy"><span class="chat-command-name">export</span><span class="chat-command-description">Download this Session log as a ZIP archive</span></span>
+              </button>
+              <button class="chat-dsh-command" data-chat-command="feedback" role="menuitem">
+                <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                <span class="chat-command-copy"><span class="chat-command-name">feedback</span><span class="chat-command-description">record feedback about this session</span></span>
+              </button>
+              <button class="chat-dsh-command" data-chat-command="goal" role="menuitem">
+                <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                <span class="chat-command-copy"><span class="chat-command-name">goal</span><span class="chat-command-description">set or view the goal for a long-running task</span></span>
+              </button>
+              <button class="chat-dsh-command" data-chat-command="permission" role="menuitem">
+                <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                <span class="chat-command-copy"><span class="chat-command-name">permission</span><span class="chat-command-description">Switch the permission preset (sandbox mode + approval policy)</span></span>
+              </button>
+              <button class="chat-dsh-command" data-chat-command="plan" role="menuitem">
+                <img class="chat-command-icon" src="./icons/at.svg" alt="">
+                <span class="chat-command-copy"><span class="chat-command-name">plan</span><span class="chat-command-description">Enter or leave plan mode</span></span>
+              </button>
+            </div>
+          </section>
+        </div>
+        <div id="chatSelectorLayer" class="chat-selector-layer" hidden>
+          <div id="chatSelectorScrim" class="chat-selector-scrim"></div>
+          <section id="chatSelectorCard" class="chat-selector-card" role="dialog" aria-modal="true" aria-label="选择输入选项">
+            <div id="chatSelectorTitle" class="chat-selector-title">选择</div>
+            <div id="chatSelectorOptions" class="chat-selector-options"></div>
+          </section>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <div id="newChatLayer" class="new-chat-layer" hidden>
+    <div id="newChatScrim" class="new-chat-scrim"></div>
+    <section class="new-chat-card" role="dialog" aria-modal="true" aria-label="新建对话">
+      <div class="new-chat-handle" aria-hidden="true"></div>
+      <h2>新建对话</h2>
+      <button class="new-chat-option new-chat-create-option" data-new-chat-action="new-project" type="button">
+        <span class="new-chat-folder-plus"><img class="new-chat-option-icon" src="./icons/folder2.svg" alt=""><span>+</span></span>
+        <span class="new-chat-option-copy"><strong>新建项目</strong><small>创建项目并开始新对话</small></span>
+        <span class="new-chat-chevron" aria-hidden="true">›</span>
+      </button>
+      <div class="new-chat-section-label">历史项目</div>
+      <div id="newChatProjectList" class="new-chat-project-list" aria-label="历史项目"></div>
+    </section>
+  </div>
+
+  <div id="chatMenuLayer" class="chat-menu-layer" hidden>
+    <div id="chatMenuScrim" class="chat-menu-scrim"></div>
+    <section class="chat-menu-card" role="menu" aria-label="会话菜单">
+      <div id="chatMenuTitle" class="chat-menu-title">Remote DSH</div>
+      <button class="chat-menu-item" data-chat-menu="pin" role="menuitem">
+        <img src="../icons/menu-generated/pin.png?v=selected-set-2" alt="">
+        <span>置顶</span>
+      </button>
+      <button class="chat-menu-item" data-chat-menu="copy" role="menuitem">
+        <img src="../icons/menu-generated/copy.png?v=selected-set-2" alt="">
+        <span>复制会话 ID</span>
+      </button>
+      <button class="chat-menu-item" data-chat-menu="rename" role="menuitem">
+        <img src="../icons/menu-generated/rename.png?v=selected-set-2" alt="">
+        <span>重命名</span>
+      </button>
+      <button class="chat-menu-item chat-menu-danger" data-chat-menu="archive" role="menuitem">
+        <img src="../icons/menu-generated/archive.png?v=selected-set-2" alt="">
+        <span>归档</span>
+      </button>
+    </section>
+  </div>
+
+  <div id="contextUsageLayer" class="context-usage-layer" hidden>
+    <div id="contextUsageScrim" class="context-usage-scrim"></div>
+    <section class="context-usage-card" role="dialog" aria-modal="true" aria-label="上下文用量">
+      <div class="context-usage-head">
+        <div class="context-usage-head-left"><span>上下文已用</span><strong id="contextUsagePercent">0%</strong></div>
+        <strong id="contextUsageTotal">—</strong>
+      </div>
+      <div class="context-usage-track" aria-hidden="true"><span id="contextUsageTrackFill"></span></div>
+      <div class="context-usage-rows">
+        <div class="context-usage-row">
+          <img class="context-usage-icon context-usage-wrench" src="./icons/maintenance-icons8.png" alt="">
+          <span>系统提示词</span><strong id="contextSystemPrompt">—</strong>
+        </div>
+        <div class="context-usage-row">
+          <img class="context-usage-icon context-usage-tools" src="./icons/tools-icons8.png" alt="">
+          <span>工具</span><strong id="contextTools">—</strong>
+        </div>
+        <div class="context-usage-row">
+          <img class="context-usage-icon context-usage-no-chat" src="./icons/no-chat-icons8.png" alt="">
+          <span>对话消息</span><strong id="contextMessages">—</strong>
+        </div>
+      </div>
+      <div id="contextProviderInfo" class="context-provider-info" hidden></div>
+    </section>
+  </div>
+
+  <div id="settingsModal" class="modal-layer" hidden>
+    <section class="settings-modal glass" role="dialog" aria-modal="true">
+      <div class="modal-head"><div><span class="eyebrow">连接配置</span><h2>连接 DSH</h2></div><button id="closeSettings" class="icon-button">×</button></div>
+      <label>Bridge WebSocket 地址<input id="endpointInput" autocomplete="off" placeholder="ws://192.168.1.5:8788/ws"></label>
+      <label>Bridge Token<input id="tokenInput" type="password" autocomplete="off" placeholder="输入电脑端 Bridge Token"></label>
+      <p class="settings-hint">电脑端 Bridge 默认端口是 8788。地址可以填 ws://、http:// 或 https://，App 会自动补全 /ws。</p>
+      <div id="settingsStatus" class="settings-status"></div>
+      <div class="modal-actions"><button id="updateButton" class="secondary-button">检查更新</button><button id="disconnectButton" class="secondary-button">断开</button><button id="saveConnectButton" class="primary-button">保存并连接</button></div>
+    </section>
+  </div>
+  <div id="toast" class="toast" aria-live="polite"></div>
+  <script src="./browser-bridge.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
