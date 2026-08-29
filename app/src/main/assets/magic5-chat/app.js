@@ -39,6 +39,23 @@
   const projectMenuLayer = $('projectMenuLayer');
   const projectMenuPopover = $('projectMenuPopover');
   const apiProjectNoteLayer = $('apiProjectNoteLayer');
+  const conversationRenameLayer = $('conversationRenameLayer');
+  const splash = $('splash');
+  let splashDone = false;
+  let keepComposerKeyboard = false;
+  let exitBackDeadline = 0;
+  let shouldPlaySplash = false;
+  try {
+    shouldPlaySplash = !isBrowserPreview && !sessionStorage.getItem('magic5.chat.splash-shown');
+    if (shouldPlaySplash) sessionStorage.setItem('magic5.chat.splash-shown', '1');
+  } catch (_) { shouldPlaySplash = !isBrowserPreview; }
+  const finishSplash = () => {
+    if (splashDone) return;
+    splashDone = true;
+    if (splash) splash.hidden = true;
+    if (chatPage.hidden) chatPage.hidden = false;
+    requestTitleMarqueeMeasure();
+  };
 
   const DEFAULT_CONFIG = { base_url: 'https://api.deepseek.com', api_key: '', model: 'deepseek-chat', system_prompt: '' };
   const STORAGE_KEY = 'deepseek.chat.conversations.v2';
@@ -308,6 +325,29 @@
       button.onclick = () => { state.activeId = conversation.id; closeSidebar(); renderMessages(); }; list.appendChild(button);
     });
   };
+  // 标题胶囊溢出检测：超出可用宽度时加 is-marquee，横向循环滚动显示全称。
+  // 可用宽度取胶囊内容宽（含 padding 之外的部分），文本宽度用 scrollWidth（不受布局截断影响）。
+  const syncTitleMarquee = () => {
+    if (chatPage.hidden) return; // 开屏/隐藏期间布局不可用，跳过等待下一次重测
+    const title = $('conversationTitle'); const pill = title?.closest('.conversation-title-pill');
+    if (!title || !pill) return;
+    const pillStyle = getComputedStyle(pill);
+    const padX = (parseFloat(pillStyle.paddingLeft) || 0) + (parseFloat(pillStyle.paddingRight) || 0);
+    const available = Math.max(0, pill.clientWidth - padX);
+    const shift = Math.max(0, title.scrollWidth - available);
+    if (shift > 1 && available > 0) {
+      pill.classList.add('is-marquee');
+      pill.style.setProperty('--marquee-shift', `-${Math.round(shift)}px`);
+      pill.style.setProperty('--marquee-duration', `${Math.min(10, Math.max(4.5, shift / 32 + 2.5)).toFixed(2)}s`);
+    } else {
+      pill.classList.remove('is-marquee');
+    }
+  };
+  const requestTitleMarqueeMeasure = () => {
+    requestAnimationFrame(syncTitleMarquee);
+    setTimeout(syncTitleMarquee, 160); // 字体加载/布局稳定后兜底重测
+    setTimeout(syncTitleMarquee, 520);
+  };
   const renderMessages = () => {
     const conversation = activeConversation();
     conversationContent.innerHTML = '';
@@ -321,7 +361,7 @@
     const scroll = $('messageScroll'); if (scroll) requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
     $('conversationTitle').textContent = conversation?.title || '今天的灵感';
     if ($('featureMenuTitle')) $('featureMenuTitle').textContent = conversation?.title || '今天的灵感';
-    setConversationFolder(conversation?.projectName || ''); renderRecentChats(); renderContextCard();
+    setConversationFolder(conversation?.projectName || ''); renderRecentChats(); renderContextCard(); requestTitleMarqueeMeasure();
   };
   // 仅对最新一条消息播放入场动画（renderMessages 每帧重建节点，
   // 若直接给气泡挂动画会在流式渲染时反复重播）。
@@ -493,14 +533,38 @@
     state.conversations.unshift({ id, title: '新对话', projectName: '', updatedAt: Date.now(), messages: [] });
     state.activeId = id; saveConversations(); showChatPage(); messageInput?.focus(); showToast('已打开新对话');
   };
+  const openConversationRename = () => {
+    if (!conversationRenameLayer) return;
+    const conversation = activeConversation();
+    const input = $('conversationRenameInput');
+    if (input) { input.value = conversation?.title || ''; setTimeout(() => input.focus(), 0); }
+    conversationRenameLayer.hidden = false;
+  };
+  const closeConversationRename = () => { if (conversationRenameLayer) conversationRenameLayer.hidden = true; };
+  const saveConversationRename = () => {
+    const conversation = activeConversation();
+    const input = $('conversationRenameInput');
+    if (!conversation || !input) { closeConversationRename(); return; }
+    const name = String(input.value || '').trim();
+    if (!name) { showToast('请输入对话名称'); input.focus(); return; }
+    conversation.title = name;
+    saveConversations(); closeConversationRename(); renderMessages(); showToast('已重命名对话');
+  };
 
-  const closeOverlays = () => { attachmentLayer.hidden = true; featureLayer.hidden = true; if (apiProjectPickerLayer) apiProjectPickerLayer.hidden = true; if (chatSelectorLayer) chatSelectorLayer.hidden = true; if (contextLayer) contextLayer.hidden = true; if (projectMenuLayer) projectMenuLayer.hidden = true; closeApiProjectCreate(); closeApiProjectNote(); $('attachmentButton')?.setAttribute('aria-expanded', 'false'); $('featureButton')?.setAttribute('aria-expanded', 'false'); $('chatModelButton')?.setAttribute('aria-expanded', 'false'); $('chatEffortButton')?.setAttribute('aria-expanded', 'false'); $('contextButton')?.setAttribute('aria-expanded', 'false'); };
+  const closeOverlays = () => { attachmentLayer.hidden = true; featureLayer.hidden = true; if (apiProjectPickerLayer) apiProjectPickerLayer.hidden = true; if (chatSelectorLayer) chatSelectorLayer.hidden = true; if (contextLayer) contextLayer.hidden = true; if (projectMenuLayer) projectMenuLayer.hidden = true; closeApiProjectCreate(); closeApiProjectNote(); closeConversationRename(); $('attachmentButton')?.setAttribute('aria-expanded', 'false'); $('featureButton')?.setAttribute('aria-expanded', 'false'); $('chatModelButton')?.setAttribute('aria-expanded', 'false'); $('chatEffortButton')?.setAttribute('aria-expanded', 'false'); $('contextButton')?.setAttribute('aria-expanded', 'false'); };
   const closeSidebar = () => { sidebarLayer.hidden = true; $('menuButton')?.setAttribute('aria-expanded', 'false'); };
   const openSidebar = () => { closeOverlays(); sidebarLayer.hidden = false; $('menuButton')?.setAttribute('aria-expanded', 'true'); };
   const showRemoteView = (route = 'remote') => { closeOverlays(); closeSidebar(); closeApiProjectCreate(); [settingsView, chatPage, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; }); remoteView.hidden = false; syncRemoteFrameInsets(); requestRemoteRoute(route); };
   const showSettingsView = (returnView = 'chat') => { closeOverlays(); closeSidebar(); closeApiProjectCreate(); state.settingsReturnView = returnView === 'remote' ? 'remote' : 'chat'; remoteView.hidden = true; chatPage.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; settingsView.hidden = false; loadConfigIntoForm(); };
   const closeSettingsView = () => { settingsView.hidden = true; if (state.settingsReturnView === 'remote') { remoteView.hidden = false; chatPage.hidden = true; syncRemoteFrameInsets(); return; } remoteView.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; chatPage.hidden = false; renderMessages(); };
-  const openOverlay = (layer, trigger) => { closeOverlays(); layer.hidden = false; trigger?.setAttribute('aria-expanded', 'true'); };
+  // 展开态（键盘弹出、输入框有焦点）点开附件/模型/思考等级/上下文弹层时保持输入栏展开：
+  // 这些文件内没有任何 blur 逻辑，按 pointerdown 记录焦点状态，弹层打开后重新聚焦 messageInput 兜底。
+  const restoreComposerFocus = () => {
+    if (!keepComposerKeyboard) return;
+    keepComposerKeyboard = false;
+    setTimeout(() => { try { messageInput?.focus({ preventScroll: true }); } catch (_) { messageInput?.focus(); } }, 0);
+  };
+  const openOverlay = (layer, trigger) => { closeOverlays(); layer.hidden = false; trigger?.setAttribute('aria-expanded', 'true'); restoreComposerFocus(); };
 
   const setApiStatus = (message, kind = '') => { const node = $('apiSettingsStatus'); node.textContent = message || ''; node.className = `api-settings-status${kind ? ` ${kind}` : ''}`; };
   const updateApiDot = (stateName) => { const dot = $('apiStatusDot'); if (!dot) return; dot.className = `api-status-dot ${stateName}`; dot.setAttribute('aria-label', stateName === 'online' ? '已配置' : stateName === 'testing' ? '测试中' : '未配置'); };
@@ -523,8 +587,8 @@
     syncChatSelectors();
   };
   const persistChatSelection = () => { try { const config = { ...state.api, effort: state.selectedEffort || 'auto' }; native?.saveApiConfig?.(JSON.stringify(config)); localStorage.setItem(CONFIG_KEY, JSON.stringify(config)); } catch (_) {} };
-  const openChatSelector = (trigger, mode = '') => { closeOverlays(); if (!chatSelectorLayer) return; const selectedMode = mode || (trigger?.id === 'chatEffortButton' ? 'effort' : 'model'); const popover = chatSelectorLayer.querySelector('.chat-selector-popover'); if (popover) popover.dataset.mode = selectedMode; chatSelectorLayer.hidden = false; trigger?.setAttribute('aria-expanded', 'true'); syncChatSelectors(); };
-  const openContextCard = () => { closeOverlays(); if (!contextLayer) return; renderContextCard(); contextLayer.hidden = false; $('contextButton')?.setAttribute('aria-expanded', 'true'); };
+  const openChatSelector = (trigger, mode = '') => { closeOverlays(); if (!chatSelectorLayer) return; const selectedMode = mode || (trigger?.id === 'chatEffortButton' ? 'effort' : 'model'); const popover = chatSelectorLayer.querySelector('.chat-selector-popover'); if (popover) popover.dataset.mode = selectedMode; chatSelectorLayer.hidden = false; trigger?.setAttribute('aria-expanded', 'true'); syncChatSelectors(); restoreComposerFocus(); };
+  const openContextCard = () => { closeOverlays(); if (!contextLayer) return; renderContextCard(); contextLayer.hidden = false; $('contextButton')?.setAttribute('aria-expanded', 'true'); restoreComposerFocus(); };
   const loadApiConfig = () => {
     let stored = null; try { stored = native?.getApiConfig?.() || localStorage.getItem(CONFIG_KEY); } catch (_) {}
     const config = safeJson(stored, {}); state.api = { ...DEFAULT_CONFIG, ...(config && typeof config === 'object' ? config : {}) }; if (!state.api.base_url) state.api.base_url = DEFAULT_CONFIG.base_url; state.selectedEffort = String(config?.effort || 'auto'); if (state.api.model) state.apiModels = [...new Set([...state.apiModels, String(state.api.model)])]; renderApiModels();
@@ -690,6 +754,7 @@
     if (action === 'pin') {
       conversation.pinned = !conversation.pinned; conversation.updatedAt = Date.now(); saveConversations(); renderRecentChats(); showToast(conversation.pinned ? '已置顶当前对话' : '已取消置顶'); return;
     }
+    if (action === 'rename') { openConversationRename(); return; }
     if (action === 'project') { if (conversation.projectName) { showToast(`已在项目「${conversation.projectName}」中`); return; } if (!state.projects.length) { showApiProjects(); openApiProjectCreate(); return; } openApiProjectPicker(); return; }
     if (action === 'files') { const count = (conversation.messages || []).filter((message) => message.attachment).length; showToast(count ? `本对话有 ${count} 个已上传文件` : '本对话暂无已上传文件'); return; }
     if (action === 'find') { showToast('可在聊天内容中查找'); messageInput.focus(); return; }
@@ -704,6 +769,11 @@
   window.DeepSeekEvents.onEvent = (name, raw) => { if (name === 'test' && state.apiTestPending) { const data = safeJson(raw, {}); const models = Array.isArray(data.models) ? data.models.map((item) => typeof item === 'string' ? item : item?.id).filter(Boolean) : []; if (models.length) { state.apiModels = models; if (!models.includes(state.api.model)) state.api.model = models[0]; renderApiModels(); persistChatSelection(); } setApiStatus(data.ok ? (data.message || '连接成功') : (data.message || '连接失败'), data.ok ? 'success' : 'error'); setApiTestBusy(false); state.apiTestPending = false; updateApiDot(data.ok ? 'online' : 'offline'); return; } baseApiHandler(name, raw); };
 
   $('attachmentButton').onclick = () => openOverlay(attachmentLayer, $('attachmentButton')); $('featureButton').onclick = () => openOverlay(featureLayer, $('featureButton')); $('contextButton').onclick = openContextCard; $('chatModelButton').onclick = () => openChatSelector($('chatModelButton'), 'model'); $('chatEffortButton').onclick = () => openChatSelector($('chatEffortButton'), 'effort'); document.querySelectorAll('[data-close-overlay]').forEach((node) => { node.onclick = closeOverlays; });
+  // 展开态点击弹层按钮时记录输入框是否有焦点（pointerdown 早于任何焦点转移），
+  // 弹层打开后据此恢复 messageInput 焦点、保持键盘与输入栏展开。
+  ['attachmentButton', 'featureButton', 'chatModelButton', 'chatEffortButton', 'contextButton'].forEach((id) => {
+    $(id)?.addEventListener('pointerdown', () => { keepComposerKeyboard = document.activeElement === messageInput; }, { passive: true });
+  });
   document.querySelectorAll('[data-feature-action]').forEach((button) => { button.onclick = () => handleFeatureAction(button.dataset.featureAction || ''); });
   $('apiProjectPickerList')?.addEventListener('click', (event) => { const row = event.target.closest('.api-project-picker-row'); if (!row) return; addActiveChatToApiProject(state.projects.find((project) => String(project.id) === String(row.dataset.projectId))); });
   $('apiProjectPickerCreate')?.addEventListener('click', () => { closeOverlays(); openApiProjectCreate(); });
@@ -732,6 +802,10 @@
   $('apiProjectCreateCancel')?.addEventListener('click', closeApiProjectCreate);
   $('apiProjectCreateConfirm')?.addEventListener('click', createApiProject);
   $('apiProjectNameInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); createApiProject(); } if (event.key === 'Escape') closeApiProjectCreate(); });
+  $('conversationRenameScrim')?.addEventListener('click', closeConversationRename);
+  $('conversationRenameCancel')?.addEventListener('click', closeConversationRename);
+  $('conversationRenameConfirm')?.addEventListener('click', saveConversationRename);
+  $('conversationRenameInput')?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); saveConversationRename(); } if (event.key === 'Escape') closeConversationRename(); });
   $('shellSettingsCheckUpdateButton')?.addEventListener('click', () => {
     const remoteUpdateButton = remoteFrame?.contentDocument?.getElementById('updateButton');
     if (!remoteUpdateButton) { showToast('更新服务尚未就绪，请稍后重试'); return; }
@@ -743,10 +817,16 @@
   document.querySelectorAll('[data-project-name]').forEach((button) => { button.onclick = () => { const project = button.dataset.projectName || ''; const conversation = activeConversation(); conversation.projectName = project; conversation.updatedAt = Date.now(); saveConversations(); showToast(`已选择项目：${project}`); renderMessages(); }; });
   $('composer').onsubmit = (event) => { event.preventDefault(); sendMessage(); }; messageInput.oninput = () => { messageInput.style.height = '42px'; messageInput.style.height = `${Math.min(112, messageInput.scrollHeight)}px`; }; $('apiSaveButton').onclick = saveApiConfig; $('apiTestButton').onclick = testApi;
   messageInput.onkeydown = (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } };
+  // 标题滚动测量兜底：字体就绪、胶囊尺寸变化、窗口变化时重测
+  try { document.fonts?.ready?.then(() => syncTitleMarquee()); } catch (_) {}
+  window.addEventListener('resize', syncTitleMarquee);
+  const titlePill = $('conversationTitle')?.closest('.conversation-title-pill');
+  if (titlePill && 'ResizeObserver' in window) { try { new ResizeObserver(() => syncTitleMarquee()).observe(titlePill); } catch (_) {} }
   window.addEventListener('keydown', (event) => { if (event.key !== 'Escape') return; if (!settingsView.hidden) closeSettingsView(); else { closeOverlays(); closeSidebar(); } });
   window.handleSystemBack = () => {
     if (!settingsView.hidden) { closeSettingsView(); return true; }
     if (apiProjectCreateLayer && !apiProjectCreateLayer.hidden) { closeApiProjectCreate(); return true; }
+    if (conversationRenameLayer && !conversationRenameLayer.hidden) { closeConversationRename(); return true; }
     if (apiProjectPickerLayer && !apiProjectPickerLayer.hidden) { closeOverlays(); return true; }
     if (apiProjectView && !apiProjectView.hidden) { showApiProjects(); return true; }
     if (apiProjectsView && !apiProjectsView.hidden) { showChatPage(); return true; }
@@ -760,8 +840,21 @@
     }
     if (!sidebarLayer.hidden) { closeSidebar(); return true; }
     if (!attachmentLayer.hidden || !featureLayer.hidden || !chatSelectorLayer?.hidden || !contextLayer?.hidden) { closeOverlays(); return true; }
+    // 主页（无任何弹层/页面可关闭）：第一次返回提示，2 秒内再次返回才放行退出
+    const now = Date.now();
+    if (now > exitBackDeadline) { exitBackDeadline = now + 2000; showToast('再按一次退出'); return true; }
+    exitBackDeadline = 0;
     return false;
   };
 
   loadConversations(); loadProjects(); loadApiConfig(); renderMessages();
+  // 开屏：仅本次应用启动播一次（sessionStorage 标记；预览模式跳过）。
+  // 播放期间 chatPage 保持 hidden（开屏盖在其上），结束后移除遮罩并触发 view-in 入场。
+  if (shouldPlaySplash && splash) {
+    splash.addEventListener('animationend', (event) => { if (event.target === splash && event.animationName === 'splash-cycle') finishSplash(); });
+    setTimeout(finishSplash, 1100); // 兜底：动画事件缺失时也不卡住界面
+    requestAnimationFrame(() => { if (!splashDone) splash.classList.add('splash-play'); });
+  } else {
+    finishSplash();
+  }
 })();

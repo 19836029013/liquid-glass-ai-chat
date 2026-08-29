@@ -7,6 +7,11 @@
   <link rel="stylesheet" href="./styles.css?v=backend-api-1">
 </head>
 <body>
+  <div id="splash" class="splash" aria-hidden="true">
+    <img class="splash-whale" src="./icons/dsh-whale.png" alt="">
+    <img class="splash-wordmark" src="./icons/deepseek-wordmark.svg" alt="deepseek">
+  </div>
+
   <div id="sidebarLayer" class="sidebar-layer" hidden>
     <div class="sidebar-scrim" data-close-sidebar></div>
     <aside class="sidebar" aria-label="主导航侧边栏">
@@ -123,7 +128,7 @@
       </div>
       <div class="settings-version-summary">
         <img src="../icons/settings-generated/version.png?v=selected-set-2" alt="">
-        <div><strong>当前版本</strong><span>v1.12.11</span></div>
+        <div><strong>当前版本</strong><span>v1.12.12</span></div>
         <span class="settings-version-state">已是最新版</span>
       </div>
       <div class="settings-version-rule" aria-hidden="true"></div>
@@ -132,7 +137,7 @@
 
   </main>
 
-  <main id="chatPage" class="chat-page" aria-label="聊天主页">
+  <main id="chatPage" class="chat-page" aria-label="聊天主页" hidden>
     <header class="chat-header">
       <button id="menuButton" class="header-button" type="button" aria-label="打开侧边栏" aria-expanded="false">
         <img src="./icons/menu.svg" alt="">
@@ -203,6 +208,7 @@
         <button class="feature-row" type="button" data-feature-action="project" role="menuitem"><img src="../icons/menu-generated/project.png?v=selected-set-3" alt=""><span>添加到项目</span><img class="feature-arrow" src="../icons/arrow-back.svg" alt=""></button>
         <button class="feature-row" type="button" data-feature-action="files" role="menuitem"><img src="../icons/menu-generated/paperclip.png?v=selected-set-3" alt=""><span>已上传文件</span></button>
         <button class="feature-row" type="button" data-feature-action="find" role="menuitem"><img src="../icons/menu-generated/search.png?v=selected-set-3" alt=""><span>在聊天中查找</span></button>
+        <button class="feature-row" type="button" data-feature-action="rename" role="menuitem"><img src="../icons/menu-generated/rename.png?v=selected-set-3" alt=""><span>重命名</span></button>
         <button class="feature-row feature-danger" type="button" data-feature-action="archive" role="menuitem"><img src="../icons/menu-generated/archive.png?v=selected-set-3" alt=""><span>归档</span></button>
         <button class="feature-row feature-danger" type="button" data-feature-action="delete" role="menuitem"><img src="../icons/menu-generated/trash.png?v=selected-set-3" alt=""><span>删除</span></button>
       </section>
@@ -350,9 +356,24 @@
     </section>
   </div>
 
+  <div id="conversationRenameLayer" class="conversation-rename-layer" hidden>
+    <div id="conversationRenameScrim" class="conversation-rename-scrim"></div>
+    <section class="conversation-rename-card" role="dialog" aria-modal="true" aria-labelledby="conversationRenameTitle">
+      <div class="conversation-rename-icon"><img src="../icons/menu-generated/rename.png?v=selected-set-3" alt=""></div>
+      <h2 id="conversationRenameTitle">重命名对话</h2>
+      <p>修改后仅影响本机显示</p>
+      <label class="conversation-rename-label" for="conversationRenameInput">对话名称</label>
+      <input id="conversationRenameInput" class="conversation-rename-input" type="text" maxlength="48" autocomplete="off" placeholder="例如：我的对话">
+      <div class="conversation-rename-actions">
+        <button id="conversationRenameCancel" class="conversation-rename-cancel" type="button">取消</button>
+        <button id="conversationRenameConfirm" class="conversation-rename-confirm" type="button">保存</button>
+      </div>
+    </section>
+  </div>
+
   <main id="remoteView" class="remote-view" hidden aria-label="Remote 功能">
     <section class="remote-frame-shell" aria-label="DSH Remote 工作台">
-      <iframe id="remoteApp" title="DSH Remote 工作台" src="../index.html?source=deepseek-logo&embedded=1&v=1.12.11&shell=23"></iframe>
+      <iframe id="remoteApp" title="DSH Remote 工作台" src="../index.html?source=deepseek-logo&embedded=1&v=1.12.12&shell=23"></iframe>
     </section>
   </main>
 

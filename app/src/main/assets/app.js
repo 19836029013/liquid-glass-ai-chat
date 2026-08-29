@@ -929,7 +929,7 @@
     const deviceName = device.name || snapshot.deviceName || 'MagicBook';
     text('settingsDesktopName', deviceName);
     text('settingsDesktopStatus', state.connected ? '已连接' : '未连接');
-    text('settingsVersionNumber', 'v1.12.11');
+    text('settingsVersionNumber', 'v1.12.12');
     text('settingsVersionState', '已是最新版');
     text('settingsVersionNote', '当前已安装最新版本');
   }
@@ -1332,11 +1332,18 @@
     // the whole transcript flashes and loses the scroll momentum.
     if (sameSession && previousIdentityKeys.length === identityKeys.length
       && identityKeys.every((value, index) => value === previousIdentityKeys[index])) {
+      // A streamed reply rewrites its node every 100-300ms. Replaying the
+      // chat-item-update animation on each packet makes the whole text flicker,
+      // so skip the animation while a reply is in flight (state.replying) or a
+      // live assistant note is still pending. Once the stream settles, later
+      // non-streaming updates (delivery state, edited history, images) animate
+      // again so the change does not jump without the flash.
+      const streamActive = state.replying || items.some((item) => item.kind === 'note' && String(item.id || '').startsWith('live:'));
       let changed = false;
       [...root.children].forEach((element, index) => {
         if (keys[index] === previous.keys[index]) return;
         const next = chatItemElement(items[index]);
-        next.classList.add('chat-item-update');
+        if (!streamActive) next.classList.add('chat-item-update');
         element.replaceWith(next);
         changed = true;
       });
@@ -1891,15 +1898,22 @@
   }
 
   function openSelector(kind) {
+    // Mark the composer expanded / selector open BEFORE closing the other
+    // sheets: closeAttachmentMenu's collapse branch would otherwise shrink the
+    // bar in the same frame (keyboard up) before we re-expand it, which shows
+    // as the bar bouncing back to the bottom edge.
+    state.composerExpanded = true;
+    state.selectorKind = kind;
     closeAttachmentMenu();
     closeChatMenu();
     setContextUsageOpen(false);
-    state.composerExpanded = true;
-    state.selectorKind = kind;
     renderComposerOptions();
     renderSelector();
     syncComposerState();
-    preserveFocusedComposer();
+    trackComposerReserve();
+    // Force the focus so the keyboard stays (or re-opens) even on WebViews
+    // where tapping a button blurs the textarea despite the pointerdown guard.
+    preserveFocusedComposer(true);
     playComposerFeedback(kind === 'permission' ? 'permissionButton' : 'modelButton');
   }
 
@@ -1968,6 +1982,19 @@
     });
   }
 
+  // The composer expand animation runs 400ms while --chat-composer-reserve is
+  // re-measured only when it settles. Without this, a sheet opened right after
+  // tapping "+" anchors to the stale collapsed height and the rising composer
+  // cuts through it mid-animation. Re-measure every frame until the bar settles.
+  const trackComposerReserve = (duration = 520) => {
+    const until = performance.now() + duration;
+    const tick = () => {
+      if (!$('dashboardView')?.hidden) syncComposerViewport();
+      if (performance.now() < until) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
   function syncComposerState() {
     const button = $('stopButton');
     if (!button) return;
@@ -1979,7 +2006,6 @@
     $('chatAttachmentLayer')?.classList.toggle('composer-expanded', expanded);
     button.disabled = !state.connected;
     button.classList.toggle('replying', active);
-    button.classList.toggle('sending', !active);
     button.setAttribute('aria-label', active ? '停止 DSH 回复' : '发送消息');
     renderComposerOptions();
     requestAnimationFrame(syncComposerViewport);
@@ -2368,12 +2394,19 @@
     }
   }
   function openAttachmentMenu() {
+    // The "+" tap must never collapse the expanded composer behind the menu:
+    // force the expanded lane state and refocus the input so the keyboard
+    // stays (or re-opens) and the menu stays anchored above the double-lane
+    // bar. This also makes the collapsed-state tap expand the composer.
+    state.composerExpanded = true;
     closeChatMenu();
     closeSelector();
     setContextUsageOpen(false);
     $('chatAttachmentLayer').hidden = false;
     syncImageCapabilityRow();
-    preserveFocusedComposer();
+    syncComposerState();
+    trackComposerReserve();
+    preserveFocusedComposer(true);
     requestAnimationFrame(refreshCommandMarquees);
   }
   function closeAttachmentMenu() {
