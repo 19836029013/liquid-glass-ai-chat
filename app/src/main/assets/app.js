@@ -929,7 +929,7 @@
     const deviceName = device.name || snapshot.deviceName || 'MagicBook';
     text('settingsDesktopName', deviceName);
     text('settingsDesktopStatus', state.connected ? '已连接' : '未连接');
-    text('settingsVersionNumber', 'v1.12.9');
+    text('settingsVersionNumber', 'v1.12.10');
     text('settingsVersionState', '已是最新版');
     text('settingsVersionNote', '当前已安装最新版本');
   }

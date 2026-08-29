@@ -281,14 +281,14 @@
     const usedPercent = Math.max(0, Math.round(data.percent));
     const remainingPercent = 100 - usedPercent;
     const setText = (id, value) => { const node = $(id); if (node) node.textContent = value; };
-    setText('contextRemaining', `${remainingPercent}%`);
-    setText('contextRemainingTokens', formatNumber(data.remaining));
+    setText('contextRemaining', `剩余 ${remainingPercent}%`);
+    setText('contextRemainingTokens', `${formatNumber(data.remaining)} token`);
     setText('contextConversationTokens', formatNumber(data.total));
     setText('contextCost', formatCost(data.costTotal, data.costEstimatedAny));
     const detail = $('contextCostDetail');
     if (detail) {
       const parts = [];
-      if ((data.tokensIn || data.tokensOut) > 0) parts.push(`输入 ${formatTokens(data.tokensIn)} · 输出 ${formatTokens(data.tokensOut)}`);
+      if ((data.tokensIn || data.tokensOut) > 0) parts.push(`累计输入 ${formatTokens(data.tokensIn)} / 输出 ${formatTokens(data.tokensOut)} token`);
       const kindLabel = data.rateKinds.length === 1 ? ({ peak: '高峰价', valley: '空闲价', custom: '自定义单价' }[data.rateKinds[0]] || '') : (data.rateKinds.length > 1 ? '混合时段价' : '');
       if (kindLabel) parts.push(kindLabel);
       if (data.costEstimatedAny || !(data.tokensIn || data.tokensOut)) parts.push('按单价估算');
