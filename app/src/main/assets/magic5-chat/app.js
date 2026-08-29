@@ -323,6 +323,15 @@
     if ($('featureMenuTitle')) $('featureMenuTitle').textContent = conversation?.title || '今天的灵感';
     setConversationFolder(conversation?.projectName || ''); renderRecentChats(); renderContextCard();
   };
+  // 仅对最新一条消息播放入场动画（renderMessages 每帧重建节点，
+  // 若直接给气泡挂动画会在流式渲染时反复重播）。
+  const animateLastMessage = () => {
+    const node = conversationContent?.lastElementChild;
+    if (!node) return;
+    node.classList.add('is-new');
+    setTimeout(() => node.classList.remove('is-new'), 460);
+  };
+  const tapTick = () => { try { navigator.vibrate?.(10); } catch (_) {} };
 
   const showChatPage = () => {
     closeOverlays(); closeSidebar();
@@ -562,8 +571,8 @@
     const finish = () => { if (request.watchdog) { clearTimeout(request.watchdog); request.watchdog = null; } };
     if (name === 'usage') { const usage = (data.usage && typeof data.usage === 'object') ? data.usage : {}; request.roundUsage = { ...(request.roundUsage || {}), ...usage }; return; }
     if (name === 'delta' || name === 'reasoning') { if (name === 'delta') request.assistant.text += String(data.text || ''); request.assistant.pending = false; renderMessages(); return; }
-    if (name === 'done' || name === 'complete') { finish(); if (name === 'complete') request.assistant.text = String(data.text || request.assistant.text || ''); finishRound(request, data); request.assistant.pending = false; state.request = null; request.conversation.updatedAt = Date.now(); saveConversations(); renderMessages(); renderContextCard(); showToast('DeepSeek 已回复'); return; }
-    if (name === 'error') { finish(); finishRound(request, data, false); request.assistant.pending = false; request.assistant.error = true; request.assistant.text = request.assistant.text || `生成失败：${String(data.message || '请检查 API 配置')}`; state.request = null; saveConversations(); renderMessages(); renderContextCard(); showToast(String(data.message || 'DeepSeek 请求失败')); }
+    if (name === 'done' || name === 'complete') { finish(); if (name === 'complete') request.assistant.text = String(data.text || request.assistant.text || ''); finishRound(request, data); request.assistant.pending = false; state.request = null; request.conversation.updatedAt = Date.now(); saveConversations(); renderMessages(); animateLastMessage(); renderContextCard(); showToast('DeepSeek 已回复'); return; }
+    if (name === 'error') { finish(); finishRound(request, data, false); request.assistant.pending = false; request.assistant.error = true; request.assistant.text = request.assistant.text || `生成失败：${String(data.message || '请检查 API 配置')}`; state.request = null; saveConversations(); renderMessages(); animateLastMessage(); renderContextCard(); showToast(String(data.message || 'DeepSeek 请求失败')); }
   };
   window.DeepSeekEvents = { onEvent: handleApiEvent };
   const sendNativeApi = (conversation) => { if (!native || typeof native.streamChat !== 'function') return false; native.streamChat(JSON.stringify({ url: apiEndpoint(), apiKey: state.api.api_key, payload: { model: state.api.model || 'deepseek-chat', messages: buildMessages(conversation), stream: true, stream_options: { include_usage: true } } })); return true; };
@@ -643,7 +652,7 @@
     const value = messageInput.value.trim(); if (!value && !state.pendingAttachment) { showToast('先输入一条消息'); messageInput.focus(); return; }
     const conversation = activeConversation(); const attachment = state.pendingAttachment ? { ...state.pendingAttachment } : null; const user = { role: 'user', text: value, attachment }; conversation.messages.push(user);
     if (conversation.messages.filter((item) => item.role === 'user').length === 1 || conversation.title === '今天的灵感') conversation.title = formatTitle(value || attachment?.name || '图片对话');
-    conversation.updatedAt = Date.now(); const assistant = { role: 'assistant', text: '', pending: true }; conversation.messages.push(assistant); state.pendingAttachment = null; attachmentInput.value = ''; messageInput.value = ''; messageInput.style.height = '42px'; renderAttachment(); renderMessages();
+    conversation.updatedAt = Date.now(); const assistant = { role: 'assistant', text: '', pending: true }; conversation.messages.push(assistant); state.pendingAttachment = null; attachmentInput.value = ''; messageInput.value = ''; messageInput.style.height = '42px'; renderAttachment(); renderMessages(); animateLastMessage(); tapTick();
     if (!state.api.api_key) { assistant.pending = false; assistant.error = true; assistant.text = '还没有配置 API Key，请到设置中完成配置后再发送。'; saveConversations(); renderMessages(); showToast('请先配置 API Key'); showSettingsView(); return; }
     const request = { conversation, assistant, userChars: (value || '').length }; state.request = request; saveConversations();
     try {

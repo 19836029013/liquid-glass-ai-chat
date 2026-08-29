@@ -109,6 +109,49 @@ button:active { transform: scale(.97); }
 .project-menu-confirm-cancel { background: #f1f3f4; color: var(--ink); }
 .project-menu-confirm-delete { background: #ffe9ea; color: #e32935; }
 .api-project-create-textarea { min-height: 96px; height: auto; padding: 10px 14px; resize: none; font-family: inherit; line-height: 20px; }
+
+/* ============================================================
+   动效：打开/页面切换/弹层/回复/点击/发送
+   只用 transform + opacity，避免布局抖动；尊重系统减弱动效。
+   ============================================================ */
+button { -webkit-tap-highlight-color: transparent; transition: transform .14s ease, background-color .18s ease, border-color .18s ease, opacity .14s ease; }
+button:active:not(:disabled) { transform: scale(.965); }
+.send-button { transition: transform .16s cubic-bezier(.34,1.56,.64,1), background-color .18s ease; }
+.send-button:active:not(:disabled) { transform: scale(.88); }
+
+/* 页面切换：视图非隐藏时入场 */
+main:not([hidden]) { animation: view-in .30s cubic-bezier(.22,.61,.36,1) both; }
+@keyframes view-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* 弹层：遮罩淡入 + 卡片弹入 */
+.overlay-layer:not([hidden]) .overlay-scrim { animation: scrim-in .24s ease both; }
+.sidebar-layer:not([hidden]) .sidebar-scrim { animation: scrim-in .24s ease both; }
+.api-project-create-layer:not([hidden]) .api-project-create-scrim { animation: scrim-in .24s ease both; }
+@keyframes scrim-in { from { opacity: 0; } to { opacity: 1; } }
+.overlay-layer:not([hidden]) .popover { animation: popover-in .26s cubic-bezier(.2,.9,.3,1.16) both; transform-origin: 50% 38%; }
+.api-project-create-layer:not([hidden]) .api-project-create-card { animation: popover-in .30s cubic-bezier(.2,.9,.3,1.16) both; }
+@keyframes popover-in { from { opacity: 0; transform: scale(.92) translateY(8px); } to { opacity: 1; transform: none; } }
+.sidebar-layer:not([hidden]) .sidebar { animation: sidebar-in .30s cubic-bezier(.22,.61,.36,1) both; }
+@keyframes sidebar-in { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+
+/* 新消息气泡弹入（由 JS 加 is-new，避免流式重绘反复播放） */
+.is-new { animation: bubble-in .30s cubic-bezier(.2,.8,.3,1.08) both; }
+@keyframes bubble-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* 回复思考中的闪烁光标 */
+.assistant-message.is-pending::after { content: ''; display: inline-block; width: 2px; height: 1.05em; margin-left: 3px; vertical-align: -.18em; background: currentColor; animation: cursor-blink 1s steps(2, jump-none) infinite; }
+@keyframes cursor-blink { 50% { opacity: 0; } }
+
+/* 消息滚动平滑 */
+.message-scroll { scroll-behavior: smooth; }
+
+/* toast 弹入 */
+.toast { will-change: opacity, transform; }
+.toast.show { animation: toast-in .28s cubic-bezier(.2,.8,.3,1.1) both; }
+@keyframes toast-in { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
 .api-project-picker { top: calc(var(--safe-top) + 74px); right: 14px; width: min(250px, calc(100vw - 28px)); padding: 13px 9px 10px; border-radius: 24px; }
 .api-project-picker h2 { margin: 2px 14px 8px; color: var(--secondary); font-size: 13px; line-height: 18px; font-weight: 600; }
 .api-project-picker-list { display: grid; max-height: 230px; overflow-y: auto; }
