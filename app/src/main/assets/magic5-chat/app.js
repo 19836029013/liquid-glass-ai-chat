@@ -161,22 +161,31 @@
     return null;
   };
   const estimateTokens = (conversation) => Math.ceil((conversation?.messages || []).reduce((total, message) => total + String(message?.text || '').trim().length, 0) / 2);
-  // DeepSeek 官方价（元 / 百万 tokens，2026-05 永久降价后生效）；
+  // DeepSeek 官方峰谷价（元 / 百万 tokens，2026-08-17 起生效）：
+  // 高峰=每日 9:00–12:00、14:00–18:00（北京时间）；空闲=其余时间，价格减半。
   // deepseek-chat / deepseek-reasoner 已并入 V4-Flash 计费。
   const PRICE_TABLE = [
-    { test: /v4-pro|deepseek-pro/, hit: 0.025, miss: 3, output: 6 },
-    { test: /v4-flash|deepseek-chat|deepseek-reasoner|flash/, hit: 0.02, miss: 1, output: 2 },
+    { test: /v4-pro|deepseek-pro/, valley: { hit: 0.15, miss: 4.5, output: 13.5 }, peak: { hit: 0.3, miss: 9, output: 27 } },
+    { test: /v4-flash|deepseek-chat|deepseek-reasoner|flash/, valley: { hit: 0.05, miss: 1.5, output: 4.5 }, peak: { hit: 0.1, miss: 3, output: 9 } },
   ];
-  const DEFAULT_PRICE = { hit: 0.02, miss: 1, output: 2 };
-  const priceFor = (model) => {
+  const DEFAULT_PRICE = { valley: { hit: 0.05, miss: 1.5, output: 4.5 }, peak: { hit: 0.1, miss: 3, output: 9 } };
+  const PEAK_HOURS = [[9, 12], [14, 18]];
+  const isPeakNow = (date = new Date()) => { const beijing = new Date(date.getTime() + 8 * 3600_000); const hour = beijing.getUTCHours(); return PEAK_HOURS.some(([start, end]) => hour >= start && hour < end); };
+  const priceFor = (model, when = new Date()) => {
     const override = (state.api && state.api.prices) || {};
     const hit = Number(override.hit); const miss = Number(override.miss); const output = Number(override.output);
     if ([hit, miss, output].some((value) => Number.isFinite(value) && value > 0)) {
-      return { hit: Number.isFinite(hit) && hit > 0 ? hit : DEFAULT_PRICE.hit, miss: Number.isFinite(miss) && miss > 0 ? miss : DEFAULT_PRICE.miss, output: Number.isFinite(output) && output > 0 ? output : DEFAULT_PRICE.output };
+      const fallback = priceForTable(model, when);
+      return { hit: Number.isFinite(hit) && hit > 0 ? hit : fallback.hit, miss: Number.isFinite(miss) && miss > 0 ? miss : fallback.miss, output: Number.isFinite(output) && output > 0 ? output : fallback.output, kind: 'custom' };
     }
+    return priceForTable(model, when);
+  };
+  const priceForTable = (model, when) => {
     const name = String(model || '').toLowerCase();
-    for (const rule of PRICE_TABLE) if (rule.test.test(name)) return rule;
-    return DEFAULT_PRICE;
+    const entry = PRICE_TABLE.find((rule) => rule.test.test(name));
+    const rates = entry || DEFAULT_PRICE;
+    const kind = isPeakNow(when) ? 'peak' : 'valley';
+    return { ...(rates[kind] || rates.valley), kind };
   };
   const usageTokens = (usage) => {
     const source = usage && typeof usage === 'object' ? usage : {};
@@ -192,12 +201,12 @@
     if (!usage || typeof usage !== 'object') return null;
     const provided = numericValue(usage.cost, usage.total_cost, usage.totalCost);
     const tokens = usageTokens(usage);
-    if (provided !== null) return { cost: provided, estimated: false, tokens };
+    if (provided !== null) return { cost: provided, estimated: false, tokens, kind: '' };
     const price = priceFor(model);
     const per = (count, rate) => (count > 0 && rate > 0) ? (count / 1_000_000) * rate : 0;
     const cost = per(tokens.hit, price.hit) + per(tokens.miss, price.miss) + per(tokens.output, price.output);
     if (!(cost > 0)) return null;
-    return { cost, estimated: false, tokens };
+    return { cost, estimated: false, tokens, kind: price.kind };
   };
   const assistantMessages = (conversation) => (conversation?.messages || []).filter((message) => message.role === 'assistant');
   const totalAssistantCost = (conversation) => assistantMessages(conversation).reduce((sum, message) => { const cost = Number(message.cost); return Number.isFinite(cost) && cost > 0 ? sum + cost : sum; }, 0);
@@ -228,13 +237,14 @@
       if (fallback) { roundCostValue = fallback.cost; roundEstimated = true; roundTokens = fallback.tokens; }
     }
     const costTotal = totalAssistantCost(conversation) || Number(conversation?.cost) || 0;
-    let tokensIn = 0; let tokensOut = 0; let anyEstimated = false;
+    let tokensIn = 0; let tokensOut = 0; let anyEstimated = false; const rateKinds = new Set();
     assistantMessages(conversation).forEach((message) => {
       if (message.usage && typeof message.usage === 'object') { const tokens = usageTokens(message.usage); tokensIn += tokens.input; tokensOut += tokens.output; }
       else if (message.estimatedTokens) { tokensIn += Number(message.estimatedTokens.input || 0); tokensOut += Number(message.estimatedTokens.output || 0); }
       if (message.costEstimated) anyEstimated = true;
+      if (Number.isFinite(Number(message.cost)) && Number(message.cost) > 0 && message.rateKind) rateKinds.add(String(message.rateKind));
     });
-    return { total, limit, used, remaining: Math.max(0, limit - used), percent: limit ? Math.min(100, (used / limit) * 100) : 0, roundCost: roundCostValue, roundEstimated, roundTokens, costTotal, tokensIn, tokensOut, costEstimatedAny: anyEstimated };
+    return { total, limit, used, remaining: Math.max(0, limit - used), percent: limit ? Math.min(100, (used / limit) * 100) : 0, roundCost: roundCostValue, roundEstimated, roundTokens, costTotal, tokensIn, tokensOut, costEstimatedAny: anyEstimated, rateKinds: [...rateKinds] };
   };
   const formatNumber = (value) => Number(value || 0).toLocaleString('en-US');
   const formatTokens = (value) => { const n = Number(value || 0); return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1).replace(/\.0$/, '')}k` : String(Math.round(n)); };
@@ -254,14 +264,14 @@
     if (Object.keys(merged).length) request.assistant.usage = merged;
     const priced = Object.keys(merged).length ? roundCost(merged, state.api.model) : null;
     if (priced) {
-      request.assistant.cost = priced.cost; request.assistant.costEstimated = Boolean(priced.estimated);
+      request.assistant.cost = priced.cost; request.assistant.costEstimated = Boolean(priced.estimated); request.assistant.rateKind = priced.kind || '';
     } else if (allowEstimate) {
       const price = priceFor(state.api.model);
       const estIn = Math.ceil(Number(request.userChars || 0) / 2);
       const estOut = Math.ceil(String(request.assistant.text || '').trim().length / 2);
       if (estIn > 0 || estOut > 0) {
         const cost = (estIn / 1_000_000) * price.miss + (estOut / 1_000_000) * price.output;
-        if (cost > 0) { request.assistant.cost = cost; request.assistant.costEstimated = true; request.assistant.estimatedTokens = { input: estIn, output: estOut }; }
+        if (cost > 0) { request.assistant.cost = cost; request.assistant.costEstimated = true; request.assistant.estimatedTokens = { input: estIn, output: estOut }; request.assistant.rateKind = price.kind || ''; }
       }
     }
     request.conversation.cost = totalAssistantCost(request.conversation);
@@ -279,6 +289,8 @@
     if (detail) {
       const parts = [];
       if ((data.tokensIn || data.tokensOut) > 0) parts.push(`输入 ${formatTokens(data.tokensIn)} · 输出 ${formatTokens(data.tokensOut)}`);
+      const kindLabel = data.rateKinds.length === 1 ? ({ peak: '高峰价', valley: '空闲价', custom: '自定义单价' }[data.rateKinds[0]] || '') : (data.rateKinds.length > 1 ? '混合时段价' : '');
+      if (kindLabel) parts.push(kindLabel);
       if (data.costEstimatedAny || !(data.tokensIn || data.tokensOut)) parts.push('按单价估算');
       detail.textContent = parts.join(' · ');
     }
