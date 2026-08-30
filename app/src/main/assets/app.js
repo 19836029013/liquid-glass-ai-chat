@@ -969,7 +969,7 @@
     const deviceName = device.name || snapshot.deviceName || 'MagicBook';
     text('settingsDesktopName', deviceName);
     text('settingsDesktopStatus', state.connected ? '已连接' : '未连接');
-    text('settingsVersionNumber', 'v1.12.13');
+    text('settingsVersionNumber', 'v1.12.14');
     text('settingsVersionState', '已是最新版');
     text('settingsVersionNote', '当前已安装最新版本');
   }
@@ -2389,7 +2389,7 @@
         else if (isProcessingState && !isQueueState) pending.deliveryState = 'processing';
         else pending.deliveryState = 'queued';
       }
-      if (result.ok === false) showToast(result.error || '控制失败');
+      if (result.ok === false) showToast(result.type === 'session.activate' ? '会话打开失败，请检查电脑端 DSH 或稍后重试' : (result.error || '控制失败'));
       else if (isProcessingState && !isQueueState) showToast('DSH 已开始处理');
       else showToast('已交给 DSH，正在排队');
     } else if (type === 'error') {
