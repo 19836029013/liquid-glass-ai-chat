@@ -16,12 +16,16 @@ const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data
 const CONV_DIR = path.join(DATA_DIR, 'convs');
 const ATTACH_DIR = path.join(DATA_DIR, 'attachments');
 const SYNC_TOKEN = (process.env.SYNC_TOKEN || '').trim();
+const MAX_STATE_BYTES = Number(process.env.MAX_STATE_BYTES || 2 * 1024 * 1024);
+const MAX_ATTACHMENT_BYTES = Number(process.env.MAX_ATTACHMENT_BYTES || 10 * 1024 * 1024);
+const MAX_MESSAGES = Number(process.env.MAX_MESSAGES || 2000);
 
 fs.mkdirSync(CONV_DIR, { recursive: true });
 fs.mkdirSync(ATTACH_DIR, { recursive: true });
 
 const conversations = new Map();
 const clients = new Map();
+const writeQueues = new Map();
 
 function loadConversations() {
   for (const file of fs.readdirSync(CONV_DIR)) {
@@ -44,9 +48,95 @@ function safeTopic(topic) {
 function saveConv(topic, conv) {
   conversations.set(topic, conv);
   const file = path.join(CONV_DIR, safeTopic(topic) + '.json');
-  fs.writeFile(file, JSON.stringify(conv), (err) => {
-    if (err) console.error('保存对话失败:', err.message);
+  const previous = writeQueues.get(topic) || Promise.resolve();
+  const next = previous
+    .catch(() => {})
+    .then(() => fs.promises.writeFile(file, JSON.stringify(conv), 'utf8'))
+    .catch((err) => console.error('保存对话失败:', err.message));
+  writeQueues.set(topic, next);
+  return next;
+}
+
+function messageKey(message) {
+  if (message && message.id != null) return 'id:' + String(message.id);
+  const attachment = message && message.attachment ? JSON.stringify(message.attachment) : '';
+  return 'fallback:' + [message?.role, message?.content, message?.createdAt, attachment].join('|');
+}
+
+function mergeConversation(existing, incoming, topic) {
+  const base = existing && typeof existing === 'object' ? existing : {};
+  const next = incoming && typeof incoming === 'object' ? incoming : {};
+  const byKey = new Map();
+  const messages = [];
+  const add = (message) => {
+    if (!message || typeof message !== 'object') return;
+    const key = messageKey(message);
+    const prior = byKey.get(key);
+    if (prior) {
+      // Keep the latest delivery state while retaining a completed response.
+      Object.assign(prior, message);
+      return;
+    }
+    const copy = { ...message };
+    byKey.set(key, copy);
+    messages.push(copy);
+  };
+  for (const message of Array.isArray(base.messages) ? base.messages : []) add(message);
+  for (const message of Array.isArray(next.messages) ? next.messages : []) add(message);
+
+  messages.sort((a, b) => {
+    const seqA = Number(a.serverSeq || 0);
+    const seqB = Number(b.serverSeq || 0);
+    if (seqA && seqB && seqA !== seqB) return seqA - seqB;
+    return Number(a.createdAt || 0) - Number(b.createdAt || 0);
   });
+  let serverSeq = messages.reduce((max, message) => Math.max(max, Number(message.serverSeq || 0)), 0);
+  for (const message of messages) {
+    if (!message.serverSeq) message.serverSeq = ++serverSeq;
+  }
+  const clipped = messages.slice(-MAX_MESSAGES);
+
+  const membersByKey = new Map();
+  for (const member of [
+    ...(Array.isArray(base.members) ? base.members : []),
+    ...(Array.isArray(next.members) ? next.members : []),
+  ]) {
+    if (!member || typeof member !== 'object') continue;
+    const key = String(member.id || member.name || member.nickname || membersByKey.size);
+    membersByKey.set(key, { ...(membersByKey.get(key) || {}), ...member });
+  }
+  return {
+    ...base,
+    ...next,
+    topic: safeTopic(topic || next.topic || base.topic),
+    messages: clipped,
+    members: [...membersByKey.values()],
+    updatedAt: Date.now(),
+  };
+}
+
+async function readRequestBody(req, maxBytes) {
+  const length = Number(req.headers['content-length'] || 0);
+  if (length > maxBytes) {
+    req.resume();
+    const error = new Error('payload_too_large');
+    error.code = 'PAYLOAD_TOO_LARGE';
+    throw error;
+  }
+  const chunks = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > maxBytes) {
+      const error = new Error('payload_too_large');
+      error.code = 'PAYLOAD_TOO_LARGE';
+      req.destroy();
+      throw error;
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
 }
 
 function json(res, code, data) {
@@ -134,10 +224,18 @@ function attachWs(req, socket) {
     socket.destroy();
     return;
   }
-  const topic = safeTopic(decodeURIComponent(parts[1]));
-  const wsAuth = !SYNC_TOKEN || url.searchParams.get('key') === SYNC_TOKEN;
+  let decodedTopic;
+  try {
+    decodedTopic = decodeURIComponent(parts[1]);
+  } catch (err) {
+    socket.destroy();
+    return;
+  }
+  const topic = safeTopic(decodedTopic);
+  const presentedToken = String(req.headers['x-sync-token'] || url.searchParams.get('key') || '');
+  const wsAuth = !SYNC_TOKEN || presentedToken === SYNC_TOKEN;
   console.log('[ws] connect', topic, 'auth=' + wsAuth);
-  if(SYNC_TOKEN && url.searchParams.get('key') !== SYNC_TOKEN){ socket.destroy(); return; }
+  if (!wsAuth) { socket.destroy(); return; }
   const key = req.headers['sec-websocket-key'];
   if (!key) {
     socket.destroy();
@@ -163,6 +261,12 @@ function attachWs(req, socket) {
   let buffer = Buffer.alloc(0);
   socket.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
+    // A sync frame is a complete JSON conversation. Close peers that send an
+    // oversized frame before it can accumulate unbounded memory.
+    if (buffer.length > MAX_STATE_BYTES + 1024) {
+      socket.destroy();
+      return;
+    }
     for (;;) {
       const frame = parseFrame(buffer);
       if (!frame) break;
@@ -179,9 +283,9 @@ function attachWs(req, socket) {
         continue;
       }
       if (msg && msg.type === 'sync' && msg.conv && Array.isArray(msg.conv.messages)) {
-        msg.conv.updatedAt = Date.now();
-        saveConv(topic, msg.conv);
-        broadcast(topic, { type: 'state', conv: msg.conv }, ws);
+        const conv = mergeConversation(conversations.get(topic), msg.conv, topic);
+        saveConv(topic, conv);
+        broadcast(topic, { type: 'state', conv }, ws);
       }
     }
   });
@@ -214,13 +318,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (url.pathname === '/health') {
-    json(res, 200, { ok: true, service: 'yingzi-sync', version: 1 });
+    json(res, 200, { ok: true, service: 'yingzi-sync', version: 2 });
     return;
   }
 
   if (parts[0] === 'api' && parts.length >= 2) {
     if(!authorized(req, url)){ json(res, 401, { ok: false, error: 'unauthorized' }); return; }
-    const topic = safeTopic(decodeURIComponent(parts[1]));
+    let topicPart;
+    try { topicPart = decodeURIComponent(parts[1]); }
+    catch (err) { json(res, 400, { ok: false, error: 'bad_topic' }); return; }
+    const topic = safeTopic(topicPart);
 
     if (parts.length === 2) {
       if (req.method === 'GET') {
@@ -233,13 +340,14 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       if (req.method === 'POST') {
-        let body = '';
-        req.setEncoding('utf8');
-        for await (const chunk of req) body += chunk;
         let conv = null;
         try {
-          conv = JSON.parse(body);
+          conv = JSON.parse((await readRequestBody(req, MAX_STATE_BYTES)).toString('utf8'));
         } catch (err) {
+          if (err.code === 'PAYLOAD_TOO_LARGE') {
+            json(res, 413, { ok: false, error: 'payload_too_large', maxBytes: MAX_STATE_BYTES });
+            return;
+          }
           json(res, 400, { ok: false, error: 'bad_json' });
           return;
         }
@@ -247,14 +355,10 @@ const server = http.createServer(async (req, res) => {
           json(res, 400, { ok: false, error: 'bad_conv' });
           return;
         }
-        if (Array.isArray(conv.messages) && conv.messages.length > 2000) {
-          conv.messages = conv.messages.slice(-2000);
-        }
-        conv.topic = topic;
-        conv.updatedAt = Date.now();
+        conv = mergeConversation(conversations.get(topic), conv, topic);
         saveConv(topic, conv);
         broadcast(topic, { type: 'state', conv });
-        json(res, 200, { ok: true, updatedAt: conv.updatedAt });
+        json(res, 200, { ok: true, updatedAt: conv.updatedAt, messageCount: conv.messages.length });
         return;
       }
     }
@@ -267,16 +371,23 @@ const server = http.createServer(async (req, res) => {
       const dir = path.join(ATTACH_DIR, safeTopic(topic));
       fs.mkdirSync(dir, { recursive: true });
       const filePath = path.join(dir, id + '-' + filename);
-      const out = fs.createWriteStream(filePath);
-      req.pipe(out);
-      await new Promise((resolve, reject) => {
-        out.on('finish', resolve);
-        out.on('error', reject);
-      });
+      let payload;
+      try {
+        payload = await readRequestBody(req, MAX_ATTACHMENT_BYTES);
+      } catch (err) {
+        if (err.code === 'PAYLOAD_TOO_LARGE') {
+          json(res, 413, { ok: false, error: 'attachment_too_large', maxBytes: MAX_ATTACHMENT_BYTES });
+          return;
+        }
+        json(res, 400, { ok: false, error: 'attachment_read_failed' });
+        return;
+      }
+      await fs.promises.writeFile(filePath, payload);
       const host = req.headers.host || 'localhost:' + PORT;
       const protocol = req.socket.encrypted ? 'https' : 'http';
+      const authQuery = SYNC_TOKEN ? '?key=' + encodeURIComponent(SYNC_TOKEN) : '';
       const downloadUrl =
-        protocol + '://' + host + '/api/' + encodeURIComponent(topic) + '/attachments/' + id + '/' + encodeURIComponent(filename);
+        protocol + '://' + host + '/api/' + encodeURIComponent(topic) + '/attachments/' + id + '/' + encodeURIComponent(filename) + authQuery;
       json(res, 200, {
         ok: true,
         attachment: {
@@ -290,7 +401,15 @@ const server = http.createServer(async (req, res) => {
 
     if (parts.length >= 5 && parts[2] === 'attachments' && req.method === 'GET') {
       const id = parts[3];
-      const filename = parts.slice(4).join('/');
+      let filename;
+      try {
+        filename = decodeURIComponent(parts.slice(4).join('/'));
+      } catch (err) {
+        res.writeHead(400);
+        res.end('bad filename');
+        return;
+      }
+      filename = path.basename(filename).replace(/[\\/:*?"<>|]/g, '_').slice(0, 120);
       const dir = path.resolve(path.join(ATTACH_DIR, safeTopic(topic)));
       const filePath = path.resolve(path.join(dir, id + '-' + filename));
       if (!filePath.startsWith(dir + path.sep) || !fs.existsSync(filePath)) {
@@ -326,10 +445,14 @@ const server = http.createServer(async (req, res) => {
 
 server.on('upgrade', attachWs);
 
-server.listen(PORT, HOST, () => {
-  console.log('英子起飞 · 群聊同步服务器已启动');
-  console.log('本机访问:   http://127.0.0.1:' + PORT);
-  console.log('健康检查:   http://127.0.0.1:' + PORT + '/health');
-  console.log('局域网/虚拟网: 用电脑的局域网 IP 或 Tailscale IP 替换 127.0.0.1');
-  console.log('数据目录:   ' + DATA_DIR);
-});
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(PORT, HOST, () => {
+    console.log('英子起飞 · 群聊同步服务器已启动');
+    console.log('本机访问:   http://127.0.0.1:' + PORT);
+    console.log('健康检查:   http://127.0.0.1:' + PORT + '/health');
+    console.log('局域网/虚拟网: 用电脑的局域网 IP 或 Tailscale IP 替换 127.0.0.1');
+    console.log('数据目录:   ' + DATA_DIR);
+  });
+}
+
+export { server, mergeConversation, safeTopic, readRequestBody };

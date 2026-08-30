@@ -2,6 +2,8 @@
 
 跑在你电脑或云服务器上的小服务，让两台手机实时同步群聊，不再依赖 ntfy。
 
+这是群聊同步层，不负责保存 DeepSeek/API 密钥。客户端只上传群聊消息和附件元数据；API 密钥仍保存在各自设备上。
+
 ## 本地 / Tailscale 使用
 
 1. 电脑安装 Node.js（推荐 18 以上），双击 `start-server.bat`，或运行 `node server.js`。
@@ -29,6 +31,18 @@
 ## 验证
 
 浏览器打开 `http://127.0.0.1:8787/health`，看到 `{"ok":true}` 就成功了。
+
+## 接口约定
+
+客户端配置的是服务器根地址，例如 `http://电脑TailscaleIP:8787`。群聊主题由客户端生成并经过 URL 编码，实际接口如下：
+
+- `GET /api/<topic>?key=<SYNC_TOKEN>`：读取群聊状态。
+- `POST /api/<topic>?key=<SYNC_TOKEN>`：合并并保存消息状态；服务端按消息 `id` 去重，不会用旧设备状态覆盖新消息。
+- `PUT /api/<topic>/attachments?key=<SYNC_TOKEN>`：上传附件，默认上限 10 MiB。
+- `GET /api/<topic>/attachments/<id>/<filename>?key=<SYNC_TOKEN>`：读取附件。
+- `WebSocket /ws/<topic>?key=<SYNC_TOKEN>`：实时推送状态并发送 `{type:"sync",conv}`。
+
+状态请求默认上限 2 MiB，最多保留 2000 条消息。生产环境建议在反向代理后使用 HTTPS，并限制来源域名；当前服务为兼容移动端 WebView 保留了宽松 CORS。
 
 ## 数据
 

@@ -3,7 +3,7 @@
   const $$ = (q, root=document) => [...root.querySelectorAll(q)];
 
   let bridge=null;
-  try{bridge=window.Android||null}catch(e){bridge=null}
+  try{bridge=window.AndroidRemote||window.Android||null}catch(e){bridge=null}
 
   function safeGet(key,fallback=''){try{return localStorage.getItem(key)||fallback}catch(e){return fallback}}
   function loadJSON(key,fallback=null){try{return JSON.parse(localStorage.getItem(key)||'null')??fallback}catch{return fallback}}
@@ -40,17 +40,31 @@
   }
 
   /* ---------- real state ---------- */
-  const convId=new URLSearchParams(location.search).get('conv')||'';
+  const queryParams=new URLSearchParams(location.search);
+  const convId=queryParams.get('conv')||'';
+  const previewMode=queryParams.get('preview')==='1';
   let conversations=[];
   let projects=[];
+  const GROUP_STORAGE_KEY='dsh.group.conversations.v1';
   function loadConversations(){
     let raw='';
-    try{if(bridge&&bridge.getState)raw=bridge.getState()||''}catch(e){}
-    if(!raw)raw=localStorage.getItem('lgchat_convs')||'';
+    try{raw=localStorage.getItem(GROUP_STORAGE_KEY)||''}catch(e){}
+    // Migrate only group records from the pre-shell store. API credentials and
+    // ordinary chats never enter this payload.
+    if(!raw){
+      try{
+        const legacy=JSON.parse(localStorage.getItem('lgchat_convs')||'null');
+        const legacyGroups=(Array.isArray(legacy)?legacy:(legacy&&legacy.conversations)||[]).filter(c=>c&&c.group);
+        if(legacyGroups.length){
+          raw=JSON.stringify({conversations:legacyGroups,projects:[]});
+          localStorage.setItem(GROUP_STORAGE_KEY,raw);
+        }
+      }catch(e){}
+    }
     if(raw&&raw.trim()){
       try{
         const p=JSON.parse(raw);
-        conversations=Array.isArray(p)?p:(p.conversations||[]);
+        conversations=(Array.isArray(p)?p:(p&&p.conversations)||[]).filter(c=>c&&c.group);
         projects=(p&&p.projects)||[];
       }catch(e){conversations=[]}
     }
@@ -59,11 +73,7 @@
   let saveTimer=null;
   function saveConversations(){
     const json=JSON.stringify({conversations,projects});
-    try{localStorage.setItem('lgchat_convs',json)}catch(e){}
-    if(bridge&&bridge.saveState){
-      clearTimeout(saveTimer);
-      saveTimer=setTimeout(()=>{try{bridge.saveState(json)}catch(e){}},400);
-    }
+    try{localStorage.setItem(GROUP_STORAGE_KEY,json)}catch(e){}
   }
   let isDraft=false;
   let draftConv=null;
@@ -97,21 +107,81 @@
   };
   if(!safeGet('account.id')){try{localStorage.setItem('account.id',account.id)}catch(e){}}
   let mentionIntent=false;
+  function notifyShell(type,detail={}){try{if(window.parent&&window.parent!==window)window.parent.postMessage({type,...detail},'*')}catch(e){}}
+  function setSyncConfig(base,token){
+    const clean=String(base||'').trim().replace(/\/+$/,'');
+    if(clean)try{localStorage.setItem('sync.serverBase',clean)}catch(e){}
+    if(token!=null)try{localStorage.setItem('sync.serverToken',String(token||'').trim())}catch(e){}
+    return clean;
+  }
+  window.addEventListener('message',e=>{
+    const data=e&&e.data;
+    if(!data||data.type!=='dsh-sync-config')return;
+    const base=setSyncConfig(data.base||'',data.token||'');
+    const c=conv();
+    if(c&&c.group){
+      const topic=topicFromSyncUrl(c.syncUrl||'');
+      if(base&&topic){c.syncUrl=base+'/api/'+encodeURIComponent(topic);c.syncWs=wsUrlFromBase(base,topic);saveConversations();watchGroup();}
+      else if(!base){c.syncUrl='';c.syncWs='';saveConversations();}
+    }
+  });
+  function parseJoinLink(raw){
+    const value=String(raw||'').trim();
+    if(!value)return null;
+    try{
+      const normalized=value.startsWith('yingzi://')?value.replace(/^yingzi:\/\//,'https://'):value;
+      const u=new URL(normalized);
+      const path=u.pathname.split('/').filter(Boolean);
+      const topic=decodeURIComponent(path[path.length-1]||u.hostname||'');
+      const params=u.searchParams;
+      return {topic,base:params.get('server')||'',token:params.get('key')||''};
+    }catch(e){
+      const match=value.match(/join\/([^?&#]+)/i);
+      return match?{topic:decodeURIComponent(match[1]),base:'',token:''}:null;
+    }
+  }
+  function createGroupConversation(){
+    const title=String(window.prompt('群聊名称','项目讨论群')||'').trim();
+    if(!title)return;
+    const base=setSyncConfig(window.prompt('同步服务器地址',getSyncBase())||getSyncBase(),window.prompt('同步密钥（可留空）',getSyncToken()));
+    if(!base){showToast('请填写同步服务器地址');return;}
+    const id='group-'+uid();
+    const item={id,title,group:true,messages:[],members:[{id:account.id,name:account.name}],created_at:nowISO(),updatedAt:Date.now()};
+    conversations.unshift(item);isDraft=false;draftConv=null;saveConversations();
+    location.href='index.html?conv='+encodeURIComponent(id);
+  }
+  function joinGroupConversation(rawValue=''){
+    const parsed=parseJoinLink(rawValue||window.prompt('粘贴群聊邀请链接','')||'');
+    if(!parsed||!parsed.topic){showToast('邀请链接无效');return;}
+    const base=setSyncConfig(parsed.base||getSyncBase(),parsed.token||getSyncToken());
+    if(!base){showToast('邀请链接缺少服务器地址');return;}
+    const existing=conversations.find(c=>c.group&&topicFromSyncUrl(c.syncUrl||'')===parsed.topic);
+    const item=existing||{id:'group-'+parsed.topic+'-'+uid().slice(-5),title:'群聊',group:true,messages:[],members:[],created_at:nowISO(),updatedAt:Date.now()};
+    item.syncUrl=base+'/api/'+encodeURIComponent(parsed.topic);item.syncWs=wsUrlFromBase(base,parsed.topic);
+    if(!item.members.some(m=>m.id===account.id))item.members.push({id:account.id,name:account.name});
+    if(!existing)conversations.unshift(item);saveConversations();
+    location.href='index.html?conv='+encodeURIComponent(item.id);
+  }
+  window.handleGroupJoinLink=joinGroupConversation;
 
   function readClientApi(){
     try{
-      if(bridge&&bridge.getConfig){
-        const raw=bridge.getConfig();
+      if(bridge&&bridge.getApiConfig){
+        const raw=bridge.getApiConfig();
         if(raw&&raw.trim()){
           const c=JSON.parse(raw);
-          if(c.apiBase||c.apiKey||c.model){
-            return {base_url:String(c.apiBase||'').trim().replace(/\/+$/,''),api_key:String(c.apiKey||'').trim(),model:String(c.model||'').trim(),reasoning_parameter:String(c.reasoningParam||'').trim(),models:Array.isArray(c.models)?c.models:[]};
+          if(c.base_url||c.api_key||c.model){
+            const remembered=loadJSON('deepseek.chat.api.models.v1',[]);
+            return {base_url:String(c.base_url||'').trim().replace(/\/+$/,''),api_key:String(c.api_key||'').trim(),model:String(c.model||'').trim(),reasoning_parameter:String(c.reasoning_parameter||'').trim(),models:[...(Array.isArray(c.models)?c.models:[]),...(Array.isArray(remembered)?remembered:[])],effort:String(c.effort||'auto')};
           }
         }
       }
     }catch(e){}
-    const local=loadJSON('ai.clientApi',null);
-    if(local)return {...local,models:Array.isArray(local.models)?local.models:[]};
+    const local=loadJSON('deepseek.chat.api.v1',null)||loadJSON('ai.clientApi',null);
+    if(local){
+      const remembered=loadJSON('deepseek.chat.api.models.v1',[]);
+      return {...local,models:[...(Array.isArray(local.models)?local.models:[]),...(Array.isArray(remembered)?remembered:[])]};
+    }
     return null;
   }
   function getModelIds(){
@@ -123,9 +193,16 @@
 
   const state={
     model:safeGet('ai.modelId')||(readClientApi()&&readClientApi().model)||'deepseek-chat',
-    reasoning:safeGet('ai.reasoningLevel')||'标准',
+    reasoning:safeGet('ai.reasoningLevel')||(({high:'深入',max:'最高'}[(readClientApi()||{}).effort]||'自动')),
     sending:false,
   };
+  function persistClientSelection(){
+    const cfg=readClientApi();
+    if(!cfg)return;
+    cfg.model=state.model;
+    cfg.effort=state.reasoning==='最高'?'max':state.reasoning==='深入'?'high':state.reasoning==='简洁'?'low':'auto';
+    try{localStorage.setItem('deepseek.chat.api.v1',JSON.stringify(cfg));bridge&&bridge.saveApiConfig&&bridge.saveApiConfig(JSON.stringify(cfg))}catch(e){}
+  }
 
   /* ---------- sync (self-hosted server + WebSocket) ---------- */
   function getSyncBase(){
@@ -148,15 +225,22 @@
   }
   function normalizeSync(c){
     if(!c||!c.group)return;
-    const base=getSyncBase();
+    const base=getSyncBase()||baseFromSyncUrl(String(c.syncUrl||''));
     const old=String(c.syncUrl||'');
     if(old&&!c.syncWs){
       c.syncWs=wsUrlFromBase(base||baseFromSyncUrl(old),topicFromSyncUrl(old));
     }
     if(base&&/^https:\/\/ntfy\.sh\//i.test(old)){
       const topic=topicFromSyncUrl(old);
-      c.syncUrl=base+'/'+topic;
+      c.syncUrl=base+'/api/'+encodeURIComponent(topic);
       c.syncWs=wsUrlFromBase(base,topic);
+    }
+    if(base&&old&&!/^https:\/\/ntfy\.sh\//i.test(old)){
+      const topic=topicFromSyncUrl(old);
+      if(topic){
+        c.syncUrl=base+'/api/'+encodeURIComponent(topic);
+        c.syncWs=wsUrlFromBase(base,topic);
+      }
     }
     if(/^https:\/\/ntfy\.sh\//i.test(old)&&!base){
       c.syncUrl='';
@@ -172,7 +256,7 @@
       return '';
     }
     const topic='whale-girl-'+uid().slice(0,10);
-    c.syncUrl=base+'/'+topic;
+    c.syncUrl=base+'/api/'+encodeURIComponent(topic);
     c.syncWs=wsUrlFromBase(base,topic);
     saveConversations();
     watchGroup();
@@ -190,22 +274,41 @@
     }catch(e){}
     return false;
   }
+  function mergeRemoteMessages(localMessages,remoteMessages){
+    const byId=new Map();
+    const list=[];
+    const add=(message,remote=false)=>{
+      if(!message||typeof message!=='object')return;
+      const key=String(message.id||[message.role,message.content,message.created_at].join('|'));
+      const prior=byId.get(key);
+      if(!prior){const copy={...message};byId.set(key,copy);list.push(copy);return}
+      const localPending=!remote&&prior.status==='sending';
+      Object.assign(prior,message);
+      if(localPending&&!message.status)prior.status='sending';
+    };
+    (Array.isArray(localMessages)?localMessages:[]).forEach(m=>add(m,false));
+    (Array.isArray(remoteMessages)?remoteMessages:[]).forEach(m=>add(m,true));
+    list.sort((a,b)=>Number(a.serverSeq||0)-Number(b.serverSeq||0)||String(a.created_at||a.createdAt||'').localeCompare(String(b.created_at||b.createdAt||'')));
+    return list;
+  }
   function adoptRemoteMessage(remote){
     const c=conv();
     if(!c||!remote||!Array.isArray(remote.messages))return false;
     const localUpdated=Number(c.updatedAt||0);
     const remoteUpdated=Number(remote.updatedAt||0);
-    const remoteHasMore=remote.messages.length>c.messages.length;
-    const membersChanged=(remote.members||[]).length!==(c.members||[]).length;
-    if(!(remoteUpdated>localUpdated||remoteHasMore||membersChanged))return false;
-    const before=c.messages.length;
+    const beforeIds=new Set((c.messages||[]).map(m=>String(m.id||'')));
+    const beforeCount=(c.messages||[]).length;
     c.title=remote.title||c.title;
-    c.messages=remote.messages;
-    c.members=remote.members||c.members;
-    c.updatedAt=remoteUpdated||Date.now();
+    c.messages=mergeRemoteMessages(c.messages,remote.messages);
+    if(Array.isArray(remote.members)){
+      const members=new Map((c.members||[]).map(m=>[String(m.id||m.name),m]));
+      remote.members.forEach(m=>{if(m&&typeof m==='object'){const key=String(m.id||m.name);members.set(key,{...(members.get(key)||{}),...m})}});
+      c.members=[...members.values()];
+    }
+    c.updatedAt=Math.max(localUpdated,remoteUpdated);
     c.syncUrl=c.syncUrl||remote.syncUrl;
     if(remote.syncWs)c.syncWs=remote.syncWs;
-    const lastMsg=remote.messages[remote.messages.length-1];
+    const lastMsg=c.messages[c.messages.length-1];
     if(lastMsg&&lastMsg.role==='user'&&lastMsg.authorName&&lastMsg.authorName!==account.name&&c.notifiedId!==lastMsg.id){
       if(bridge&&bridge.notifyGroupMessage){
         bridge.notifyGroupMessage(String(lastMsg.authorName),String(normalizeText(lastMsg.content)).slice(0,120));
@@ -213,9 +316,10 @@
     }
     c.notifiedId=lastMsg?lastMsg.id:null;
     saveConversations();
-    if(remote.messages.length>before)showToast('收到新消息');
+    const hasNew=c.messages.some(m=>m.id&&!beforeIds.has(String(m.id)));
+    if(hasNew||c.messages.length>beforeCount)showToast('收到新消息');
     renderAll();
-    return true;
+    return hasNew||c.messages.length!==beforeCount||remoteUpdated>localUpdated;
   }
   async function fetchRecent(){
     const c=conv();
@@ -236,11 +340,13 @@
     normalizeSync(c);
     if(!c.syncWs){c._watching=false;return}
     c._watching=true;
+    let reconnectAttempt=0;
     while(conv()&&c.group&&c.syncWs){
       let ws=null;
       try{ws=new WebSocket(c.syncWs)}catch(e){ws=null}
-      if(!ws){await sleep(2000);continue}
+      if(!ws){reconnectAttempt++;await sleep(Math.min(15000,1000*2**Math.min(reconnectAttempt,4)));continue}
       c._ws=ws;
+      ws.onopen=()=>{reconnectAttempt=0;showToast('群聊已连接')};
       const closed=new Promise(resolve=>{
         ws.onclose=()=>resolve();
         ws.onerror=()=>{try{ws.close()}catch(e){}resolve()};
@@ -252,8 +358,10 @@
         }catch(e){}
       };
       await closed;
-      await sleep(1200);
+      reconnectAttempt++;
+      await sleep(Math.min(15000,1000*2**Math.min(reconnectAttempt,4)));
     }
+    c._watching=false;
   }
 
   /* ---------- render ---------- */
@@ -265,11 +373,15 @@
     const c=conv();
     const members=(c&&c.members||[]).filter(m=>m.id!=='friend');
     const humans=members.length||1;
-    $('#memberCount').textContent=`${humans} 人 · 1 个 AI`;
-    $('#avatarStack').innerHTML=members.slice(0,4).map(m=>{
+    $('#memberCount').textContent=`${humans} 位成员`;
+    // The selected visual reference shows a compact strip of all members;
+    // keep up to six circles before falling back to a small overflow badge.
+    const visibleMembers=members.slice(0,6);
+    const overflow=members.length-visibleMembers.length;
+    $('#avatarStack').innerHTML=visibleMembers.map(m=>{
       const isSelf=m.id===account.id;
       return `<div class="member-avatar" style="background:${colorFor(m.name||'成员')}">${escapeHtml(initials(m.name||'成员'))}${isSelf?'<i class="self-dot"></i>':''}</div>`;
-    }).join('');
+    }).join('')+(overflow>0?`<div class="member-more">+${overflow}</div>`:'');
     $('#memberNames').textContent=members.map(m=>m.name+(m.id===account.id?'（我）':'')).join('、')||'等待成员加入';
     const others=members.filter(m=>m.id!==account.id);
     $('#memberGrid').innerHTML=others.length
@@ -346,8 +458,8 @@
       return;
     }
     const card=e.target.closest('.file-card');
-    if(card&&card.dataset.url&&bridge&&bridge.openUrl){
-      bridge.openUrl(card.dataset.url);
+    if(card&&card.dataset.url){
+      try{if(bridge&&bridge.openUrl){bridge.openUrl(card.dataset.url)}else{window.open(card.dataset.url,'_blank')}}catch(e){}
     }
     const retry=e.target.closest('[data-retry]');
     if(retry)retryMessage(retry.dataset.retry);
@@ -363,7 +475,8 @@
     try{
       if(!c.syncUrl)ensureSyncUrl(c);
       if(msg.attachment&&msg.attachment.local){
-        const remote=await uploadAttachment(c,{name:msg.attachment.name,type:msg.attachment.type,size:msg.attachment.size});
+        if(!pendingFile)throw new Error('附件内容已失效，请重新选择文件后再重试');
+        const remote=await uploadAttachment(c,pendingFile);
         msg.attachment={...msg.attachment,url:remote.url,local:false};
         if(pendingPreviewUrl){try{URL.revokeObjectURL(pendingPreviewUrl)}catch(e){}}
         pendingPreviewUrl=null;
@@ -380,11 +493,46 @@
   function renderAll(){
     const c=conv();
     if(!c)return;
+    $('#groupLanding').hidden=true;
+    $('#chatScroll').hidden=false;
+    document.querySelector('.composer').hidden=false;
+    $('#memberStrip').hidden=false;
     $('#groupTitle').textContent=c.title||'群聊';
     renderMembers();
     renderMessages();
     $('#modelValue').textContent=state.model;
     $('#reasoningValue').textContent=state.reasoning;
+    const storedProgress=Number(c.contextProgress ?? c.context_percent ?? 0)||0;
+    const progress=Math.max(0,Math.min(100,storedProgress||estimateContextProgress(c)));
+    const ring=$('#contextRing');
+    if(ring)ring.style.setProperty('--progress',progress+'%');
+    const ringValue=$('#contextRingValue');
+    if(ringValue)ringValue.textContent=progress+'%';
+  }
+  function renderLanding(){
+    $('#groupLanding').hidden=false;
+    $('#chatScroll').hidden=true;
+    document.querySelector('.composer').hidden=true;
+    $('#memberStrip').hidden=true;
+    $('#groupTitle').textContent='群聊';
+    $('#memberCount').textContent='';
+  }
+  function makePreviewConversation(){
+    const now=Date.now();
+    return {id:'preview-group',title:'项目讨论群',group:true,contextProgress:30,members:[
+      {id:'p1',name:'张伟'},{id:'p2',name:'李娜'},{id:'p3',name:'王磊'},{id:'p4',name:'赵敏'},{id:account.id,name:account.name||'你'},{id:'p6',name:'陈晨'}
+    ],messages:[
+      {id:'pm1',role:'user',authorId:'p1',authorName:'张伟',content:'大家好，今天我们同步一下项目进度和下一步计划。',created_at:new Date(now-240000).toISOString()},
+      {id:'pm2',role:'user',authorId:'p2',authorName:'李娜',content:'好的，我先汇报下设计稿的最新进展。',created_at:new Date(now-180000).toISOString()},
+      {id:'pm3',role:'user',authorId:'p3',authorName:'王磊',content:'我这边后端接口已经完成了 80%，预计明天可以联调。',created_at:new Date(now-120000).toISOString()},
+      {id:'pm4',role:'user',authorId:account.id,authorName:account.name||'你',content:'收到，辛苦大家了！有问题随时在群里沟通～',created_at:new Date(now-60000).toISOString()}
+    ],updatedAt:now};
+  }
+  function estimateContextProgress(c){
+    const chars=(c&&Array.isArray(c.messages)?c.messages:[]).reduce((sum,m)=>sum+normalizeText(m&&m.content).length,0);
+    // DeepSeek chat context is measured approximately from UTF-8 text. The
+    // ring is deliberately conservative until the provider returns usage.
+    return Math.max(0,Math.min(99,Math.round(chars/4/65536*100)));
   }
 
   /* ---------- sheets ---------- */
@@ -409,13 +557,14 @@
     $$('[data-model]').forEach(btn=>btn.addEventListener('click',()=>{
       state.model=btn.dataset.model;
       localStorage.setItem('ai.modelId',state.model);
+      persistClientSelection();
       $('#modelValue').textContent=state.model;
       renderModelOptions();
       closeSheets();
     }));
   }
   function renderReasoningOptions(){
-    const levels=['简洁','标准','深入','最高'];
+    const levels=['自动','简洁','标准','深入','最高'];
     $('#reasoningOptions').innerHTML=levels.map(id=>`
       <button class="sheet-option ${id===state.reasoning?'active':''}" data-reasoning="${id}">
         <span class="sheet-option-icon">${id===state.reasoning?'✓':'✦'}</span>
@@ -426,6 +575,7 @@
     $$('[data-reasoning]').forEach(btn=>btn.addEventListener('click',()=>{
       state.reasoning=btn.dataset.reasoning;
       localStorage.setItem('ai.reasoningLevel',state.reasoning);
+      persistClientSelection();
       $('#reasoningValue').textContent=state.reasoning;
       renderReasoningOptions();
       closeSheets();
@@ -493,7 +643,10 @@
   }
   async function uploadAttachment(c,file){
     if(!c.syncUrl)ensureSyncUrl(c);
-    const res=await fetch(c.syncUrl,{
+    normalizeSync(c);
+    if(!file||typeof file!=='object')throw new Error('附件内容为空');
+    const endpoint=String(c.syncUrl||'').replace(/\/+$/,'')+'/attachments';
+    const res=await fetch(endpoint,{
       method:'PUT',
       headers:{'Content-Type':file.type||'application/octet-stream','Filename':file.name,...syncHeaders()},
       body:file,
@@ -541,8 +694,8 @@
     if(isV4){
       if(state.reasoning==='简洁')payload.thinking={type:'disabled'};
       else{payload.thinking={type:'enabled'};payload.reasoning_effort=state.reasoning==='最高'?'max':'high'}
-    }else if(cfg.reasoning_parameter){
-      const map={'简洁':'low','标准':'medium','深入':'high','最高':'high'};
+      }else if(cfg.reasoning_parameter){
+      const map={'自动':'medium','简洁':'low','标准':'medium','深入':'high','最高':'high'};
       payload[cfg.reasoning_parameter]=map[state.reasoning]||'medium';
     }
     return payload;
@@ -551,7 +704,7 @@
     return new Promise((resolve,reject)=>{
       if(bridge&&bridge.streamChat){
         pendingStream={resolve,reject,handlers};
-        bridge.streamChat(JSON.stringify({url:apiUrl(cfg),apiKey:cfg.api_key,payload:buildPayload(cfg,messages)}));
+        bridge.streamChat(JSON.stringify({target:'group',url:apiUrl(cfg),apiKey:cfg.api_key,payload:buildPayload(cfg,messages)}));
       }else{
         reject(new Error('原生桥接不可用'));
       }
@@ -561,7 +714,7 @@
     return new Promise((resolve,reject)=>{
       if(bridge&&bridge.completeChat){
         pendingComplete={resolve,reject};
-        bridge.completeChat(JSON.stringify({url:(cfg.base_url||'').replace(/\/+$/,'')+'/chat/completions',apiKey:cfg.api_key,payload:{model:cfg.model,messages,stream:false}}));
+        bridge.completeChat(JSON.stringify({target:'group',url:(cfg.base_url||'').replace(/\/+$/,'')+'/chat/completions',apiKey:cfg.api_key,payload:{model:cfg.model,messages,stream:false}}));
       }else{
         reject(new Error('原生桥接不可用'));
       }
@@ -603,6 +756,7 @@
     }
   }
   window.AndroidEvents={onEvent:handleEvent};
+  window.DeepSeekEvents={onEvent:handleEvent};
 
   async function sendMessage(){
     const c=conv();
@@ -616,9 +770,10 @@
       if(!c.syncUrl)ensureSyncUrl(c);
     }catch(e){}
     const mentions=buildMentions(text);
+    const fileToUpload=pendingFile;
     let attachment=null;
-    if(pendingFile){
-      attachment={url:pendingPreviewUrl||'',localUrl:pendingPreviewUrl||'',type:pendingFile.type||'',name:pendingFile.name||'file',size:pendingFile.size||0,local:true};
+    if(fileToUpload){
+      attachment={url:pendingPreviewUrl||'',localUrl:pendingPreviewUrl||'',type:fileToUpload.type||'',name:fileToUpload.name||'file',size:fileToUpload.size||0,local:true};
     }
     const userMsg={id:uid(),role:'user',content:text,authorId:account.id,authorName:account.name,mentions,attachment,status:'sending',created_at:nowISO()};
     if(pendingFile)$('#attachPreview').hidden=true;
@@ -638,7 +793,7 @@
     (async()=>{
       try{
         if(attachment&&attachment.local){
-          const remote=await uploadAttachment(c,{name:attachment.name,type:attachment.type,size:attachment.size});
+          const remote=await uploadAttachment(c,fileToUpload);
           userMsg.attachment={...attachment,url:remote.url,local:false};
           pendingPreviewUrl=null;
           pendingFile=null;
@@ -651,8 +806,10 @@
       renderAll();
       if(userMsg.status==='error')showToast('发送失败，点红色感叹号重试');
     })();
-    if(!mentions.length||!cfg)return;
-    const assistantMsg={id:uid(),role:'assistant',content:'',model:state.model,created_at:nowISO()};
+    if(!mentions.length)return;
+    if(!cfg){showToast('请先在设置中配置 API');return;}
+    if(!cfg.api_key){showToast('请先在设置中配置 API Key');return;}
+    const assistantMsg={id:uid(),role:'assistant',content:'',model:state.model,authorId:'ai',authorName:'AI 助手',status:'sending',created_at:nowISO()};
     c.messages.push(assistantMsg);
     $('#typingIndicator').hidden=false;
     renderMessages();
@@ -672,9 +829,11 @@
       });
     }catch(e){
       assistantMsg.content=assistantMsg.content||'（生成失败：'+(e.message||'未知错误')+'）';
+      assistantMsg.status='error';
       showToast(e.message||'生成失败');
     }finally{
       assistantMsg.created_at=nowISO();
+      if(assistantMsg.status==='sending')assistantMsg.status='sent';
       state.sending=false;
       $('#typingIndicator').hidden=true;
       saveConversations();
@@ -701,6 +860,13 @@
     gBackdrop.classList.remove('show');
     document.body.classList.remove('sidebar-open');
   }
+  window.handleSystemBack=()=>{
+    if(!$('#sheetScrim').hidden){closeSheets();return true}
+    if(gSidebar.classList.contains('open')){gCloseSidebar();return true}
+    if(!$('#attachMenu').hidden){$('#attachMenu').hidden=true;return true}
+    if(!$('#stickerPanel').hidden){$('#stickerPanel').hidden=true;return true}
+    return false;
+  };
   function gHistoryButton(c,isGroup){
     const b=document.createElement('button');
     b.className='side-item chat-history'+(c.id===convId?' current':'');
@@ -732,15 +898,23 @@
   document.addEventListener('click',e=>{if(e.target.closest('#menuButton')){e.preventDefault();gOpenSidebar()}});
   gBackdrop.addEventListener('click',gCloseSidebar);
   $$('[data-sidebar-close]').forEach(b=>b.addEventListener('click',gCloseSidebar));
-  $('#sidebarSettings').addEventListener('click',()=>{location.href='../index.html?openSettings=1'});
-  $('#newGroupButton').addEventListener('click',()=>{location.href='../index.html?newgroup=1'});
-  $('#joinGroupButton').addEventListener('click',()=>{location.href='../index.html?joingroup=1'});
+  $('#sidebarSettings').addEventListener('click',()=>{gCloseSidebar();notifyShell('dsh-group-open-shell-settings')});
+  $('#newGroupButton').addEventListener('click',createGroupConversation);
+  $('#joinGroupButton').addEventListener('click',joinGroupConversation);
+  $('#landingNewGroupButton').addEventListener('click',createGroupConversation);
+  $('#landingJoinGroupButton').addEventListener('click',joinGroupConversation);
   $('#sidebarSearch').addEventListener('input',e=>{
     const q=String(e.target.value||'').trim().toLowerCase();
     $$('.chat-history',gSidebar).forEach(item=>{item.hidden=!!q&&!(item.textContent||'').toLowerCase().includes(q)});
   });
   $('#groupInfoButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#memberDetailsButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
+  $('#contextButton').addEventListener('click',()=>{
+    const c=conv();
+    const progress=Math.max(0,Math.min(100,Number(c&&c.contextProgress||0)||estimateContextProgress(c)));
+    showToast(`上下文已使用 ${progress}%`);
+  });
+  $('#groupMenuButton').addEventListener('click',()=>{renderMembers();openSheet('#memberSheet')});
   $('#inviteButton').addEventListener('click',()=>{renderInvite();openSheet('#inviteSheet')});
   $('#copyInviteButton').addEventListener('click',()=>{
     const link=$('#inviteLink').textContent;
@@ -850,11 +1024,17 @@
   /* ---------- boot ---------- */
   loadConversations();
   if(!conv()){
-    showToast('群聊不存在');
-    setTimeout(()=>{location.href='../index.html'},1200);
-    return;
+    if(previewMode){
+      draftConv=makePreviewConversation();
+      isDraft=true;
+      renderAll();
+      return;
+    }
+    const first=conversations.find(c=>c&&c.group);
+    if(first){location.replace('index.html?conv='+encodeURIComponent(first.id));return;}
+    renderLanding();
+  }else{
+    renderAll();
+    watchGroup();
   }
-  renderAll();
-  watchGroup();
 })();
-

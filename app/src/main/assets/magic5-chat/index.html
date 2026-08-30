@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>今天的灵感 · 通用聊天</title>
-  <link rel="stylesheet" href="./styles.css?v=backend-api-1">
+  <link rel="stylesheet" href="./styles.css?v=group-chat-v2">
 </head>
 <body>
   <div id="splash" class="splash" aria-hidden="true">
@@ -27,6 +27,10 @@
         <button class="sidebar-item" id="sidebarRemoteButton" type="button">
           <img src="../icons/laptop-with-cursor.svg" alt="">
           <span>Remote</span>
+        </button>
+        <button class="sidebar-item" id="sidebarGroupButton" type="button">
+          <img src="../icons/people-fill.svg" alt="">
+          <span>群聊</span>
         </button>
       </nav>
 
@@ -92,6 +96,28 @@
       <div class="settings-api-actions">
         <button id="apiTestButton" class="secondary-action" type="button">测试连接</button>
         <button id="apiSaveButton" class="primary-action" type="button">保存配置</button>
+      </div>
+    </section>
+
+    <section class="settings-sync-card settings-panel" aria-labelledby="syncSettingsHeading">
+      <div class="settings-api-heading">
+        <div>
+          <h2 id="syncSettingsHeading">群聊同步</h2>
+          <p>让多台设备实时看到群消息和附件</p>
+        </div>
+        <span id="syncStatusBadge" class="settings-panel-badge offline">未配置</span>
+      </div>
+      <label class="settings-field">同步服务器地址
+        <input id="syncServerInput" type="url" autocomplete="url" placeholder="http://电脑地址:8787">
+      </label>
+      <label class="settings-field">同步密钥（可选）
+        <input id="syncTokenInput" type="password" autocomplete="off" placeholder="与服务器 SYNC_TOKEN 一致">
+      </label>
+      <p class="settings-field-note">只保存服务器地址和密钥；DeepSeek API Key 仍单独保存在本机。</p>
+      <div id="syncSettingsStatus" class="api-settings-status" role="status" aria-live="polite"></div>
+      <div class="settings-api-actions">
+        <button id="syncTestButton" class="secondary-action" type="button">测试连通</button>
+        <button id="syncSaveButton" class="primary-action" type="button">保存服务器</button>
       </div>
     </section>
 
@@ -377,7 +403,13 @@
     </section>
   </main>
 
+  <main id="groupView" class="group-view" hidden aria-label="群聊">
+    <section class="group-frame-shell" aria-label="群聊工作区">
+    <iframe id="groupApp" title="群聊" src="../group-chat/index.html?embedded=1&v=group-chat-v2"></iframe>
+    </section>
+  </main>
+
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="./app.js?v=backend-api-1"></script>
+  <script src="./app.js?v=group-chat-v2"></script>
 </body>
 </html>

@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <meta name="theme-color" content="#eaf2f5" />
+  <meta name="theme-color" content="#ffffff" />
   <title>群聊 · 英子起飞</title>
-  <link rel="stylesheet" href="./group-chat.css" />
+  <link rel="stylesheet" href="./group-chat.css?v=group-chat-v2" />
 </head>
 <body>
   <div class="wallpaper" aria-hidden="true"></div>
@@ -47,21 +47,27 @@
 
   <main class="group-app" id="groupApp">
     <header class="topbar">
-      <button class="round-button glass" id="menuButton" aria-label="返回">
+      <button class="round-button glass" id="menuButton" aria-label="打开侧边栏">
         <span class="hamburger" aria-hidden="true"></span>
       </button>
 
       <button class="group-title glass" id="groupInfoButton" type="button">
-        <span class="spark">✦</span>
         <span class="group-title-copy">
           <strong id="groupTitle">群聊</strong>
           <small id="memberCount">成员加载中…</small>
         </span>
       </button>
 
+      <div class="topbar-actions glass">
+        <button class="context-button" id="contextButton" type="button" aria-label="上下文用量">
+          <span class="context-ring" id="contextRing" aria-hidden="true"><span id="contextRingValue"></span></span>
+        </button>
+        <button class="more-button" id="groupMenuButton" type="button" aria-label="群聊菜单"><span></span><span></span><span></span></button>
+      </div>
+
     </header>
 
-    <section class="member-strip glass" id="memberStrip">
+    <section class="member-strip" id="memberStrip">
       <div class="avatar-stack" id="avatarStack"></div>
       <div class="member-names" id="memberNames">成员加载中…</div>
       <button class="member-details" id="memberDetailsButton" type="button">查看成员 <span>›</span></button>
@@ -76,12 +82,21 @@
       </div>
     </section>
 
+    <section class="group-landing" id="groupLanding" hidden aria-label="群聊入口">
+      <div class="group-landing-mark" aria-hidden="true">•••</div>
+      <h1>开始群聊</h1>
+      <p>和朋友一起讨论，也可以随时 @AI 加入回答。</p>
+      <div class="group-landing-actions">
+        <button id="landingNewGroupButton" type="button">新建群聊</button>
+        <button id="landingJoinGroupButton" type="button">加入群聊</button>
+      </div>
+    </section>
+
     <section class="composer glass">
       <div class="attach-preview" id="attachPreview" hidden></div>
       <div class="input-shell">
-        <textarea id="messageInput" rows="1" placeholder="输入消息… @AI 让英子参与"></textarea>
-        <button class="attach-btn plus-button" id="plusButton" type="button" aria-label="添加">＋</button>
-        <button class="attach-btn emoji-button" id="emojiButton" type="button" aria-label="表情">😊</button>
+        <textarea id="messageInput" rows="1" placeholder="输入消息"></textarea>
+        <button class="attach-btn emoji-button" id="emojiButton" type="button" aria-label="表情" hidden>😊</button>
       </div>
       <div class="attach-menu glass" id="attachMenu" hidden>
         <button type="button" id="attachImageOption">🖼 图片</button>
@@ -94,17 +109,13 @@
       <div class="mention-menu glass" id="mentionMenu" hidden></div>
 
       <div class="composer-controls">
+        <button class="attach-btn plus-button" id="plusButton" type="button" aria-label="添加">＋</button>
         <button class="selector" id="modelSelector" type="button">
-          <span class="selector-icon">◇</span>
           <span class="selector-value ellipsis" id="modelValue">选择模型</span>
-          <span class="chevron">⌄</span>
         </button>
 
         <button class="selector reasoning-selector" id="reasoningSelector" type="button">
-          <span class="selector-icon">✦</span>
-          <span class="selector-label">思考等级</span>
           <span class="selector-value" id="reasoningValue">标准</span>
-          <span class="chevron">⌄</span>
         </button>
 
         <button class="send-button" id="sendButton" type="button" aria-label="发送"><span>➤</span></button>
@@ -158,6 +169,6 @@
     <button id="imageViewerClose" type="button" aria-label="关闭">×</button>
     <img id="imageViewerImg" alt="图片" />
   </div>
-  <script src="./group-chat.js"></script>
+  <script src="./group-chat.js?v=group-chat-v2"></script>
 </body>
 </html>
