@@ -380,8 +380,20 @@
 
   function requestSessionHistory(sessionId, { beforeSeq, limit = 72, refresh = false } = {}) {
     const id = canonicalSessionId(String(sessionId || ''));
-    if (!id || isSyntheticSessionId(id) || !transportOpen()) return false;
+    if (!id || isSyntheticSessionId(id)) return false;
     const history = state.sessionHistory[id] || { items: [], hasMore: true, nextBefore: null, loading: false, loadingOlder: false, loadingTimer: null, lastTimestamp: 0 };
+    if (!transportOpen()) {
+      // 传输不可用：把失败态记入 history（而不是只复位 loading 后静默返回），
+      // 会话区会立即渲染"无法加载对话：当前未连接电脑"+ 重试入口，避免空白。
+      clearTimeout(history.loadingTimer);
+      history.loading = false;
+      history.loadingOlder = false;
+      history.loadingTimer = null;
+      history.loadFailed = { reason: 'offline', at: Date.now() };
+      state.sessionHistory[id] = history;
+      queueRender();
+      return false;
+    }
     if (history.loading || (beforeSeq !== undefined && !history.hasMore)) return false;
     history.loading = true;
     history.loadingOlder = beforeSeq !== undefined;
@@ -393,9 +405,13 @@
         ? Boolean(native.requestHistory(id, beforeSeq === undefined ? -1 : Number(beforeSeq), limit))
         : sendLiveMessage('session.history.request', { sessionId: id, beforeSeq, limit, refresh });
     if (!sent) {
+      // 发送失败（Bridge 未接受历史请求）：如实呈现"对话加载失败"而不是静默复位。
       history.loading = false;
       history.loadingOlder = false;
+      history.loadFailed = { reason: 'error', at: Date.now() };
     } else {
+      // 新请求已发出：清掉旧失败态，回到"正在加载对话…"。
+      history.loadFailed = undefined;
       // 首屏与更早页共用同一个超时兜底：连接中途断开时不让 loading 永久卡住，
       // 用户重进/重试仍可再次发起请求。
       history.loadingTimer = setTimeout(() => {
@@ -403,6 +419,7 @@
         history.loading = false;
         history.loadingOlder = false;
         history.loadingTimer = null;
+        history.loadFailed = { reason: transportOpen() ? 'error' : 'offline', at: Date.now() };
         queueRender();
       }, 10000);
     }
@@ -441,7 +458,16 @@
   }
   function refreshActiveChat() {
     const id = activeChatSessionId();
-    if (!id || !transportOpen()) { showToast('当前未连接 Bridge'); return; }
+    if (!id || !transportOpen()) {
+      if (id) {
+        const history = state.sessionHistory[id] || { items: [], hasMore: true, nextBefore: null, loading: false, loadingOlder: false, loadingTimer: null, lastTimestamp: 0, lastSeq: 0 };
+        history.loadFailed = { reason: 'offline', at: Date.now() };
+        state.sessionHistory[id] = history;
+        queueRender();
+      }
+      showToast('当前未连接 Bridge');
+      return;
+    }
     state.sessionHistory[id] = { items: [], hasMore: true, nextBefore: null, loading: false, loadingOlder: false, loadingTimer: null, lastTimestamp: 0, lastSeq: 0 };
     state.renderedChat = { sessionId: '', keys: [], identityKeys: [] };
     // A pull-to-refresh starts at the top. Keep that position while the
@@ -453,6 +479,20 @@
     requestSessionHistory(id, { limit: 120, refresh: true });
     control('requestSnapshot');
     showToast('正在刷新当前对话');
+  }
+  // "无法加载对话"note 下的重试入口：重新激活会话并重发历史请求。
+  // 失败态在请求发出前清除，请求再次失败会由 requestSessionHistory 重新标记，
+  // 提示条随之在"加载中/失败"之间自然切换，不会出现静默空白。
+  function retryChatLoad(sessionId) {
+    const id = canonicalSessionId(String(sessionId || ''));
+    if (!id) { showToast('当前没有可用的 DSH 会话，请确认电脑端 DSH 已启动'); return; }
+    const history = state.sessionHistory[id] || { items: [], hasMore: true, nextBefore: null, loading: false, loadingOlder: false, loadingTimer: null, lastTimestamp: 0 };
+    history.loadFailed = undefined;
+    state.sessionHistory[id] = history;
+    activateChatSession(id);
+    const requested = requestSessionHistory(id, { limit: 120, refresh: true });
+    if (!requested) showToast('仍未连接：请确认电脑端 DSH 已启动');
+    else showToast('正在重新加载对话');
   }
   const eventName = (type) => ({
     'session.started': '会话启动', 'session.completed': '会话完成', 'session.failed': '会话失败',
@@ -929,7 +969,7 @@
     const deviceName = device.name || snapshot.deviceName || 'MagicBook';
     text('settingsDesktopName', deviceName);
     text('settingsDesktopStatus', state.connected ? '已连接' : '未连接');
-    text('settingsVersionNumber', 'v1.12.12');
+    text('settingsVersionNumber', 'v1.12.13');
     text('settingsVersionState', '已是最新版');
     text('settingsVersionNote', '当前已安装最新版本');
   }
@@ -1078,10 +1118,35 @@
     }
     const liveFloor = Number(history?.lastTimestamp || 0);
     const historyFloorSeq = Number(history?.lastSeq || history?.items?.reduce((max, item) => Math.max(max, Number(item.seq || 0)), 0) || 0);
-    if (!items.length && history?.loading) {
-      items.push({ kind: 'note', text: '正在加载对话…', timestamp: Date.now(), sequence: sequence++ });
-    } else if (!history?.items?.length && snapshot.lastMessage && !hasAssistantEvent && (!sessionId || sessionId === String(snapshot.session?.id || ''))) {
-      items.push({ kind: 'note', text: String(snapshot.lastMessage), timestamp: timeOf(snapshot.updatedAt, 0), sequence: sequence++ });
+    if (!items.length) {
+      if (history?.loading) {
+        items.push({ kind: 'note', id: `note:${sessionId}:loading`, text: '正在加载对话…', timestamp: Date.now(), sequence: sequence++ });
+      } else if (history?.loadFailed) {
+        const offline = history.loadFailed.reason === 'offline';
+        items.push({
+          kind: 'note',
+          id: `note:${sessionId}:load-failed:${history.loadFailed.reason}`,
+          text: offline
+            ? '无法加载对话：当前未连接电脑，请确认电脑端 DSH 已启动后重试。'
+            : '无法加载对话：对话加载失败，请确认电脑端 DSH 已启动后重试。',
+          timestamp: Date.now(),
+          sequence: sequence++,
+        });
+        items.push({ kind: 'retry', id: `retry:${sessionId}`, sessionId, label: '重试加载', timestamp: Date.now() + 1, sequence: sequence++ });
+      } else if (!history?.items?.length && snapshot.lastMessage && !hasAssistantEvent && (!sessionId || sessionId === String(snapshot.session?.id || ''))) {
+        items.push({ kind: 'note', text: String(snapshot.lastMessage), timestamp: timeOf(snapshot.updatedAt, 0), sequence: sequence++ });
+      } else if (history || isSyntheticSessionId(sessionId)) {
+        // 列表为空且没有加载中/失败/快照兜底：显示居中空态，收敛顶部白带的"未渲染"观感。
+        const draft = isSyntheticSessionId(sessionId);
+        items.push({
+          kind: 'empty-state',
+          id: `empty:${sessionId}`,
+          title: draft ? '准备开始新的对话' : '选择一个会话开始工作',
+          hint: draft ? '发送第一条消息，DSH 会在电脑端创建会话' : '或先启动电脑端 DSH',
+          timestamp: Date.now(),
+          sequence: sequence++,
+        });
+      }
     }
     sessionEvents.forEach((event, index) => {
       const eventType = String(event.type || event.data?.type || '').trim();
@@ -1293,6 +1358,31 @@
       buttons.append(deny, allow);
       card.append(heading, desc, buttons);
       return card;
+    }
+    if (item.kind === 'retry') {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'chat-retry-row chat-item-enter';
+      button.dataset.chatRetry = String(item.sessionId || '');
+      button.setAttribute('aria-label', '重试加载对话');
+      button.innerHTML = '<span class="chat-retry-icon" aria-hidden="true">↻</span><span class="chat-retry-label"></span>';
+      button.querySelector('.chat-retry-label').textContent = String(item.label || '重试');
+      return button;
+    }
+    if (item.kind === 'empty-state' || item.kind === 'empty') {
+      const empty = document.createElement('div');
+      empty.className = 'chat-empty-state chat-item-enter';
+      const icon = document.createElement('img');
+      icon.src = './icons/no-chat-icons8.png';
+      icon.alt = '';
+      const title = document.createElement('p');
+      title.className = 'chat-empty-title';
+      title.textContent = String(item.title || '选择一个会话开始工作');
+      const hint = document.createElement('p');
+      hint.className = 'chat-empty-hint';
+      hint.textContent = String(item.hint || '或先启动电脑端 DSH');
+      empty.append(icon, title, hint);
+      return empty;
     }
     const row = document.createElement('div');
     row.className = 'chat-event-row';
@@ -2172,6 +2262,8 @@
         history.loadingTimer = null;
         history.loading = false;
         history.loadingOlder = false;
+        // 历史响应到达：任何先前的加载失败态都被事实覆盖，失败 note 随 items 重组自然消失。
+        history.loadFailed = undefined;
         history.lastTimestamp = history.items.reduce((latest, item) => Math.max(latest, Number(item.timestamp || 0)), 0);
         state.sessionHistory[sessionId] = history;
         // 历史响应可能属于任何会话（后台预热/去重的请求都会共用状态对象）。
@@ -2824,6 +2916,10 @@
   };
   $('disconnectButton').onclick = disconnect;
   $('stopButton').onclick = () => {
+    if (!activeChatSessionId()) {
+      showToast('当前没有可用的 DSH 会话，请确认电脑端 DSH 已启动');
+      return;
+    }
     if (state.replying) {
       state.replying = false;
       syncComposerState();
@@ -2839,6 +2935,12 @@
     const images = Array.isArray(state.pendingImages) ? state.pendingImages : [];
     if (!value && !images.length) { $('promptInput').focus(); return; }
     const activeId = activeChatSessionId();
+    if (!activeId) {
+      // Bridge 可能已连接，但当前没有 DSH 会话（快照为空/会话已不在桌面端）。
+      // 允许输入但明确告知而不是把消息发向不存在的会话。
+      showToast('当前没有可用的 DSH 会话，请确认电脑端 DSH 已启动');
+      return;
+    }
     if (isSyntheticSessionId(activeId) && String(activeId).startsWith('draft:')) {
       const creating = state.creatingChatProject;
       if (!creating) {
@@ -2981,6 +3083,11 @@
     }
     if (!state.autoFollowChat) scheduleFollowResume();
   }, { passive: true });
+  // 加载失败 note 下的"重试加载"按钮（chatItemElement 生成，data-chat-retry 携带会话 id）。
+  $('chatItems').addEventListener('click', (event) => {
+    const retry = event.target.closest('[data-chat-retry]');
+    if (retry) retryChatLoad(retry.dataset.chatRetry || '');
+  });
   $('chatScrollBottom').onclick = () => {
     const scroller = $('chatScroll');
     if (!scroller) return;

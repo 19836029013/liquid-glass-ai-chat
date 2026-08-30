@@ -455,6 +455,13 @@ body.dashboard-mode .app-shell { width: 100%; padding: 0; }
 .chat-thinking-content { max-height: 0; overflow: hidden; padding: 0 18px 0 49px; color: #858b91; font-size: 16px; line-height: 1.55; font-weight: 400; letter-spacing: -.008em; white-space: pre-wrap; overflow-wrap: anywhere; opacity: 0; transition: max-height .42s cubic-bezier(.22,.78,.28,1), padding .32s ease, opacity .24s ease; }
 .chat-thinking-card.is-expanded .chat-thinking-content { max-height: 1400px; padding-bottom: 18px; opacity: 1; }
 .chat-note { margin-top: 16px; color: #111; font-size: 16px; line-height: 1.55; font-weight: 400; letter-spacing: -.010em; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-retry-row { display: inline-flex; align-items: center; justify-content: center; gap: 7px; margin-top: 14px; min-height: 44px; padding: 0 22px; border: 1px solid #dce6f5; border-radius: 22px; background: #f2f7fe; color: #2e6be6; font: inherit; font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.chat-retry-row:active { background: #e3eefd; }
+.chat-retry-icon { width: 18px; height: 18px; display: grid; place-items: center; flex: 0 0 18px; font-size: 17px; line-height: 1; }
+.chat-empty-state { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 64px 24px 12px; color: #9aa0a6; text-align: center; }
+.chat-empty-state img { width: 56px; height: 56px; object-fit: contain; display: block; opacity: .62; }
+.chat-empty-title { margin: 16px 0 0; color: #7d838a; font-size: 15px; line-height: 1.35; font-weight: 600; letter-spacing: -.012em; }
+.chat-empty-hint { margin: 7px 0 0; color: #a8aeb4; font-size: 13px; line-height: 1.45; font-weight: 400; letter-spacing: -.008em; }
 .chat-approval-card { width: 100%; margin-top: 18px; padding: 14px 16px 14px; border: 1px solid #eceef0; border-radius: 22px; background: #fefefe; box-shadow: 0 1px 2px rgba(30, 36, 41, .04); }
 .chat-approval-heading { display: flex; align-items: center; gap: 9px; color: #5f666b; }
 .chat-approval-icon { width: 22px; height: 22px; object-fit: contain; display: block; }

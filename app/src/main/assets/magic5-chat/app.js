@@ -138,7 +138,9 @@
     if (!state.conversations.length) state.conversations = [defaultConversation()];
     if (!state.conversations.some((item) => item.id === state.activeId)) state.activeId = state.conversations[0].id;
   };
-  const saveConversations = () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.conversations.slice(0, 30))); } catch (_) {} };
+  // 草稿（_draft: true）只存在内存，绝不写入 localStorage：新建对话后即使一个字
+  // 都没发，切走重进也不会在最近聊天里残留空对话；发送首条消息时才转正落库。
+  const saveConversations = () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state.conversations.filter((item) => !item._draft).slice(0, 30))); } catch (_) {} };
   const loadProjects = () => {
     const stored = safeJson(localStorage.getItem(PROJECTS_STORAGE_KEY), []);
     state.projects = Array.isArray(stored) ? stored.filter((item) => item && String(item.name || '').trim()) : [];
@@ -186,6 +188,18 @@
     { test: /v4-flash|deepseek-chat|deepseek-reasoner|flash/, valley: { hit: 0.05, miss: 1.5, output: 4.5 }, peak: { hit: 0.1, miss: 3, output: 9 } },
   ];
   const DEFAULT_PRICE = { valley: { hit: 0.05, miss: 1.5, output: 4.5 }, peak: { hit: 0.1, miss: 3, output: 9 } };
+  // 模型上下文窗口：DeepSeek V4 家族（V4 Flash / V4 Pro / vision-exp，含
+  // deepseek-chat / deepseek-reasoner 别名）上下文均为 1,048,576 tokens（1M），
+  // 最大输出 393,216（384K）。未收录模型回退旧默认 64K（仅估算展示用；
+  // API 若通过 usage 下发 context_limit / contextLimit / limit 则优先采用）。
+  const MODEL_CONTEXT_WINDOWS = [
+    { test: /v4|deepseek-chat|deepseek-reasoner|flash|pro/, limit: 1_048_576 },
+  ];
+  const contextLimitFor = (model) => {
+    const name = String(model || '').toLowerCase();
+    const entry = MODEL_CONTEXT_WINDOWS.find((rule) => rule.test.test(name));
+    return entry ? entry.limit : 65536;
+  };
   const PEAK_HOURS = [[9, 12], [14, 18]];
   const isPeakNow = (date = new Date()) => { const beijing = new Date(date.getTime() + 8 * 3600_000); const hour = beijing.getUTCHours(); return PEAK_HOURS.some(([start, end]) => hour >= start && hour < end); };
   const priceFor = (model, when = new Date()) => {
@@ -239,7 +253,7 @@
   };
   const conversationMetrics = (conversation = activeConversation()) => {
     const usage = conversation?.usage && typeof conversation.usage === 'object' ? conversation.usage : {};
-    const limit = numericValue(usage.context_limit, usage.contextLimit, usage.limit) ?? 65536;
+    const limit = numericValue(usage.context_limit, usage.contextLimit, usage.limit) ?? contextLimitFor(state.api.model);
     const total = conversationTokensTotal(conversation);
     const used = Math.min(limit, total);
     let roundCostValue = 0; let roundEstimated = false; let roundTokens = null;
@@ -320,9 +334,9 @@
     const list = document.querySelector('.sidebar-recent-list');
     if (!list) return;
     list.innerHTML = '';
-    state.conversations.filter((conversation) => !String(conversation?.projectName || '').trim()).slice().sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || Number(b.updatedAt || 0) - Number(a.updatedAt || 0)).slice(0, 8).forEach((conversation) => {
+    state.conversations.filter((conversation) => !conversation._draft && !String(conversation?.projectName || '').trim()).slice().sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || Number(b.updatedAt || 0) - Number(a.updatedAt || 0)).slice(0, 8).forEach((conversation) => {
       const button = document.createElement('button'); button.className = 'sidebar-recent-item'; button.type = 'button'; button.dataset.conversationId = conversation.id; button.textContent = conversation.title || '新对话';
-      button.onclick = () => { state.activeId = conversation.id; closeSidebar(); renderMessages(); }; list.appendChild(button);
+      button.onclick = () => { cleanupDraftConversation(); state.activeId = conversation.id; closeSidebar(); renderMessages(); }; list.appendChild(button);
     });
   };
   // 标题胶囊溢出检测：超出可用宽度时加 is-marquee，横向循环滚动显示全称。
@@ -429,7 +443,7 @@
     const root = $('apiProjectChats'); const empty = $('apiProjectEmpty'); if (!root || !empty) return;
     const query = String($('apiProjectSearch')?.value || '').trim().toLocaleLowerCase();
     const projectKey = String(project.name || '').trim().toLocaleLowerCase();
-    const chats = state.conversations.filter((conversation) => String(conversation?.projectName || '').trim().toLocaleLowerCase() === projectKey && (!query || String(conversation.title || '').toLocaleLowerCase().includes(query))).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
+    const chats = state.conversations.filter((conversation) => !conversation._draft && String(conversation?.projectName || '').trim().toLocaleLowerCase() === projectKey && (!query || String(conversation.title || '').toLocaleLowerCase().includes(query))).sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0));
     root.replaceChildren();
     chats.forEach((conversation) => {
       const row = document.createElement('button'); row.type = 'button'; row.className = 'api-project-chat-row'; row.dataset.conversationId = String(conversation.id || '');
@@ -441,12 +455,14 @@
     empty.hidden = chats.length > 0;
   };
   const showApiProjects = () => {
+    cleanupDraftConversation();
     closeOverlays(); closeSidebar();
     [chatPage, settingsView, remoteView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
     apiProjectsView.hidden = false; renderApiProjects();
   };
   const showApiProject = (project) => {
     if (!project) return;
+    cleanupDraftConversation();
     closeOverlays(); closeSidebar(); state.selectedProject = project;
     [chatPage, settingsView, remoteView, apiProjectsView].forEach((view) => { if (view) view.hidden = true; });
     apiProjectView.hidden = false; renderApiProject();
@@ -522,16 +538,33 @@
     const now = Date.now(); const project = { id: `api-project-${now}`, name, createdAt: now, updatedAt: now };
     state.projects.unshift(project); saveProjects(); closeApiProjectCreate(); showApiProject(project); showToast('项目已创建');
   };
+  // 草稿清理：切到其他对话 / 项目 / 设置 / Remote（以及再次新建对话）时调用。
+  // 活动草稿若没有任何消息且输入框为空、无附件 → 从内存移除（不写 localStorage，
+  // 避免最近聊天残留空对话）；若有输入内容未发送 → 保留在内存（仍不落库），
+  // 回到该对话时依旧可见，直到 sendMessage 发送首条消息才转正。
+  const cleanupDraftConversation = () => {
+    const drafts = state.conversations.filter((item) => item._draft);
+    if (!drafts.length) return;
+    const hasInlineText = Boolean(messageInput && String(messageInput.value || '').trim());
+    const hasAttachment = Boolean(state.pendingAttachment);
+    const alive = drafts.filter((draft) => draft.id === state.activeId && ((draft.messages || []).length > 0 || hasInlineText || hasAttachment));
+    if (alive.length === drafts.length) return;
+    state.conversations = state.conversations.filter((item) => !item._draft || alive.includes(item));
+    if (!state.conversations.length) state.conversations = [defaultConversation()];
+    if (!state.conversations.some((item) => item.id === state.activeId)) state.activeId = state.conversations[0].id;
+  };
   const startApiProjectChat = () => {
     const project = state.selectedProject; if (!project) return;
+    cleanupDraftConversation();
     const id = `api-chat-${Date.now()}`;
-    state.conversations.unshift({ id, title: '新对话', projectName: project.name, updatedAt: Date.now(), messages: [] });
-    state.activeId = id; saveConversations(); showChatPage(); messageInput?.focus();
+    state.conversations.unshift({ id, title: '新对话', projectName: project.name, updatedAt: Date.now(), messages: [], _draft: true });
+    state.activeId = id; showChatPage(); messageInput?.focus();
   };
   const startOrdinaryChat = () => {
+    cleanupDraftConversation();
     const id = `api-chat-${Date.now()}`;
-    state.conversations.unshift({ id, title: '新对话', projectName: '', updatedAt: Date.now(), messages: [] });
-    state.activeId = id; saveConversations(); showChatPage(); messageInput?.focus(); showToast('已打开新对话');
+    state.conversations.unshift({ id, title: '新对话', projectName: '', updatedAt: Date.now(), messages: [], _draft: true });
+    state.activeId = id; showChatPage(); messageInput?.focus(); showToast('已打开新对话');
   };
   const openConversationRename = () => {
     if (!conversationRenameLayer) return;
@@ -554,8 +587,8 @@
   const closeOverlays = () => { attachmentLayer.hidden = true; featureLayer.hidden = true; if (apiProjectPickerLayer) apiProjectPickerLayer.hidden = true; if (chatSelectorLayer) chatSelectorLayer.hidden = true; if (contextLayer) contextLayer.hidden = true; if (projectMenuLayer) projectMenuLayer.hidden = true; closeApiProjectCreate(); closeApiProjectNote(); closeConversationRename(); $('attachmentButton')?.setAttribute('aria-expanded', 'false'); $('featureButton')?.setAttribute('aria-expanded', 'false'); $('chatModelButton')?.setAttribute('aria-expanded', 'false'); $('chatEffortButton')?.setAttribute('aria-expanded', 'false'); $('contextButton')?.setAttribute('aria-expanded', 'false'); };
   const closeSidebar = () => { sidebarLayer.hidden = true; $('menuButton')?.setAttribute('aria-expanded', 'false'); };
   const openSidebar = () => { closeOverlays(); sidebarLayer.hidden = false; $('menuButton')?.setAttribute('aria-expanded', 'true'); };
-  const showRemoteView = (route = 'remote') => { closeOverlays(); closeSidebar(); closeApiProjectCreate(); [settingsView, chatPage, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; }); remoteView.hidden = false; syncRemoteFrameInsets(); requestRemoteRoute(route); };
-  const showSettingsView = (returnView = 'chat') => { closeOverlays(); closeSidebar(); closeApiProjectCreate(); state.settingsReturnView = returnView === 'remote' ? 'remote' : 'chat'; remoteView.hidden = true; chatPage.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; settingsView.hidden = false; loadConfigIntoForm(); };
+  const showRemoteView = (route = 'remote') => { cleanupDraftConversation(); closeOverlays(); closeSidebar(); closeApiProjectCreate(); [settingsView, chatPage, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; }); remoteView.hidden = false; syncRemoteFrameInsets(); requestRemoteRoute(route); };
+  const showSettingsView = (returnView = 'chat') => { cleanupDraftConversation(); closeOverlays(); closeSidebar(); closeApiProjectCreate(); state.settingsReturnView = returnView === 'remote' ? 'remote' : 'chat'; remoteView.hidden = true; chatPage.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; settingsView.hidden = false; loadConfigIntoForm(); };
   const closeSettingsView = () => { settingsView.hidden = true; if (state.settingsReturnView === 'remote') { remoteView.hidden = false; chatPage.hidden = true; syncRemoteFrameInsets(); return; } remoteView.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; chatPage.hidden = false; renderMessages(); };
   // 展开态（键盘弹出、输入框有焦点）点开附件/模型/思考等级/上下文弹层时保持输入栏展开：
   // 这些文件内没有任何 blur 逻辑，按 pointerdown 记录焦点状态，弹层打开后重新聚焦 messageInput 兜底。
@@ -714,7 +747,12 @@
   const sendMessage = async () => {
     if (state.request) { showToast('上一条消息还在生成，请稍候'); return; }
     const value = messageInput.value.trim(); if (!value && !state.pendingAttachment) { showToast('先输入一条消息'); messageInput.focus(); return; }
-    const conversation = activeConversation(); const attachment = state.pendingAttachment ? { ...state.pendingAttachment } : null; const user = { role: 'user', text: value, attachment }; conversation.messages.push(user);
+    const conversation = activeConversation();
+    // 发送首条消息（或附件）= 草稿转正：去除 _draft 标记并确保处于
+    // state.conversations（否则 push），随后 saveConversations 落库。
+    if (conversation?._draft) delete conversation._draft;
+    if (!state.conversations.some((item) => item === conversation)) state.conversations.unshift(conversation);
+    const attachment = state.pendingAttachment ? { ...state.pendingAttachment } : null; const user = { role: 'user', text: value, attachment }; conversation.messages.push(user);
     if (conversation.messages.filter((item) => item.role === 'user').length === 1 || conversation.title === '今天的灵感') conversation.title = formatTitle(value || attachment?.name || '图片对话');
     conversation.updatedAt = Date.now(); const assistant = { role: 'assistant', text: '', pending: true }; conversation.messages.push(assistant); state.pendingAttachment = null; attachmentInput.value = ''; messageInput.value = ''; messageInput.style.height = '42px'; renderAttachment(); renderMessages(); animateLastMessage(); tapTick();
     if (!state.api.api_key) { assistant.pending = false; assistant.error = true; assistant.text = '还没有配置 API Key，请到设置中完成配置后再发送。'; saveConversations(); renderMessages(); showToast('请先配置 API Key'); showSettingsView(); return; }
@@ -760,7 +798,12 @@
     if (action === 'find') { showToast('可在聊天内容中查找'); messageInput.focus(); return; }
     if (action === 'archive') { conversation.archived = true; conversation.updatedAt = Date.now(); saveConversations(); showToast('已归档当前对话'); return; }
     if (action === 'delete') {
-      if (state.conversations.length <= 1) { conversation.messages = []; conversation.title = '今天的灵感'; conversation.projectName = ''; conversation.usage = {}; conversation.updatedAt = Date.now(); }
+      if (conversation._draft) {
+        // 草稿从未落库，直接移除即可；保持至少一个默认对话
+        state.conversations = state.conversations.filter((item) => item.id !== conversation.id);
+        if (!state.conversations.length) state.conversations = [defaultConversation()];
+        state.activeId = state.conversations[0]?.id || 'today';
+      } else if (state.conversations.length <= 1) { conversation.messages = []; conversation.title = '今天的灵感'; conversation.projectName = ''; conversation.usage = {}; conversation.updatedAt = Date.now(); }
       else { state.conversations = state.conversations.filter((item) => item.id !== conversation.id); state.activeId = state.conversations[0]?.id || 'today'; }
       saveConversations(); renderMessages(); showToast('已删除当前对话');
     }
@@ -796,7 +839,7 @@
   $('apiProjectsList')?.addEventListener('click', (event) => { if (state.longPressActive) { state.longPressActive = false; return; } const row = event.target.closest('.api-project-row'); if (!row) return; showApiProject(state.projects.find((project) => String(project.id) === String(row.dataset.projectId))); });
   $('apiProjectBackButton')?.addEventListener('click', showApiProjects);
   $('apiProjectSearch')?.addEventListener('input', renderApiProject);
-  $('apiProjectChats')?.addEventListener('click', (event) => { const row = event.target.closest('.api-project-chat-row'); if (!row) return; state.activeId = String(row.dataset.conversationId || ''); showChatPage(); });
+  $('apiProjectChats')?.addEventListener('click', (event) => { const row = event.target.closest('.api-project-chat-row'); if (!row) return; cleanupDraftConversation(); state.activeId = String(row.dataset.conversationId || ''); showChatPage(); });
   $('apiProjectComposeButton')?.addEventListener('click', startApiProjectChat);
   $('apiProjectCreateScrim')?.addEventListener('click', closeApiProjectCreate);
   $('apiProjectCreateCancel')?.addEventListener('click', closeApiProjectCreate);
