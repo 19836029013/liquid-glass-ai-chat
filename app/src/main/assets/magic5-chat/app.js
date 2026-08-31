@@ -28,12 +28,13 @@
   const featureLayer = $('featureLayer');
   const chatSelectorLayer = $('chatSelectorLayer');
   const contextLayer = $('contextLayer');
+  const groupSettingEditorLayer = $('groupSettingEditorLayer');
   const sidebarLayer = $('sidebarLayer');
   const chatPage = $('chatPage');
   const remoteView = $('remoteView');
-  const groupView = $('groupView');
-  const groupFrame = $('groupApp');
   const settingsView = $('settingsView');
+  const groupSettingsView = $('groupSettingsView');
+  const scheduleView = $('scheduleView');
   const apiProjectsView = $('apiProjectsView');
   const apiProjectView = $('apiProjectView');
   const apiProjectCreateLayer = $('apiProjectCreateLayer');
@@ -60,11 +61,19 @@
   };
 
   const DEFAULT_CONFIG = { base_url: 'https://api.deepseek.com', api_key: '', model: 'deepseek-chat', system_prompt: '' };
-  const STORAGE_KEY = 'deepseek.chat.conversations.v2';
-  const PROJECTS_STORAGE_KEY = 'deepseek.chat.projects.v1';
+  const STORAGE_KEY = 'deepseek.chat.conversations.v3';
+  const PROJECTS_STORAGE_KEY = 'deepseek.chat.projects.v2';
   const CONFIG_KEY = 'deepseek.chat.api.v1';
   const API_MODELS_KEY = 'deepseek.chat.api.models.v1';
-  const state = { conversations: [], projects: [], activeId: 'today', selectedProject: null, api: { ...DEFAULT_CONFIG }, apiModels: ['deepseek-chat', 'deepseek-reasoner'], selectedEffort: 'auto', projectName: '', pendingAttachment: null, request: null, toastTimer: null, pendingRemoteMessages: [], pendingRemoteRoute: '', pendingGroupJoinLink: '', apiTestPending: false, settingsReturnView: 'chat', menuProjectId: '', projectRenameId: '', projectNoteId: '', longPressActive: false };
+  const GROUP_SETTINGS_KEY = 'deepseek.chat.group.settings.v1';
+  const FRESH_STATE_MARKER = 'deepseek.chat.fresh-state.v1';
+  const DEFAULT_GROUP_SETTINGS = {
+    chat: { model: 'deepseek-chat', effort: 'auto', prompt: '' },
+    reasoner: { model: 'deepseek-reasoner', effort: 'auto', prompt: '' },
+  };
+  const state = { conversations: [], projects: [], activeId: 'today', selectedProject: null, api: { ...DEFAULT_CONFIG }, apiModels: ['deepseek-chat', 'deepseek-reasoner'], selectedEffort: 'auto', groupSettings: {}, groupEditor: null, projectName: '', pendingAttachment: null, request: null, toastTimer: null, pendingRemoteMessages: [], pendingRemoteRoute: '', apiTestPending: false, settingsReturnView: 'chat', menuProjectId: '', projectRenameId: '', projectNoteId: '', longPressActive: false };
+  const scheduleToday = new Date();
+  let scheduleMonthCursor = new Date(scheduleToday.getFullYear(), scheduleToday.getMonth(), 1);
 
   const safeJson = (value, fallback) => { try { return typeof value === 'string' ? JSON.parse(value) : (value ?? fallback); } catch (_) { return fallback; } };
   const showToast = (message) => { const toast = $('toast'); if (!toast) return; toast.textContent = String(message || ''); toast.classList.add('show'); clearTimeout(state.toastTimer); state.toastTimer = setTimeout(() => toast.classList.remove('show'), 2200); };
@@ -86,14 +95,6 @@
     const parsed = safeJson(payload, null);
     if (parsed?.type === 'file-picked') window.dispatchEvent(new CustomEvent('native-file-picked', { detail: parsed }));
     if (parsed?.type === 'open-session') showRemoteView();
-    if (parsed?.type === 'group-join') {
-      const link = String(parsed.link || '');
-      showGroupView();
-      const target = groupFrame?.contentWindow;
-      if (target && typeof target.handleGroupJoinLink === 'function') { try { target.handleGroupJoinLink(link); return; } catch (_) {} }
-      state.pendingGroupJoinLink = link;
-      return;
-    }
     const target = remoteFrame?.contentWindow?.DshRemote;
     if (target && typeof target.onNativeMessage === 'function') { try { target.onNativeMessage(payload); return; } catch (_) {} }
     state.pendingRemoteMessages.push(payload);
@@ -119,20 +120,9 @@
       try { remoteFrame.contentWindow.postMessage({ type: 'dsh-shell-route', route: state.pendingRemoteRoute }, '*'); } catch (_) {}
     }
   });
-  groupFrame?.addEventListener('load', () => {
-    const link = state.pendingGroupJoinLink;
-    if (!link) return;
-    state.pendingGroupJoinLink = '';
-    try { groupFrame.contentWindow.handleGroupJoinLink?.(link); } catch (_) { state.pendingGroupJoinLink = link; }
-  });
   window.addEventListener('resize', syncRemoteFrameInsets);
-  window.DshShellBack = () => { remoteView.hidden = true; groupView.hidden = true; settingsView.hidden = true; chatPage.hidden = false; renderMessages(); };
+  window.DshShellBack = () => { remoteView.hidden = true; settingsView.hidden = true; groupSettingsView.hidden = true; if (scheduleView) scheduleView.hidden = true; chatPage.hidden = false; renderMessages(); };
   window.addEventListener('message', (event) => {
-    if (event.source === groupFrame?.contentWindow) {
-      if (event.data?.type === 'dsh-group-open-shell-settings') showSettingsView('group');
-      if (event.data?.type === 'dsh-group-back') showChatPage();
-      return;
-    }
     if (event.source !== remoteFrame?.contentWindow) return;
     if (event.data?.type === 'dsh-shell-back') window.DshShellBack();
     if (event.data?.type === 'dsh-open-shell-settings') showSettingsView('remote');
@@ -154,9 +144,26 @@
   syncKeyboardInset();
 
   const defaultConversation = () => ({ id: 'today', title: '今天的灵感', projectName: '', updatedAt: Date.now(), messages: [] });
+  const clearLegacyDemoState = () => {
+    try {
+      if (localStorage.getItem(FRESH_STATE_MARKER) === '1') return;
+      [
+        // Both the current and legacy conversation stores may contain the
+        // old preview/demo rows. Start this build with one empty conversation.
+        STORAGE_KEY,
+        PROJECTS_STORAGE_KEY,
+        'deepseek.chat.conversations.v2',
+        'deepseek.chat.projects.v1',
+        'dsh.group.conversations.v1',
+        'deepseek.chat.group.settings.v1',
+      ].forEach((key) => localStorage.removeItem(key));
+      localStorage.setItem(FRESH_STATE_MARKER, '1');
+    } catch (_) {}
+  };
   const loadConversations = () => {
     const stored = safeJson(localStorage.getItem(STORAGE_KEY), []);
-    state.conversations = Array.isArray(stored) ? stored.filter((item) => item && item.id && Array.isArray(item.messages)) : [];
+    const valid = Array.isArray(stored) ? stored.filter((item) => item && item.id && Array.isArray(item.messages)) : [];
+    state.conversations = valid;
     if (!state.conversations.length) state.conversations = [defaultConversation()];
     if (!state.conversations.some((item) => item.id === state.activeId)) state.activeId = state.conversations[0].id;
   };
@@ -193,6 +200,13 @@
     return `${date.getMonth() + 1}月 ${date.getDate()}日`;
   };
   const activeConversation = () => state.conversations.find((item) => item.id === state.activeId) || state.conversations[0];
+  const isGroupConversation = (conversation) => Boolean(conversation?.isGroup === true || String(conversation?.kind || '').toLowerCase() === 'group' || String(conversation?.title || '').trim() === '项目讨论群');
+  const groupMemberCount = (conversation) => {
+    const explicit = Number(conversation?.memberCount);
+    if (Number.isFinite(explicit) && explicit > 0) return Math.round(explicit);
+    if (Array.isArray(conversation?.members) && conversation.members.length) return conversation.members.length;
+    return 6;
+  };
   const formatTitle = (value) => { const text = String(value || '').replace(/\s+/g, ' ').trim(); return text.length > 24 ? `${text.slice(0, 24)}…` : (text || '新对话'); };
   const numericValue = (...values) => {
     for (const value of values) {
@@ -357,7 +371,11 @@
     if (!list) return;
     list.innerHTML = '';
     state.conversations.filter((conversation) => !conversation._draft && !String(conversation?.projectName || '').trim()).slice().sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) || Number(b.updatedAt || 0) - Number(a.updatedAt || 0)).slice(0, 8).forEach((conversation) => {
-      const button = document.createElement('button'); button.className = 'sidebar-recent-item'; button.type = 'button'; button.dataset.conversationId = conversation.id; button.textContent = conversation.title || '新对话';
+      const title = String(conversation.title || '新对话');
+      const isGroup = isGroupConversation(conversation);
+      const button = document.createElement('button'); button.className = `sidebar-recent-item${isGroup ? ' is-group' : ''}`; button.type = 'button'; button.dataset.conversationId = conversation.id; button.setAttribute('aria-label', isGroup ? `${title}，群聊` : title);
+      if (isGroup) { const icon = document.createElement('img'); icon.className = 'sidebar-recent-icon'; icon.src = '../icons/people-fill.svg?v=shell-v1'; icon.alt = ''; icon.setAttribute('aria-hidden', 'true'); button.appendChild(icon); }
+      const label = document.createElement('span'); label.className = 'sidebar-recent-title'; label.textContent = title; button.appendChild(label);
       button.onclick = () => { cleanupDraftConversation(); state.activeId = conversation.id; closeSidebar(); renderMessages(); }; list.appendChild(button);
     });
   };
@@ -395,7 +413,17 @@
       conversationContent.appendChild(node);
     });
     const scroll = $('messageScroll'); if (scroll) requestAnimationFrame(() => { scroll.scrollTop = scroll.scrollHeight; });
+    const group = isGroupConversation(conversation);
     $('conversationTitle').textContent = conversation?.title || '今天的灵感';
+    const titlePill = $('conversationTitle')?.closest('.conversation-title-pill');
+    titlePill?.classList.toggle('is-group', group);
+    const groupIcon = $('conversationGroupIcon');
+    if (groupIcon) { groupIcon.hidden = !group; groupIcon.setAttribute('aria-hidden', String(!group)); }
+    const memberCount = $('conversationMemberCount');
+    if (memberCount) { memberCount.hidden = !group; memberCount.textContent = group ? `${groupMemberCount(conversation)} 位成员` : ''; }
+    ['chatModelButton', 'chatEffortButton'].forEach((id) => { const button = $(id); if (button) { button.hidden = group; button.setAttribute('aria-hidden', String(group)); } });
+    const groupSettings = document.querySelector('[data-feature-action="group-settings"]');
+    if (groupSettings) { groupSettings.hidden = !group; groupSettings.setAttribute('aria-hidden', String(!group)); }
     if ($('featureMenuTitle')) $('featureMenuTitle').textContent = conversation?.title || '今天的灵感';
     setConversationFolder(conversation?.projectName || ''); renderRecentChats(); renderContextCard(); requestTitleMarqueeMeasure();
   };
@@ -411,8 +439,73 @@
 
   const showChatPage = () => {
     closeOverlays(); closeSidebar();
-    [settingsView, remoteView, groupView, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
+    [settingsView, groupSettingsView, scheduleView, remoteView, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
     chatPage.hidden = false; renderMessages();
+  };
+  const showGroupSettingsView = () => {
+    const conversation = activeConversation();
+    if (!isGroupConversation(conversation)) { showToast('群聊设置仅适用于群聊'); return; }
+    cleanupDraftConversation(); closeOverlays(); closeSidebar();
+    [settingsView, scheduleView, chatPage, remoteView, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
+    groupSettingsView.hidden = false; renderGroupSettings();
+  };
+  const closeGroupSettingsView = () => {
+    if (!groupSettingsView || groupSettingsView.hidden) return;
+    groupSettingsView.hidden = true; chatPage.hidden = false; renderMessages();
+  };
+  const scheduleDateKey = (date) => {
+    const value = date instanceof Date ? date : new Date(date);
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  };
+  const scheduleMonthLabel = (date) => `${date.getFullYear()}年${date.getMonth() + 1}月`;
+  const renderScheduleCalendar = () => {
+    const heading = $('scheduleCalendarHeading');
+    const grid = $('scheduleCalendarGrid');
+    if (heading) heading.textContent = scheduleMonthLabel(scheduleMonthCursor);
+    if (!grid) return;
+    const year = scheduleMonthCursor.getFullYear();
+    const month = scheduleMonthCursor.getMonth();
+    const firstDayOffset = (new Date(year, month, 1).getDay() + 6) % 7;
+    const monthDays = new Date(year, month + 1, 0).getDate();
+    const totalCells = Math.ceil((firstDayOffset + monthDays) / 7) * 7;
+    const todayKey = scheduleDateKey(scheduleToday);
+    grid.replaceChildren();
+    for (let index = 0; index < totalCells; index += 1) {
+      const date = new Date(year, month, index - firstDayOffset + 1);
+      const cell = document.createElement('button');
+      cell.type = 'button';
+      cell.className = 'schedule-day';
+      cell.setAttribute('role', 'gridcell');
+      cell.textContent = String(date.getDate());
+      cell.setAttribute('aria-label', date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }));
+      if (date.getMonth() !== month) cell.classList.add('is-outside');
+      if (scheduleDateKey(date) === todayKey) { cell.classList.add('is-today'); cell.setAttribute('aria-current', 'date'); }
+      cell.addEventListener('click', () => {
+        if (date.getMonth() !== month) {
+          scheduleMonthCursor = new Date(date.getFullYear(), date.getMonth(), 1);
+          renderScheduleCalendar();
+          return;
+        }
+        document.querySelectorAll('.schedule-day.is-selected').forEach((node) => node.classList.remove('is-selected'));
+        cell.classList.add('is-selected');
+        showToast(`${date.getMonth() + 1}月${date.getDate()}日 · 日程编辑即将开放`);
+      });
+      grid.append(cell);
+    }
+  };
+  const renderScheduleView = () => {
+    renderScheduleCalendar();
+    const planProgress = $('schedulePlanProgress');
+    if (planProgress) planProgress.textContent = '0/0';
+    const goalProgressBar = $('scheduleGoalProgressBar');
+    if (goalProgressBar) goalProgressBar.style.width = '0%';
+  };
+  const showScheduleView = () => {
+    cleanupDraftConversation(); closeOverlays(); closeSidebar();
+    [settingsView, groupSettingsView, remoteView, chatPage, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
+    if (!scheduleView) return;
+    scheduleView.hidden = false;
+    renderScheduleView();
   };
   const attachProjectRowPress = (row, project) => {
     let timer = null; let startX = 0; let startY = 0;
@@ -479,14 +572,14 @@
   const showApiProjects = () => {
     cleanupDraftConversation();
     closeOverlays(); closeSidebar();
-    [chatPage, settingsView, remoteView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
+    [chatPage, settingsView, groupSettingsView, scheduleView, remoteView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
     apiProjectsView.hidden = false; renderApiProjects();
   };
   const showApiProject = (project) => {
     if (!project) return;
     cleanupDraftConversation();
     closeOverlays(); closeSidebar(); state.selectedProject = project;
-    [chatPage, settingsView, remoteView, apiProjectsView].forEach((view) => { if (view) view.hidden = true; });
+    [chatPage, settingsView, groupSettingsView, scheduleView, remoteView, apiProjectsView].forEach((view) => { if (view) view.hidden = true; });
     apiProjectView.hidden = false; renderApiProject();
   };
   const openApiProjectCreate = () => {
@@ -606,18 +699,12 @@
     saveConversations(); closeConversationRename(); renderMessages(); showToast('已重命名对话');
   };
 
-  const closeOverlays = () => { attachmentLayer.hidden = true; featureLayer.hidden = true; if (apiProjectPickerLayer) apiProjectPickerLayer.hidden = true; if (chatSelectorLayer) chatSelectorLayer.hidden = true; if (contextLayer) contextLayer.hidden = true; if (projectMenuLayer) projectMenuLayer.hidden = true; closeApiProjectCreate(); closeApiProjectNote(); closeConversationRename(); $('attachmentButton')?.setAttribute('aria-expanded', 'false'); $('featureButton')?.setAttribute('aria-expanded', 'false'); $('chatModelButton')?.setAttribute('aria-expanded', 'false'); $('chatEffortButton')?.setAttribute('aria-expanded', 'false'); $('contextButton')?.setAttribute('aria-expanded', 'false'); };
+  const closeOverlays = () => { attachmentLayer.hidden = true; featureLayer.hidden = true; if (apiProjectPickerLayer) apiProjectPickerLayer.hidden = true; if (chatSelectorLayer) chatSelectorLayer.hidden = true; if (contextLayer) contextLayer.hidden = true; if (groupSettingEditorLayer) groupSettingEditorLayer.hidden = true; if (projectMenuLayer) projectMenuLayer.hidden = true; closeApiProjectCreate(); closeApiProjectNote(); closeConversationRename(); state.groupEditor = null; $('attachmentButton')?.setAttribute('aria-expanded', 'false'); $('featureButton')?.setAttribute('aria-expanded', 'false'); $('chatModelButton')?.setAttribute('aria-expanded', 'false'); $('chatEffortButton')?.setAttribute('aria-expanded', 'false'); $('contextButton')?.setAttribute('aria-expanded', 'false'); };
   const closeSidebar = () => { sidebarLayer.hidden = true; $('menuButton')?.setAttribute('aria-expanded', 'false'); };
   const openSidebar = () => { closeOverlays(); sidebarLayer.hidden = false; $('menuButton')?.setAttribute('aria-expanded', 'true'); };
-  const showRemoteView = (route = 'remote') => { cleanupDraftConversation(); closeOverlays(); closeSidebar(); closeApiProjectCreate(); [settingsView, chatPage, groupView, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; }); remoteView.hidden = false; syncRemoteFrameInsets(); requestRemoteRoute(route); };
-  const showGroupView = (convId = '') => {
-    cleanupDraftConversation(); closeOverlays(); closeSidebar(); closeApiProjectCreate();
-    [settingsView, chatPage, remoteView, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; });
-    if (groupFrame && convId) groupFrame.src = `../group-chat/index.html?embedded=1&conv=${encodeURIComponent(convId)}&v=group-chat-v2`;
-    groupView.hidden = false;
-  };
-  const showSettingsView = (returnView = 'chat') => { cleanupDraftConversation(); closeOverlays(); closeSidebar(); closeApiProjectCreate(); state.settingsReturnView = ['remote', 'group'].includes(returnView) ? returnView : 'chat'; remoteView.hidden = true; groupView.hidden = true; chatPage.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; settingsView.hidden = false; loadConfigIntoForm(); };
-  const closeSettingsView = () => { settingsView.hidden = true; if (state.settingsReturnView === 'remote') { remoteView.hidden = false; groupView.hidden = true; chatPage.hidden = true; syncRemoteFrameInsets(); return; } if (state.settingsReturnView === 'group') { groupView.hidden = false; remoteView.hidden = true; chatPage.hidden = true; return; } remoteView.hidden = true; groupView.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; chatPage.hidden = false; renderMessages(); };
+  const showRemoteView = (route = 'remote') => { cleanupDraftConversation(); closeOverlays(); closeSidebar(); closeApiProjectCreate(); [settingsView, groupSettingsView, scheduleView, chatPage, apiProjectsView, apiProjectView].forEach((view) => { if (view) view.hidden = true; }); remoteView.hidden = false; syncRemoteFrameInsets(); requestRemoteRoute(route); };
+  const showSettingsView = (returnView = 'chat') => { cleanupDraftConversation(); closeOverlays(); closeSidebar(); closeApiProjectCreate(); state.settingsReturnView = returnView === 'remote' ? 'remote' : 'chat'; remoteView.hidden = true; groupSettingsView.hidden = true; if (scheduleView) scheduleView.hidden = true; chatPage.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; settingsView.hidden = false; loadConfigIntoForm(); };
+  const closeSettingsView = () => { settingsView.hidden = true; if (state.settingsReturnView === 'remote') { remoteView.hidden = false; chatPage.hidden = true; if (scheduleView) scheduleView.hidden = true; syncRemoteFrameInsets(); return; } remoteView.hidden = true; if (scheduleView) scheduleView.hidden = true; apiProjectsView.hidden = true; apiProjectView.hidden = true; chatPage.hidden = false; renderMessages(); };
   // 展开态（键盘弹出、输入框有焦点）点开附件/模型/思考等级/上下文弹层时保持输入栏展开：
   // 这些文件内没有任何 blur 逻辑，按 pointerdown 记录焦点状态，弹层打开后重新聚焦 messageInput 兜底。
   const restoreComposerFocus = () => {
@@ -654,50 +741,58 @@
     let stored = null; try { stored = native?.getApiConfig?.() || localStorage.getItem(CONFIG_KEY); } catch (_) {}
     const config = safeJson(stored, {}); state.api = { ...DEFAULT_CONFIG, ...(config && typeof config === 'object' ? config : {}) }; if (!state.api.base_url) state.api.base_url = DEFAULT_CONFIG.base_url; state.selectedEffort = String(config?.effort || 'auto'); const remembered = safeJson(localStorage.getItem(API_MODELS_KEY), []); if (Array.isArray(remembered)) state.apiModels = [...new Set([...state.apiModels, ...remembered.map((item) => String(item || '').trim()).filter(Boolean)])]; if (state.api.model) state.apiModels = [...new Set([...state.apiModels, String(state.api.model)])]; renderApiModels();
   };
+  const loadGroupSettings = () => {
+    const stored = safeJson(localStorage.getItem(GROUP_SETTINGS_KEY), {});
+    const source = stored && typeof stored === 'object' ? stored : {};
+    state.groupSettings = Object.keys(DEFAULT_GROUP_SETTINGS).reduce((result, member) => {
+      const defaults = DEFAULT_GROUP_SETTINGS[member]; const saved = source[member] && typeof source[member] === 'object' ? source[member] : {};
+      result[member] = { ...defaults, ...saved, model: String(saved.model || defaults.model), effort: String(saved.effort || defaults.effort), prompt: String(saved.prompt || defaults.prompt) };
+      return result;
+    }, {});
+  };
+  const saveGroupSettings = () => { try { localStorage.setItem(GROUP_SETTINGS_KEY, JSON.stringify(state.groupSettings)); } catch (_) {} };
+  const renderGroupSettings = () => {
+    const root = $('groupSettingsView'); if (!root) return;
+    root.querySelectorAll('[data-group-member]').forEach((block) => {
+      const member = block.dataset.groupMember || ''; const settings = state.groupSettings[member] || DEFAULT_GROUP_SETTINGS[member] || {};
+      block.querySelectorAll('[data-group-value]').forEach((node) => {
+        const setting = node.dataset.groupValue || '';
+        node.textContent = setting === 'effort' ? effortLabel(settings[setting]) : setting === 'prompt' ? (settings.prompt ? '已编辑提示词' : '编辑提示词') : String(settings[setting] || '');
+      });
+    });
+  };
+  const closeGroupSettingEditor = () => { if (groupSettingEditorLayer) groupSettingEditorLayer.hidden = true; state.groupEditor = null; };
+  const openGroupSettingEditor = (member, setting) => {
+    if (!groupSettingEditorLayer || !state.groupSettings[member]) return;
+    closeOverlays();
+    state.groupEditor = { member, setting, value: state.groupSettings[member][setting] || '' };
+    const memberLabel = $('groupSettingEditorMember'); const title = $('groupSettingEditorTitle'); const options = $('groupSettingEditorOptions'); const promptWrap = $('groupPromptEditorWrap'); const prompt = $('groupPromptEditor');
+    if (memberLabel) memberLabel.textContent = member === 'reasoner' ? 'deepseek-reasoner' : 'deepseek-chat';
+    if (title) title.textContent = setting === 'model' ? '模型' : setting === 'effort' ? '思考程度' : '提示词';
+    if (options) options.replaceChildren();
+    if (promptWrap) promptWrap.hidden = setting !== 'prompt';
+    if (prompt) prompt.value = setting === 'prompt' ? String(state.groupSettings[member].prompt || '') : '';
+    if (setting !== 'prompt' && options) {
+      const values = setting === 'model' ? [...new Set([...state.apiModels, 'deepseek-chat', 'deepseek-reasoner'])] : ['auto', 'high', 'max'];
+      values.forEach((value) => {
+        const row = document.createElement('button'); row.type = 'button'; row.className = 'group-editor-option'; row.dataset.value = value;
+        const label = document.createElement('span'); label.textContent = setting === 'effort' ? effortLabel(value) : value;
+        const tick = document.createElement('i'); tick.textContent = '✓'; tick.setAttribute('aria-hidden', 'true'); row.append(label, tick); row.classList.toggle('is-selected', value === state.groupEditor.value); options.append(row);
+      });
+    }
+    groupSettingEditorLayer.hidden = false;
+  };
+  const saveGroupSettingEditor = () => {
+    const editor = state.groupEditor; if (!editor || !state.groupSettings[editor.member]) { closeGroupSettingEditor(); return; }
+    const prompt = $('groupPromptEditor');
+    if (editor.setting === 'prompt') editor.value = String(prompt?.value || '').trim();
+    state.groupSettings[editor.member][editor.setting] = editor.value || (editor.setting === 'effort' ? 'auto' : DEFAULT_GROUP_SETTINGS[editor.member][editor.setting]);
+    saveGroupSettings(); renderGroupSettings(); closeGroupSettingEditor(); showToast('成员设置已保存');
+  };
   const parsePriceValue = (node) => { const value = Number(String(node?.value || '').trim()); return Number.isFinite(value) && value > 0 ? value : 0; };
   const readPriceInputs = () => ({ hit: parsePriceValue($('priceHitInput')), miss: parsePriceValue($('priceMissInput')), output: parsePriceValue($('priceOutputInput')) });
   const applyPricePlaceholders = () => { const price = priceFor(state.api.model); const set = (id, value) => { const node = $(id); if (node) node.placeholder = String(value); }; set('priceHitInput', price.hit); set('priceMissInput', price.miss); set('priceOutputInput', price.output); };
-  const loadSyncConfigIntoForm = () => {
-    const base = String(localStorage.getItem('sync.serverBase') || '').trim();
-    const token = String(localStorage.getItem('sync.serverToken') || '').trim();
-    const baseInput = $('syncServerInput'); const tokenInput = $('syncTokenInput');
-    if (baseInput) baseInput.value = base;
-    if (tokenInput) tokenInput.value = token;
-    const badge = $('syncStatusBadge');
-    if (badge) { badge.textContent = base ? '已配置' : '未配置'; badge.classList.toggle('offline', !base); badge.classList.toggle('online', Boolean(base)); }
-  };
-  const setSyncStatus = (message, kind = '') => { const node = $('syncSettingsStatus'); if (!node) return; node.textContent = message || ''; node.className = `api-settings-status${kind ? ` ${kind}` : ''}`; };
-  const saveSyncConfig = () => {
-    const base = String($('syncServerInput')?.value || '').trim().replace(/\/+$/, '');
-    const token = String($('syncTokenInput')?.value || '').trim();
-    if (base && !/^https?:\/\//i.test(base)) { setSyncStatus('服务器地址必须以 http:// 或 https:// 开头', 'error'); return false; }
-    try { if (base) localStorage.setItem('sync.serverBase', base); else localStorage.removeItem('sync.serverBase'); localStorage.setItem('sync.serverToken', token); } catch (_) {}
-    const badge = $('syncStatusBadge'); if (badge) { badge.textContent = base ? '已配置' : '未配置'; badge.classList.toggle('offline', !base); badge.classList.toggle('online', Boolean(base)); }
-    try { groupFrame?.contentWindow?.postMessage({ type: 'dsh-sync-config', base, token }, '*'); } catch (_) {}
-    setSyncStatus(base ? '服务器配置已保存' : '已清除群聊服务器配置', 'success');
-    return true;
-  };
-  const testSync = async () => {
-    if (!saveSyncConfig()) return;
-    const base = String($('syncServerInput')?.value || '').trim().replace(/\/+$/, '');
-    if (!base) { setSyncStatus('请先填写服务器地址', 'error'); return; }
-    const button = $('syncTestButton'); if (button) button.disabled = true;
-    setSyncStatus('正在测试服务器…');
-    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 8000);
-    try {
-      const token = String($('syncTokenInput')?.value || '').trim();
-      const response = await fetch(`${base}/health`, { headers: token ? { 'X-Sync-Token': token } : {}, signal: controller.signal });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json().catch(() => ({}));
-      if (!data.ok) throw new Error('服务未就绪');
-      setSyncStatus(`连接成功 · ${data.service || '群聊同步'}`, 'success');
-      const badge = $('syncStatusBadge'); if (badge) { badge.textContent = '已连接'; badge.classList.remove('offline'); badge.classList.add('online'); }
-    } catch (error) {
-      setSyncStatus(error?.name === 'AbortError' ? '连接超时，请检查地址和网络' : `连接失败：${error.message || '无法访问服务器'}`, 'error');
-      const badge = $('syncStatusBadge'); if (badge) { badge.textContent = '未连接'; badge.classList.remove('online'); badge.classList.add('offline'); }
-    } finally { clearTimeout(timer); if (button) button.disabled = false; }
-  };
-  const loadConfigIntoForm = () => { $('apiBaseInput').value = state.api.base_url || DEFAULT_CONFIG.base_url; $('apiKeyInput').value = state.api.api_key || ''; const price = state.api.prices || {}; $('priceHitInput').value = price.hit || ''; $('priceMissInput').value = price.miss || ''; $('priceOutputInput').value = price.output || ''; updateApiDot(state.api.api_key ? 'online' : 'offline'); syncChatSelectors(); loadSyncConfigIntoForm(); if (!$('apiSettingsStatus').textContent) setApiStatus(state.api.api_key ? '已配置 DeepSeek API' : '尚未配置 API Key'); };
+  const loadConfigIntoForm = () => { $('apiBaseInput').value = state.api.base_url || DEFAULT_CONFIG.base_url; $('apiKeyInput').value = state.api.api_key || ''; const price = state.api.prices || {}; $('priceHitInput').value = price.hit || ''; $('priceMissInput').value = price.miss || ''; $('priceOutputInput').value = price.output || ''; updateApiDot(state.api.api_key ? 'online' : 'offline'); syncChatSelectors(); if (!$('apiSettingsStatus').textContent) setApiStatus(state.api.api_key ? '已配置 DeepSeek API' : '尚未配置 API Key'); };
   const saveApiConfig = () => {
     const config = { base_url: normalizeApiBase($('apiBaseInput').value || ''), api_key: String($('apiKeyInput').value || '').trim(), model: String(state.api.model || 'deepseek-chat').trim(), system_prompt: state.api.system_prompt || '', effort: state.selectedEffort || 'auto' };
     const prices = readPriceInputs(); if (prices.hit || prices.miss || prices.output) config.prices = prices;
@@ -861,6 +956,8 @@
       conversation.pinned = !conversation.pinned; conversation.updatedAt = Date.now(); saveConversations(); renderRecentChats(); showToast(conversation.pinned ? '已置顶当前对话' : '已取消置顶'); return;
     }
     if (action === 'rename') { openConversationRename(); return; }
+    if (action === 'schedule') { showScheduleView(); return; }
+    if (action === 'group-settings') { if (isGroupConversation(conversation)) showGroupSettingsView(); return; }
     if (action === 'project') { if (conversation.projectName) { showToast(`已在项目「${conversation.projectName}」中`); return; } if (!state.projects.length) { showApiProjects(); openApiProjectCreate(); return; } openApiProjectPicker(); return; }
     if (action === 'files') { const count = (conversation.messages || []).filter((message) => message.attachment).length; showToast(count ? `本对话有 ${count} 个已上传文件` : '本对话暂无已上传文件'); return; }
     if (action === 'find') { showToast('可在聊天内容中查找'); messageInput.focus(); return; }
@@ -900,7 +997,7 @@
   document.querySelectorAll('[data-attachment-kind]').forEach((button) => { button.onclick = () => { closeOverlays(); attachmentInput.accept = button.dataset.attachmentKind === 'image' ? 'image/*' : '*/*'; attachmentInput.click(); }; });
   attachmentInput.onchange = () => { const file = attachmentInput.files?.[0]; if (file) setAttachment(file); };
   $('menuButton').onclick = openSidebar; document.querySelectorAll('[data-close-sidebar]').forEach((node) => { node.onclick = closeSidebar; });
-  $('sidebarProjectsButton')?.addEventListener('click', showApiProjects); $('sidebarNewChatButton')?.addEventListener('click', startOrdinaryChat); $('sidebarSettingsButton').onclick = () => showSettingsView('chat'); $('sidebarRemoteButton').onclick = () => showRemoteView('remote'); $('sidebarGroupButton')?.addEventListener('click', () => showGroupView());
+  $('sidebarProjectsButton')?.addEventListener('click', showApiProjects); $('sidebarNewChatButton')?.addEventListener('click', startOrdinaryChat); $('sidebarSettingsButton').onclick = () => showSettingsView('chat'); $('sidebarRemoteButton').onclick = () => showRemoteView('remote');
   $('apiProjectsBackButton')?.addEventListener('click', showChatPage);
   $('apiProjectsAddButton')?.addEventListener('click', openApiProjectCreate);
   $('apiProjectsSearch')?.addEventListener('input', renderApiProjects);
@@ -925,17 +1022,45 @@
     catch (_) { setShellUpdateIcon(shellUpdateMode, false); showToast('暂时无法检查更新'); }
   });
   $('settingsBackButton').onclick = closeSettingsView;
+  $('groupSettingsBackButton')?.addEventListener('click', closeGroupSettingsView);
+  $('scheduleBackButton')?.addEventListener('click', showChatPage);
+  $('scheduleMoreButton')?.addEventListener('click', () => showToast('日程更多设置即将开放'));
+  $('schedulePreviousMonth')?.addEventListener('click', () => { scheduleMonthCursor = new Date(scheduleMonthCursor.getFullYear(), scheduleMonthCursor.getMonth() - 1, 1); renderScheduleCalendar(); });
+  $('scheduleNextMonth')?.addEventListener('click', () => { scheduleMonthCursor = new Date(scheduleMonthCursor.getFullYear(), scheduleMonthCursor.getMonth() + 1, 1); renderScheduleCalendar(); });
+  $('scheduleTodayButton')?.addEventListener('click', () => { scheduleMonthCursor = new Date(scheduleToday.getFullYear(), scheduleToday.getMonth(), 1); renderScheduleCalendar(); });
+  $('schedulePlanAddButton')?.addEventListener('click', () => showToast('日程编辑即将开放'));
+  $('scheduleNoteAddButton')?.addEventListener('click', () => showToast('日程记录即将开放'));
+  $('scheduleAiButton')?.addEventListener('click', () => showSettingsView('chat'));
+  $('groupSettingsMoreButton')?.addEventListener('click', () => showToast('群聊设置已打开'));
+  $('groupSettingsSave')?.addEventListener('click', () => { saveGroupSettings(); closeGroupSettingsView(); showToast('群聊设置已保存'); });
+  document.querySelectorAll('.group-setting-row').forEach((button) => {
+    button.addEventListener('click', () => {
+      const member = button.closest('[data-group-member]')?.dataset.groupMember || '';
+      const setting = button.dataset.groupSetting || '';
+      openGroupSettingEditor(member, setting);
+    });
+  });
+  $('groupSettingEditorOptions')?.addEventListener('click', (event) => {
+    const option = event.target.closest('.group-editor-option'); if (!option || !state.groupEditor) return;
+    state.groupEditor.value = option.dataset.value || '';
+    document.querySelectorAll('.group-editor-option').forEach((row) => row.classList.toggle('is-selected', row === option));
+  });
+  $('groupSettingEditorCancel')?.addEventListener('click', closeGroupSettingEditor);
+  $('groupSettingEditorSave')?.addEventListener('click', saveGroupSettingEditor);
   document.querySelectorAll('[data-project-name]').forEach((button) => { button.onclick = () => { const project = button.dataset.projectName || ''; const conversation = activeConversation(); conversation.projectName = project; conversation.updatedAt = Date.now(); saveConversations(); showToast(`已选择项目：${project}`); renderMessages(); }; });
-  $('composer').onsubmit = (event) => { event.preventDefault(); sendMessage(); }; messageInput.oninput = () => { messageInput.style.height = '42px'; messageInput.style.height = `${Math.min(112, messageInput.scrollHeight)}px`; }; $('apiSaveButton').onclick = saveApiConfig; $('apiTestButton').onclick = testApi; $('syncSaveButton')?.addEventListener('click', saveSyncConfig); $('syncTestButton')?.addEventListener('click', testSync);
+  $('composer').onsubmit = (event) => { event.preventDefault(); sendMessage(); }; messageInput.oninput = () => { messageInput.style.height = '42px'; messageInput.style.height = `${Math.min(112, messageInput.scrollHeight)}px`; }; $('apiSaveButton').onclick = saveApiConfig; $('apiTestButton').onclick = testApi;
   messageInput.onkeydown = (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } };
   // 标题滚动测量兜底：字体就绪、胶囊尺寸变化、窗口变化时重测
   try { document.fonts?.ready?.then(() => syncTitleMarquee()); } catch (_) {}
   window.addEventListener('resize', syncTitleMarquee);
   const titlePill = $('conversationTitle')?.closest('.conversation-title-pill');
   if (titlePill && 'ResizeObserver' in window) { try { new ResizeObserver(() => syncTitleMarquee()).observe(titlePill); } catch (_) {} }
-  window.addEventListener('keydown', (event) => { if (event.key !== 'Escape') return; if (!settingsView.hidden) closeSettingsView(); else { closeOverlays(); closeSidebar(); } });
+  window.addEventListener('keydown', (event) => { if (event.key !== 'Escape') return; if (!settingsView.hidden) closeSettingsView(); else if (groupSettingEditorLayer && !groupSettingEditorLayer.hidden) closeGroupSettingEditor(); else if (groupSettingsView && !groupSettingsView.hidden) closeGroupSettingsView(); else if (scheduleView && !scheduleView.hidden) showChatPage(); else { closeOverlays(); closeSidebar(); } });
   window.handleSystemBack = () => {
     if (!settingsView.hidden) { closeSettingsView(); return true; }
+    if (groupSettingEditorLayer && !groupSettingEditorLayer.hidden) { closeGroupSettingEditor(); return true; }
+    if (groupSettingsView && !groupSettingsView.hidden) { closeGroupSettingsView(); return true; }
+    if (scheduleView && !scheduleView.hidden) { showChatPage(); return true; }
     if (apiProjectCreateLayer && !apiProjectCreateLayer.hidden) { closeApiProjectCreate(); return true; }
     if (conversationRenameLayer && !conversationRenameLayer.hidden) { closeConversationRename(); return true; }
     if (apiProjectPickerLayer && !apiProjectPickerLayer.hidden) { closeOverlays(); return true; }
@@ -949,14 +1074,6 @@
       window.DshShellBack();
       return true;
     }
-    if (groupView && !groupView.hidden) {
-      try {
-        const innerHandler = groupFrame?.contentWindow?.handleSystemBack;
-        if (typeof innerHandler === 'function' && innerHandler()) return true;
-      } catch (_) {}
-      showChatPage();
-      return true;
-    }
     if (!sidebarLayer.hidden) { closeSidebar(); return true; }
     if (!attachmentLayer.hidden || !featureLayer.hidden || (chatSelectorLayer && !chatSelectorLayer.hidden) || (contextLayer && !contextLayer.hidden)) { closeOverlays(); return true; }
     // 主页（无任何弹层/页面可关闭）：第一次返回提示，2 秒内再次返回才放行退出
@@ -966,7 +1083,8 @@
     return false;
   };
 
-  loadConversations(); loadProjects(); loadApiConfig(); renderMessages();
+  clearLegacyDemoState();
+  loadConversations(); loadProjects(); loadApiConfig(); loadGroupSettings(); renderMessages();
   // 开屏：仅本次应用启动播一次（sessionStorage 标记；预览模式跳过）。
   // 播放期间 chatPage 保持 hidden（开屏盖在其上），结束后移除遮罩并触发 view-in 入场。
   if (shouldPlaySplash && splash) {

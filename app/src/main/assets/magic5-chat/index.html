@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <title>今天的灵感 · 通用聊天</title>
-  <link rel="stylesheet" href="./styles.css?v=group-chat-v2">
+  <link rel="stylesheet" href="./styles.css?v=shell-v1">
 </head>
 <body>
   <div id="splash" class="splash" aria-hidden="true">
@@ -28,22 +28,11 @@
           <img src="../icons/laptop-with-cursor.svg" alt="">
           <span>Remote</span>
         </button>
-        <button class="sidebar-item" id="sidebarGroupButton" type="button">
-          <img src="../icons/people-fill.svg" alt="">
-          <span>群聊</span>
-        </button>
       </nav>
 
       <section class="sidebar-recent" aria-labelledby="recentChatsHeading">
         <h2 id="recentChatsHeading">最近聊天</h2>
-        <div class="sidebar-recent-list">
-          <button class="sidebar-recent-item" type="button" data-recent-title="美版价格对比 siun​​ners?">美版价格对比 siun​​ners?</button>
-          <button class="sidebar-recent-item" type="button" data-recent-title="Codex模拟器开发流程">Codex模拟器开发流程</button>
-          <button class="sidebar-recent-item" type="button" data-recent-title="DeepSeek Agent内测严苛性">DeepSeek Agent内测严苛性</button>
-          <button class="sidebar-recent-item" type="button" data-recent-title="编码是否消耗额度">编码是否消耗额度</button>
-          <button class="sidebar-recent-item" type="button" data-recent-title="排查Clash Meta断网">排查Clash Meta断网</button>
-          <button class="sidebar-recent-item" type="button" data-recent-title="Technical Art Practice Plan">Technical Art Practice Plan</button>
-        </div>
+        <div class="sidebar-recent-list"></div>
       </section>
 
       <div class="sidebar-bottom-actions" aria-label="快捷操作">
@@ -99,28 +88,6 @@
       </div>
     </section>
 
-    <section class="settings-sync-card settings-panel" aria-labelledby="syncSettingsHeading">
-      <div class="settings-api-heading">
-        <div>
-          <h2 id="syncSettingsHeading">群聊同步</h2>
-          <p>让多台设备实时看到群消息和附件</p>
-        </div>
-        <span id="syncStatusBadge" class="settings-panel-badge offline">未配置</span>
-      </div>
-      <label class="settings-field">同步服务器地址
-        <input id="syncServerInput" type="url" autocomplete="url" placeholder="http://电脑地址:8787">
-      </label>
-      <label class="settings-field">同步密钥（可选）
-        <input id="syncTokenInput" type="password" autocomplete="off" placeholder="与服务器 SYNC_TOKEN 一致">
-      </label>
-      <p class="settings-field-note">只保存服务器地址和密钥；DeepSeek API Key 仍单独保存在本机。</p>
-      <div id="syncSettingsStatus" class="api-settings-status" role="status" aria-live="polite"></div>
-      <div class="settings-api-actions">
-        <button id="syncTestButton" class="secondary-action" type="button">测试连通</button>
-        <button id="syncSaveButton" class="primary-action" type="button">保存服务器</button>
-      </div>
-    </section>
-
     <section class="settings-device-card settings-panel" aria-labelledby="settingsDeviceHeading">
       <div class="settings-panel-heading">
         <div>
@@ -154,7 +121,7 @@
       </div>
       <div class="settings-version-summary">
         <img src="../icons/settings-generated/version.png?v=selected-set-2" alt="">
-        <div><strong>当前版本</strong><span>v1.12.14</span></div>
+        <div><strong>当前版本</strong><span>v1.12.15</span></div>
         <span class="settings-version-state">已是最新版</span>
       </div>
       <div class="settings-version-rule" aria-hidden="true"></div>
@@ -163,13 +130,154 @@
 
   </main>
 
+  <main id="groupSettingsView" class="group-settings-view" hidden aria-label="群聊设置">
+    <header class="group-settings-header">
+      <button id="groupSettingsBackButton" class="header-button group-settings-back" type="button" aria-label="返回群聊">
+        <img src="./icons/arrow-back.svg" alt="">
+      </button>
+      <h1>群聊设置</h1>
+      <button id="groupSettingsMoreButton" class="header-button group-settings-more" type="button" aria-label="更多设置">
+        <img src="./icons/more-vert.svg" alt="">
+      </button>
+    </header>
+
+    <section class="group-settings-card" aria-labelledby="groupSettingsMembersHeading">
+      <h2 id="groupSettingsMembersHeading">AI 成员</h2>
+
+      <article class="group-member-block" data-group-member="chat">
+        <h3>deepseek-chat</h3>
+        <button class="group-setting-row" type="button" data-group-setting="model" aria-label="deepseek-chat 模型">
+          <img src="../icons/group-settings-generated/model.png?v=group-settings-v2" alt="">
+          <span>模型</span>
+          <span class="group-setting-value group-setting-model-value" data-group-value="model">deepseek-chat</span>
+          <img class="group-setting-arrow" src="./icons/arrow-back.svg" alt="">
+        </button>
+        <button class="group-setting-row" type="button" data-group-setting="effort" aria-label="deepseek-chat 思考程度">
+          <img src="../icons/group-settings-generated/thinking.png?v=group-settings-v2" alt="">
+          <span>思考程度</span>
+          <span class="group-setting-value" data-group-value="effort">自动</span>
+          <img class="group-setting-arrow" src="./icons/arrow-back.svg" alt="">
+        </button>
+        <button class="group-setting-row" type="button" data-group-setting="prompt" aria-label="编辑 deepseek-chat 提示词">
+          <img src="../icons/group-settings-generated/prompt.png?v=group-settings-v1" alt="">
+          <span>提示词</span>
+          <span class="group-setting-value" data-group-value="prompt">编辑提示词</span>
+          <img class="group-setting-arrow" src="./icons/arrow-back.svg" alt="">
+        </button>
+      </article>
+
+      <article class="group-member-block" data-group-member="reasoner">
+        <h3>deepseek-reasoner</h3>
+        <button class="group-setting-row" type="button" data-group-setting="model" aria-label="deepseek-reasoner 模型">
+          <img src="../icons/group-settings-generated/model.png?v=group-settings-v2" alt="">
+          <span>模型</span>
+          <span class="group-setting-value group-setting-model-value" data-group-value="model">deepseek-reasoner</span>
+          <img class="group-setting-arrow" src="./icons/arrow-back.svg" alt="">
+        </button>
+        <button class="group-setting-row" type="button" data-group-setting="effort" aria-label="deepseek-reasoner 思考程度">
+          <img src="../icons/group-settings-generated/thinking.png?v=group-settings-v2" alt="">
+          <span>思考程度</span>
+          <span class="group-setting-value" data-group-value="effort">自动</span>
+          <img class="group-setting-arrow" src="./icons/arrow-back.svg" alt="">
+        </button>
+        <button class="group-setting-row" type="button" data-group-setting="prompt" aria-label="编辑 deepseek-reasoner 提示词">
+          <img src="../icons/group-settings-generated/prompt.png?v=group-settings-v1" alt="">
+          <span>提示词</span>
+          <span class="group-setting-value" data-group-value="prompt">编辑提示词</span>
+          <img class="group-setting-arrow" src="./icons/arrow-back.svg" alt="">
+        </button>
+      </article>
+    </section>
+
+    <button id="groupSettingsSave" class="group-settings-save" type="button">保存</button>
+  </main>
+
+  <main id="scheduleView" class="schedule-view" hidden aria-label="日程规划">
+    <header class="schedule-header">
+      <button id="scheduleBackButton" class="header-button schedule-back" type="button" aria-label="返回聊天">
+        <img src="./icons/arrow-back.svg" alt="">
+      </button>
+      <div class="schedule-header-copy">
+        <h1><img src="../icons/menu-generated/schedule.png?v=schedule-v1" alt="">日程规划</h1>
+        <p>掌控每一天</p>
+      </div>
+      <button id="scheduleMoreButton" class="header-button schedule-more" type="button" aria-label="日程更多设置">
+        <img src="./icons/more-vert.svg" alt="">
+      </button>
+    </header>
+
+    <div class="schedule-content">
+      <section class="schedule-card schedule-goal-card" aria-labelledby="scheduleGoalHeading">
+        <div class="schedule-card-heading">
+          <div class="schedule-card-title-wrap">
+            <img src="../icons/menu-generated/schedule.png?v=schedule-v1" alt="">
+            <div>
+              <h2 id="scheduleGoalHeading">本月目标</h2>
+              <p>聚焦重点，少做但做好</p>
+            </div>
+          </div>
+          <strong id="scheduleGoalProgress">0/0 <span>完成</span></strong>
+        </div>
+        <div class="schedule-progress" aria-hidden="true"><span id="scheduleGoalProgressBar"></span></div>
+        <p id="scheduleGoalEmpty" class="schedule-empty-copy">先添加一个目标，让今天有清晰方向。</p>
+      </section>
+
+      <section class="schedule-card schedule-calendar-card" aria-labelledby="scheduleCalendarHeading">
+        <div class="schedule-calendar-toolbar">
+          <h2 id="scheduleCalendarHeading">—</h2>
+          <div class="schedule-calendar-actions">
+            <button id="schedulePreviousMonth" class="schedule-round-button" type="button" aria-label="上一个月">‹</button>
+            <button id="scheduleTodayButton" class="schedule-today-button" type="button">今天</button>
+            <button id="scheduleNextMonth" class="schedule-round-button" type="button" aria-label="下一个月">›</button>
+          </div>
+        </div>
+        <div class="schedule-weekdays" aria-hidden="true">
+          <span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span>
+        </div>
+        <div id="scheduleCalendarGrid" class="schedule-calendar-grid" role="grid" aria-label="日历"></div>
+      </section>
+
+      <section class="schedule-card schedule-list-card" aria-labelledby="schedulePlanHeading">
+        <div class="schedule-section-heading">
+          <div class="schedule-section-title"><span class="schedule-list-mark" aria-hidden="true">☷</span><h2 id="schedulePlanHeading">今日计划</h2></div>
+          <span id="schedulePlanProgress" class="schedule-section-meta">0/0</span>
+        </div>
+        <div id="schedulePlanEmpty" class="schedule-list-empty">
+          <span>还没有安排今天的计划</span>
+          <button id="schedulePlanAddButton" class="schedule-add-button" type="button" aria-label="添加今日计划">＋</button>
+        </div>
+        <div id="schedulePlanList" class="schedule-plan-list" hidden></div>
+      </section>
+
+      <section class="schedule-card schedule-note-card" aria-labelledby="scheduleNoteHeading">
+        <div class="schedule-section-heading">
+          <div class="schedule-section-title"><span class="schedule-note-mark" aria-hidden="true">⌁</span><h2 id="scheduleNoteHeading">今日记录</h2></div>
+          <button id="scheduleNoteAddButton" class="schedule-add-button schedule-add-dark" type="button" aria-label="添加今日记录">＋</button>
+        </div>
+        <p id="scheduleNoteEmpty" class="schedule-note-empty">记录今天的想法，稍后再回看。</p>
+      </section>
+
+      <section class="schedule-card schedule-ai-card" aria-labelledby="scheduleAiHeading">
+        <div class="schedule-ai-copy">
+          <div class="schedule-section-title"><span class="schedule-ai-mark" aria-hidden="true">✦</span><h2 id="scheduleAiHeading">AI 建议</h2></div>
+          <p>配置 API 后，可让 AI 根据聊天内容生成日程建议。</p>
+        </div>
+        <button id="scheduleAiButton" class="schedule-ai-button" type="button">去设置</button>
+      </section>
+    </div>
+  </main>
+
   <main id="chatPage" class="chat-page" aria-label="聊天主页" hidden>
     <header class="chat-header">
       <button id="menuButton" class="header-button" type="button" aria-label="打开侧边栏" aria-expanded="false">
         <img src="./icons/menu.svg" alt="">
       </button>
       <div class="conversation-heading conversation-title-pill no-project">
-        <h1 id="conversationTitle">今天的灵感</h1>
+        <div class="conversation-title-main">
+          <img id="conversationGroupIcon" class="conversation-group-icon" src="../icons/people-fill.svg?v=shell-v1" alt="" hidden>
+          <h1 id="conversationTitle">今天的灵感</h1>
+        </div>
+        <div id="conversationMemberCount" class="conversation-member-count" hidden></div>
         <div id="conversationFolder" class="conversation-folder" data-folder="" hidden>
           <img src="../icons/folder2.svg" alt="">
           <span></span>
@@ -186,10 +294,7 @@
     </header>
 
     <section id="messageScroll" class="message-scroll" aria-label="聊天消息">
-      <div id="conversationContent" class="conversation-content" aria-live="polite" aria-atomic="false">
-        <div class="user-message">帮我整理一下今天的想法</div>
-        <p class="assistant-message">好的，我先把你的想法整理成几个清晰的方向。</p>
-      </div>
+      <div id="conversationContent" class="conversation-content" aria-live="polite" aria-atomic="false"></div>
     </section>
 
     <form id="composer" class="composer" novalidate>
@@ -235,6 +340,8 @@
         <button class="feature-row" type="button" data-feature-action="files" role="menuitem"><img src="../icons/menu-generated/paperclip.png?v=selected-set-3" alt=""><span>已上传文件</span></button>
         <button class="feature-row" type="button" data-feature-action="find" role="menuitem"><img src="../icons/menu-generated/search.png?v=selected-set-3" alt=""><span>在聊天中查找</span></button>
         <button class="feature-row" type="button" data-feature-action="rename" role="menuitem"><img src="../icons/menu-generated/rename.png?v=selected-set-3" alt=""><span>重命名</span></button>
+        <button class="feature-row" type="button" data-feature-action="schedule" role="menuitem"><img src="../icons/menu-generated/schedule.png?v=schedule-v1" alt=""><span>日程规划</span></button>
+        <button class="feature-row group-only-feature" type="button" data-feature-action="group-settings" role="menuitem" hidden><img src="../icons/menu-generated/group-settings.png?v=selected-group-v1" alt=""><span>群聊设置</span></button>
         <button class="feature-row feature-danger" type="button" data-feature-action="archive" role="menuitem"><img src="../icons/menu-generated/archive.png?v=selected-set-3" alt=""><span>归档</span></button>
         <button class="feature-row feature-danger" type="button" data-feature-action="delete" role="menuitem"><img src="../icons/menu-generated/trash.png?v=selected-set-3" alt=""><span>删除</span></button>
       </section>
@@ -295,6 +402,25 @@
     </div>
 
   </main>
+
+  <div id="groupSettingEditorLayer" class="overlay-layer" hidden>
+    <div class="overlay-scrim" data-close-overlay="groupSettingEditorLayer"></div>
+    <section class="popover group-setting-editor-popover" role="dialog" aria-modal="true" aria-labelledby="groupSettingEditorTitle">
+      <div class="group-setting-editor-heading">
+        <span id="groupSettingEditorMember">AI 成员</span>
+        <h2 id="groupSettingEditorTitle">模型</h2>
+      </div>
+      <div id="groupSettingEditorOptions" class="group-setting-editor-options"></div>
+      <label id="groupPromptEditorWrap" class="group-prompt-editor-wrap" hidden>
+        <span>提示词内容</span>
+        <textarea id="groupPromptEditor" rows="5" maxlength="2000" placeholder="输入这个 AI 成员的提示词……"></textarea>
+      </label>
+      <div class="group-setting-editor-actions">
+        <button id="groupSettingEditorCancel" class="secondary-action" type="button">取消</button>
+        <button id="groupSettingEditorSave" class="primary-action" type="button">保存</button>
+      </div>
+    </section>
+  </div>
 
   <main id="apiProjectsView" class="api-projects-view" hidden aria-label="API 项目">
     <header class="api-projects-topbar">
@@ -399,17 +525,11 @@
 
   <main id="remoteView" class="remote-view" hidden aria-label="Remote 功能">
     <section class="remote-frame-shell" aria-label="DSH Remote 工作台">
-      <iframe id="remoteApp" title="DSH Remote 工作台" src="../index.html?source=deepseek-logo&embedded=1&v=1.12.14&shell=23"></iframe>
-    </section>
-  </main>
-
-  <main id="groupView" class="group-view" hidden aria-label="群聊">
-    <section class="group-frame-shell" aria-label="群聊工作区">
-    <iframe id="groupApp" title="群聊" src="../group-chat/index.html?embedded=1&v=group-chat-v2"></iframe>
+      <iframe id="remoteApp" title="DSH Remote 工作台" src="../index.html?source=deepseek-logo&embedded=1&v=1.12.15&shell=23"></iframe>
     </section>
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script src="./app.js?v=group-chat-v2"></script>
+  <script src="./app.js?v=shell-v1"></script>
 </body>
 </html>

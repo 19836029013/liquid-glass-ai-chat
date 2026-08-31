@@ -254,7 +254,7 @@
     }
     return id;
   };
-  const isSyntheticSessionId = (value) => /^(dsh-|preview-session-|draft:)/i.test(String(value || ''));
+  const isSyntheticSessionId = (value) => /^(dsh-|draft:)/i.test(String(value || ''));
   const mergeSessionHistory = (fromId, toId) => {
     const from = String(fromId || '');
     const to = String(toId || '');
@@ -572,53 +572,9 @@
     return { ...item, kind: 'thinking', icon: item.icon || 'chat-think.png', title: 'Think', text: thinkingItemText(item) || '思考中' };
   };
 
-  const chatSeedItems = [
-    { kind: 'bubble', text: 'ge":"Error from provider\n(Console Go): Upstream\nrequest failed: [1210] This\nmodel always engages in\nthinking and cannot be\ndisabled; please use low,\nhigh, or max"' },
-    { kind: 'event', icon: 'chat-think.png', text: 'Diagnosing model thinking disable error' },
-    { kind: 'note', text: '这个报错不是手机同步问题，而是当前模型被\nDSH 以“关闭思考”模式调用了；该模型强制要求\nlow / high / max 之一。我先定位 DSH 里对应\n的思考参数配置。' },
-    { kind: 'event', icon: 'chat-terminal.png', text: '命令执行' },
-    { kind: 'event', icon: 'chat-think.png', text: 'Adjusting model settings to low/high/\nmax' },
-    { kind: 'event', icon: 'chat-terminal.png', text: '命令执行' },
-    { kind: 'event', icon: 'chat-think.png', text: 'Investigating provider reasoning effort\nmapping' },
-    { kind: 'event', icon: 'chat-terminal.png', text: '命令执行' },
-  ];
-
-  function seedBrowserChatPreview() {
+  function applyBrowserPreviewMode() {
     if (!browserPreview) return;
     document.body.classList.add('browser-preview');
-    const sessionId = 'preview-session-remote';
-    const now = Date.now();
-    const previewItems = [
-      { kind: 'bubble', text: '帮我把聊天内容也放进模拟机里，看看真实的 DSH 回复效果。', timestamp: now - 126000 },
-      { kind: 'thinking', icon: 'chat-think.png', title: 'Think', text: 'Wait — the folder tab: rows 20-35 left region x15-60 is solid, but rows 36-40 are empty. That means the folder tab is a separate band from the body. I am checking the boundary before continuing.', timestamp: now - 119000 },
-      { kind: 'event', icon: 'chat-grep.png', text: '读取项目状态 · remote-preview', timestamp: now - 111000 },
-      { kind: 'event', icon: 'chat-terminal.png', text: '命令执行 · 检查消息同步链路', timestamp: now - 103000 },
-      { kind: 'note', text: '我先检查当前会话的消息流，再把最终结果同步到手机端。\n预览中会保留思考、工具、正文和用户气泡。', timestamp: now - 92000 },
-      { kind: 'bubble', text: '好的，继续检查回复和滚动效果。', timestamp: now - 76000 },
-      { kind: 'event', icon: 'chat-read.png', text: '阅读 · app.js / styles.css', timestamp: now - 68000 },
-      { kind: 'event', icon: 'chat-terminal.png', text: '命令执行 · 生成网页预览', timestamp: now - 59000 },
-      { kind: 'note', text: '网页模拟已经加载了示例聊天。\n\n你可以：\n- 上下滑动查看历史消息；\n- 滑离底部后点击屏幕下方的箭头回到底部；\n- 点击输入栏、加号、权限或模型区域测试交互。', timestamp: now - 43000 },
-      { kind: 'event', icon: 'chat-think.png', text: '会话完成', timestamp: now - 24000 },
-      { kind: 'note', text: '这是一条最终示例回复。之后接入真实 Bridge 时，这些内容会替换为 DSH 实时事件和完整正文。', timestamp: now - 9000 },
-    ];
-    state.snapshot = {
-      project: { id: 'preview-project', name: 'dsh插件' },
-      projects: [{ id: 'preview-project', name: 'dsh插件', asset: 'folder2.svg' }],
-      recent: [{ id: sessionId, title: 'Remote DSH · 聊天预览', projectId: 'preview-project', projectName: 'dsh插件', updatedAt: now }],
-      session: { id: sessionId, title: 'Remote DSH · 聊天预览' },
-      device: { name: 'MagicBook' },
-      state: 'completed',
-      phase: 'completed',
-      updatedAt: now,
-      usage: { percent: 39, contextUsed: 389000, contextLimit: 1000000, systemPrompt: 1600, tools: 6800, messages: 7100 },
-    };
-    state.selectedChat = { id: sessionId, title: 'Remote DSH · 聊天预览', projectId: 'preview-project', projectName: 'dsh插件' };
-    state.chatOrigin = 'home';
-    state.sessionHistory[sessionId] = { items: previewItems, hasMore: false, nextBefore: null, loading: false, loadingOlder: false, loadingTimer: null, lastTimestamp: now, lastSeq: previewItems.length };
-    state.connected = true;
-    state.connectionState = 'online';
-    state.replying = false;
-    state.autoFollowChat = true;
   }
   const shortHomeTitle = (value) => {
     const clean = String(value || '').replace(/\s+/g, ' ').trim();
@@ -969,7 +925,7 @@
     const deviceName = device.name || snapshot.deviceName || 'MagicBook';
     text('settingsDesktopName', deviceName);
     text('settingsDesktopStatus', state.connected ? '已连接' : '未连接');
-    text('settingsVersionNumber', 'v1.12.14');
+    text('settingsVersionNumber', 'v1.12.15');
     text('settingsVersionState', '已是最新版');
     text('settingsVersionNote', '当前已安装最新版本');
   }
@@ -1397,8 +1353,8 @@
     const project = state.snapshot?.project || {};
     const session = state.snapshot?.session || {};
     const selectedChat = state.selectedChat || {};
-    const projectName = String(selectedChat.projectName || project.name || '').trim() || 'dsAPP';
-    const chatTitle = selectedChat.title || state.renamedTitles[String(selectedChat.id || session.id || '')] || session.title || '确认编码是否消耗额度';
+    const projectName = String(selectedChat.projectName || project.name || '').trim() || 'DSH';
+    const chatTitle = selectedChat.title || state.renamedTitles[String(selectedChat.id || session.id || '')] || session.title || '新会话';
     text('chatTitle', chatTitle);
     text('chatMenuTitle', chatTitle, 'Remote DSH');
     text('chatProject', selectedChat.projectName || projectName);
@@ -3118,7 +3074,7 @@
   state.snapshot = initialSnapshotMessage?.type === 'session.snapshot'
     ? (initialSnapshotMessage.data || {})
     : initialSnapshotMessage;
-  seedBrowserChatPreview();
+  applyBrowserPreviewMode();
   // A snapshot's `online` flag describes DSH, not this phone's WebSocket.
   // Query the native transport directly so a WebView that missed an early
   // broadcast still renders the real connection state.

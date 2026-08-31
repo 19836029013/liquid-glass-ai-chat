@@ -113,7 +113,6 @@ public final class MainActivity extends Activity {
     private String lastSnapshotPayload = "";
     private long observedMessageEpoch = Long.MIN_VALUE;
     private String pendingOpenSessionPayload = "";
-    private String pendingGroupJoinPayload = "";
     private int rendererRecoveryAttempts;
     private boolean rendererRecoveryScheduled;
 
@@ -166,7 +165,6 @@ public final class MainActivity extends Activity {
                 enqueueNativeMessage("{\"type\":\"open-settings\",\"source\":\"native\"}"));
 
         captureNotificationIntent(getIntent());
-        captureGroupJoinIntent(getIntent());
         webView.loadUrl(START_ASSET_URL);
         requestNotificationPermission();
     }
@@ -252,11 +250,6 @@ public final class MainActivity extends Activity {
                     pendingOpenSessionPayload = "";
                     enqueueNativeMessage(payload);
                 }
-                if (!pendingGroupJoinPayload.isEmpty()) {
-                    String payload = pendingGroupJoinPayload;
-                    pendingGroupJoinPayload = "";
-                    enqueueNativeMessage(payload);
-                }
                 applySafeAreaToWebView();
                 drainJsMessages();
             }
@@ -335,26 +328,6 @@ public final class MainActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         captureNotificationIntent(intent);
-        captureGroupJoinIntent(intent);
-    }
-
-    private void captureGroupJoinIntent(Intent intent) {
-        if (intent == null) return;
-        Uri data = intent.getData();
-        if (data == null || !"yingzi".equalsIgnoreCase(data.getScheme())
-                || !"join".equalsIgnoreCase(data.getHost())) return;
-        try {
-            String payload = new JSONObject()
-                    .put("type", "group-join")
-                    .put("source", "native")
-                    .put("link", data.toString())
-                    .toString();
-            if (webPageReady) enqueueNativeMessage(payload);
-            else pendingGroupJoinPayload = payload;
-        } catch (Throwable error) {
-            Log.e(TAG, "Unable to route group invite link", error);
-        }
-        intent.setData(null);
     }
 
     private boolean enqueueNativeMessage(String rawPayload) {
@@ -1246,26 +1219,14 @@ public final class MainActivity extends Activity {
     // -----------------------------------------------------------------------------------------
 
     private void postDeepSeekEvent(String name, JSONObject data) {
-        postDeepSeekEvent(name, data, "main");
-    }
-
-    private void postDeepSeekEvent(String name, JSONObject data, String target) {
         if (activityDestroyed || webView == null) return;
         String payload = data == null ? "{}" : data.toString();
         String eventName = JSONObject.quote(name);
         String eventPayload = JSONObject.quote(payload);
-        String eventTarget = JSONObject.quote(target == null ? "main" : target);
-        // The group chat runs in an iframe inside magic5-chat.  Android's
-        // Javascript interface is shared by frames, but the callback object
-        // is frame-local. Route each request to its originating frame so a
-        // group reply cannot accidentally update an unrelated main-chat turn.
         String script = "(function(){"
-                + "var n=" + eventName + ",p=" + eventPayload + ",t=" + eventTarget + ";"
-                + "if(t!=='group'){var e=window.DeepSeekEvents;"
-                + "if(e&&typeof e.onEvent==='function')e.onEvent(n,p);}"
-                + "if(t==='group'){try{var f=document.getElementById('groupApp'),w=f&&f.contentWindow;"
-                + "if(w&&w!==window&&w.DeepSeekEvents&&typeof w.DeepSeekEvents.onEvent==='function')"
-                + "w.DeepSeekEvents.onEvent(n,p);}catch(_){}}"
+                + "var n=" + eventName + ",p=" + eventPayload + ";"
+                + "var e=window.DeepSeekEvents;"
+                + "if(e&&typeof e.onEvent==='function')e.onEvent(n,p);"
                 + "})()";
         runOnUiThread(() -> {
             if (!activityDestroyed && webView != null) webView.evaluateJavascript(script, null);
@@ -1305,14 +1266,12 @@ public final class MainActivity extends Activity {
 
         @JavascriptInterface
         public void streamChat(String requestJson) {
-            deepSeekApi.stream(requestJson, (name, data) ->
-                    postDeepSeekEvent(name, data, requestTarget(requestJson)));
+            deepSeekApi.stream(requestJson, MainActivity.this::postDeepSeekEvent);
         }
 
         @JavascriptInterface
         public void completeChat(String requestJson) {
-            deepSeekApi.complete(requestJson, (name, data) ->
-                    postDeepSeekEvent(name, data, requestTarget(requestJson)));
+            deepSeekApi.complete(requestJson, MainActivity.this::postDeepSeekEvent);
         }
 
         @JavascriptInterface
@@ -1323,16 +1282,6 @@ public final class MainActivity extends Activity {
         @JavascriptInterface
         public void queryModels(String requestJson) {
             deepSeekApi.queryModels(requestJson, MainActivity.this::postDeepSeekEvent);
-        }
-
-        private String requestTarget(String requestJson) {
-            try {
-                String target = new JSONObject(requestJson == null ? "{}" : requestJson)
-                        .optString("target", "main").trim().toLowerCase(Locale.ROOT);
-                return "group".equals(target) ? "group" : "main";
-            } catch (Exception ignored) {
-                return "main";
-            }
         }
 
         @JavascriptInterface

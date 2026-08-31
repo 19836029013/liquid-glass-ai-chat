@@ -25,51 +25,11 @@
     .battery { position: relative; width: 18px; height: 10px; padding: 1px; border: 1.3px solid #111; border-radius: 3px; }
     .battery::after { content: ""; position: absolute; top: 2px; right: -3px; width: 2px; height: 4px; border-radius: 0 1px 1px 0; background: #111; }
     .battery::before { content: ""; display: block; width: 76%; height: 100%; border-radius: 1px; background: #4dbd69; }
-    .honor-notification-demo { position: absolute; z-index: 10; top: 34px; left: 14px; right: 14px; display: grid; justify-items: center; pointer-events: none; }
-    .honor-notification-demo[hidden] { display: none !important; }
-    .honor-capsule { width: min(264px, calc(100% - 18px)); min-height: 36px; display: grid; grid-template-columns: 20px minmax(0, 1fr) 14px; align-items: center; gap: 7px; padding: 5px 12px; border: 0; border-radius: 20px; color: #fff; background: rgba(17,18,20,.96); box-shadow: 0 7px 20px rgba(0,0,0,.18); font: inherit; text-align: left; pointer-events: auto; cursor: pointer; transition: transform .24s cubic-bezier(.22,.78,.28,1), width .24s ease; }
-    .honor-capsule:focus-visible { outline: 2px solid #4a87f5; outline-offset: 2px; }
-    .honor-capsule-mark { width: 18px; height: 18px; object-fit: contain; filter: grayscale(1) brightness(0) invert(1); opacity: .92; }
-    .honor-capsule-copy { min-width: 0; display: grid; gap: 1px; }
-    .honor-capsule-title, .honor-capsule-state { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .honor-capsule-title { font-size: 10px; line-height: 12px; font-weight: 700; }
-    .honor-capsule-state { color: rgba(255,255,255,.7); font-size: 9px; line-height: 11px; font-weight: 500; }
-    .honor-capsule-chevron { width: 8px; height: 8px; border-right: 1.5px solid rgba(255,255,255,.8); border-bottom: 1.5px solid rgba(255,255,255,.8); transform: rotate(45deg) translateY(-2px); transition: transform .24s ease; }
-    .honor-notification-demo.is-expanded .honor-capsule-chevron { transform: rotate(225deg) translate(-1px, -1px); }
-    .honor-notification-panel { width: 100%; margin-top: 7px; padding: 14px 15px 13px; border-radius: 23px; color: #151719; background: rgba(255,255,255,.98); box-shadow: 0 14px 34px rgba(0,0,0,.22); pointer-events: auto; animation: honor-notification-in .24s cubic-bezier(.22,.78,.28,1) both; }
-    .honor-notification-panel[hidden] { display: none; }
-    .honor-notification-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
-    .honor-notification-app { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 10px; line-height: 13px; font-weight: 700; }
-    .honor-notification-app img { width: 16px; height: 16px; object-fit: contain; }
-    .honor-notification-phase { color: #6c7278; font-size: 9px; line-height: 12px; white-space: nowrap; }
-    .honor-notification-rule { height: 1px; margin: 0 0 9px; background: #e5e7e9; }
-    .honor-notification-body { max-height: 180px; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; color: #222528; font-size: 10.5px; line-height: 20px; white-space: pre-wrap; overflow-wrap: anywhere; scrollbar-width: thin; scrollbar-color: #b9bec2 transparent; }
-    .honor-notification-body::-webkit-scrollbar { width: 3px; }
-    .honor-notification-body::-webkit-scrollbar-thumb { border-radius: 99px; background: #b9bec2; }
-    .honor-notification-foot { display: flex; align-items: center; gap: 5px; margin-top: 9px; color: #8a9095; font-size: 8.5px; line-height: 11px; }
-    .honor-notification-dot { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #51b882; }
-    .honor-notification-demo.is-active .honor-notification-dot { animation: honor-notification-pulse 1.2s ease-in-out infinite; }
-    @keyframes honor-notification-in { from { opacity: 0; transform: translateY(-5px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-    @keyframes honor-notification-pulse { 0%,100% { opacity: .45; transform: scale(.85); } 50% { opacity: 1; transform: scale(1.08); } }
-    @media (prefers-reduced-motion: reduce) { .honor-capsule, .honor-capsule-chevron, .honor-notification-panel { animation: none; transition: none; } .honor-notification-demo.is-active .honor-notification-dot { animation: none; } }
   </style>
 </head>
 <body>
   <main class="phone" aria-label="荣耀 Magic5 Pro DSH Remote 模拟手机">
     <iframe id="remoteApp" title="荣耀 Magic5 Pro 上运行的 DSH Remote" src="./index.html?preview=magic5pro&source=remote-preview&view=chat&v=thinking-expand-2"></iframe>
-    <div id="honorNotificationDemo" class="honor-notification-demo is-active" hidden aria-live="polite">
-      <button id="honorCapsule" class="honor-capsule" type="button" aria-expanded="false" aria-controls="honorNotificationPanel" aria-label="展开 DSH 通知">
-        <img class="honor-capsule-mark" src="./magic5-chat/icons/dsh-whale.png" alt="">
-        <span class="honor-capsule-copy"><span id="honorCapsuleTitle" class="honor-capsule-title">DSH Remote · dsh插件</span><span id="honorCapsuleState" class="honor-capsule-state">调用工具 · Grep</span></span>
-        <i class="honor-capsule-chevron" aria-hidden="true"></i>
-      </button>
-      <section id="honorNotificationPanel" class="honor-notification-panel" hidden aria-label="DSH 通知详情">
-        <div class="honor-notification-head"><span class="honor-notification-app"><img src="./magic5-chat/icons/dsh-whale.png" alt="">DSH Remote · dsh插件</span><span id="honorNotificationPhase" class="honor-notification-phase">正在运行</span></div>
-        <div class="honor-notification-rule"></div>
-        <div id="honorNotificationBody" class="honor-notification-body" tabindex="0">正在调用工具\nGrep · polish|reply\n检查当前项目中的回复样式和通知状态…</div>
-        <div class="honor-notification-foot"><span class="honor-notification-dot"></span><span id="honorNotificationFoot">DSH 实时更新中 · 点击胶囊收起</span></div>
-      </section>
-    </div>
     <div class="statusbar" aria-label="模拟状态栏">
       <span class="carrier"><span>中国移动</span><span>中国电信</span></span>
       <span class="clock">21:43</span>
@@ -77,63 +37,9 @@
     </div>
   </main>
   <script>
+    // The wrapper is only a device frame. It intentionally contains no
+    // canned notification, chat, or reply data; the iframe renders live state.
     const remoteApp = document.getElementById('remoteApp');
-    const honorDemo = document.getElementById('honorNotificationDemo');
-    const honorCapsule = document.getElementById('honorCapsule');
-    const honorPanel = document.getElementById('honorNotificationPanel');
-    const honorCapsuleState = document.getElementById('honorCapsuleState');
-    const honorNotificationPhase = document.getElementById('honorNotificationPhase');
-    const honorNotificationBody = document.getElementById('honorNotificationBody');
-    const honorNotificationFoot = document.getElementById('honorNotificationFoot');
-    const replyLines = [
-      '已完成这次 Remote 通知同步。',
-      '',
-      '运行中会优先显示 DSH 当前阶段：',
-      '调用工具、终端命令、阅读文件和文件变更。',
-      '',
-      '回复开始后，通知正文会跟随回复实时更新。',
-      '回复完成后，通知切换为完整正文。',
-      '',
-      '展开通知可看到约九行内容，超过可见区域后，',
-      '可以在通知内部上下滑动查看剩余文本。',
-      '',
-      '这只是荣耀 Magic5 Pro 通知层的交互预览。'
-    ];
-    const demoStates = [
-      { key: 'tool', capsule: '调用工具 · Grep', phase: '正在运行', body: '正在调用工具\nGrep · polish|reply\n检查当前项目中的回复样式和通知状态…' },
-      { key: 'terminal', capsule: '终端 · npm run build', phase: '正在运行', body: '正在执行终端命令\nnpm run build\n构建输出正在实时同步…' },
-      { key: 'reading', capsule: '阅读 · settings.yaml', phase: '正在阅读', body: '正在阅读文件\nC:\\Users\\CHJ19\\Documents\\ChatGPT\\settings.yaml\n读取内容并同步到 DSH…' },
-      { key: 'reply', capsule: '回复中 · 正在同步正文', phase: '正在回复', body: replyLines.slice(0, 6).join('\n') },
-      { key: 'complete', capsule: 'DSH 回复已完成', phase: '已完成', body: replyLines.join('\n') }
-    ];
-    let demoStateIndex = 0;
-    let replyFrame = 0;
-    function renderHonorNotification() {
-      const state = demoStates[demoStateIndex];
-      let body = state.body;
-      if (state.key === 'reply') {
-        replyFrame = Math.min(replyFrame + 1, replyLines.length);
-        body = replyLines.slice(0, Math.max(4, Math.min(replyFrame + 2, replyLines.length))).join('\n');
-      }
-      honorCapsuleState.textContent = state.capsule;
-      honorNotificationPhase.textContent = state.phase;
-      honorNotificationBody.textContent = body;
-      honorNotificationFoot.textContent = state.key === 'complete' ? '完整正文 · 通知内可上下滑动' : 'DSH 实时更新中 · 点击胶囊收起';
-      honorDemo.classList.toggle('is-active', state.key !== 'complete');
-      if (state.key === 'reply' || state.key === 'complete') honorNotificationBody.scrollTop = 0;
-    }
-    honorCapsule.addEventListener('click', () => {
-      const expanded = !honorDemo.classList.contains('is-expanded');
-      honorDemo.classList.toggle('is-expanded', expanded);
-      honorPanel.hidden = !expanded;
-      honorCapsule.setAttribute('aria-expanded', String(expanded));
-    });
-    window.setInterval(() => {
-      demoStateIndex = (demoStateIndex + 1) % demoStates.length;
-      replyFrame = 0;
-      renderHonorNotification();
-    }, 3600);
-    renderHonorNotification();
     remoteApp.addEventListener('load', () => {
       const root = remoteApp.contentDocument?.documentElement;
       if (!root) return;

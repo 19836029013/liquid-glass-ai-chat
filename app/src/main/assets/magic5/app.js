@@ -151,16 +151,6 @@
     return d.summary || d.label || d.command || d.text || d.message || d.path || d.title || d.detail || '';
   };
 
-  const chatSeedItems = [
-    { kind: 'bubble', text: 'ge":"Error from provider\n(Console Go): Upstream\nrequest failed: [1210] This\nmodel always engages in\nthinking and cannot be\ndisabled; please use low,\nhigh, or max"' },
-    { kind: 'event', icon: 'chat-think.png', text: 'Diagnosing model thinking disable error' },
-    { kind: 'note', text: '这个报错不是手机同步问题，而是当前模型被\nDSH 以“关闭思考”模式调用了；该模型强制要求\nlow / high / max 之一。我先定位 DSH 里对应\n的思考参数配置。' },
-    { kind: 'event', icon: 'chat-terminal.png', text: '命令执行' },
-    { kind: 'event', icon: 'chat-think.png', text: 'Adjusting model settings to low/high/\nmax' },
-    { kind: 'event', icon: 'chat-terminal.png', text: '命令执行' },
-    { kind: 'event', icon: 'chat-think.png', text: 'Investigating provider reasoning effort\nmapping' },
-    { kind: 'event', icon: 'chat-terminal.png', text: '命令执行' },
-  ];
   const shortHomeTitle = (value) => {
     const clean = String(value || '').replace(/\s+/g, ' ').trim();
     return clean.length > 36 ? `${clean.slice(0, 35)}…` : clean;
@@ -337,12 +327,9 @@
   function renderNewChatProjects() {
     const root = $('newChatProjectList');
     if (!root) return;
-    const snapshotProjects = Array.isArray(state.snapshot?.projects) ? state.snapshot.projects : [];
-    const projects = snapshotProjects.length ? snapshotProjects : [
-      { id: 'new-chat-dsh', name: 'dsh插件', asset: 'folder2.svg' },
-      { id: 'new-chat-dsapp', name: 'dsAPP', asset: 'folder2.svg' },
-      { id: 'new-chat-pc', name: '电脑整理', asset: 'folder2.svg' },
-    ];
+    // Only show projects reported by the real Bridge. Never manufacture
+    // placeholder/demo projects when the desktop is disconnected.
+    const projects = Array.isArray(state.snapshot?.projects) ? state.snapshot.projects : [];
     root.replaceChildren();
     projects.slice(0, 30).forEach((project) => {
       const row = document.createElement('button');
@@ -498,8 +485,8 @@
     const project = state.snapshot?.project || {};
     const session = state.snapshot?.session || {};
     const selectedChat = state.selectedChat || {};
-    const projectName = String(selectedChat.projectName || project.name || '').trim() || 'dsAPP';
-    const chatTitle = selectedChat.title || state.renamedTitles[String(selectedChat.id || session.id || '')] || session.title || '确认编码是否消耗额度';
+    const projectName = String(selectedChat.projectName || project.name || '').trim() || 'DSH';
+    const chatTitle = selectedChat.title || state.renamedTitles[String(selectedChat.id || session.id || '')] || session.title || '新会话';
     text('chatTitle', chatTitle);
     text('chatMenuTitle', chatTitle, 'Remote DSH');
     text('chatProject', selectedChat.projectName || projectName);
