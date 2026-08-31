@@ -118,8 +118,10 @@ public final class RemoteService extends Service {
     private static final String KEY_SNAPSHOT_OWNER = "snapshotOwnerFingerprint";
     private static final String KEY_EXPLICITLY_OFFLINE = "explicitlyOffline";
 
-    static final String BUILTIN_ENDPOINT = "ws://192.168.1.4:8788/ws";
-    static final String BUILTIN_TOKEN = "CsRAoEQIuWeLxbPBVb_VJKufHGAcHrdB";
+    // P0 BUG-004: 内置配对端点/token 从未跟踪的 local.properties 经 BuildConfig
+    // 注入；仓库源码不含真实值，缺省空串时 App 走手动配置路径。
+    static final String BUILTIN_ENDPOINT = BuildConfig.DSH_BUILTIN_ENDPOINT;
+    static final String BUILTIN_TOKEN = BuildConfig.DSH_BUILTIN_TOKEN;
 
     private static final String CHANNEL_ID = "dsh_remote_live";
     private static final int NOTIFICATION_ID = 4201;
@@ -3429,6 +3431,8 @@ public final class RemoteService extends Service {
         private final ExecutorService executor = Executors.newSingleThreadExecutor(
                 namedThread("dsh-update"));
         private boolean downloading;
+        // P0 BUG-013 前置：check() 阶段从 /update/info 取得的期望 SHA-256。
+        private volatile String expectedUpdateSha256 = "";
 
         void check() {
             emitStatus("update-checking", "正在检查更新");
@@ -3464,6 +3468,7 @@ public final class RemoteService extends Service {
                             .put("currentVersionCode", currentCode)
                             .put("latestVersion", latestName)
                             .put("latestVersionCode", latestCode);
+                    expectedUpdateSha256 = trim(info.optString("sha256", ""));
                     if (latestCode > currentCode) {
                         emitStatus("update-available", "发现新版本 " + latestName, details);
                     } else {
@@ -3543,6 +3548,14 @@ public final class RemoteService extends Service {
                 }
                 if (!target.isFile() || target.length() < 10_000L) {
                     throw new IOException("下载的 APK 文件无效");
+                }
+                // P0 BUG-013 前置：清单缺 SHA-256 拒绝安装；不一致立即删除并报错。
+                String expectedSha256 = expectedUpdateSha256 == null ? "" : expectedUpdateSha256.trim();
+                if (expectedSha256.isEmpty()) {
+                    throw new IOException("UPDATE_MANIFEST_INVALID：更新清单缺少 SHA-256，已拒绝安装");
+                }
+                if (!com.dsapp.liquidglasschat.update.UpdateVerifier.matches(target, expectedSha256)) {
+                    throw new IOException("UPDATE_HASH_MISMATCH：更新包校验失败，已放弃安装");
                 }
                 emitStatus("update-downloaded", "更新包已下载，正在打开安装确认");
                 openInstaller(target);

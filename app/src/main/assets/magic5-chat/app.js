@@ -66,7 +66,6 @@
   const CONFIG_KEY = 'deepseek.chat.api.v1';
   const API_MODELS_KEY = 'deepseek.chat.api.models.v1';
   const GROUP_SETTINGS_KEY = 'deepseek.chat.group.settings.v1';
-  const FRESH_STATE_MARKER = 'deepseek.chat.fresh-state.v1';
   const DEFAULT_GROUP_SETTINGS = {
     chat: { model: 'deepseek-chat', effort: 'auto', prompt: '' },
     reasoner: { model: 'deepseek-reasoner', effort: 'auto', prompt: '' },
@@ -144,20 +143,45 @@
   syncKeyboardInset();
 
   const defaultConversation = () => ({ id: 'today', title: '今天的灵感', projectName: '', updatedAt: Date.now(), messages: [] });
-  const clearLegacyDemoState = () => {
+  // P0 BUG-005: 旧版 clearLegacyDemoState 会在升级后整键删除全部会话/项目/群聊
+  // 存储，属于破坏性清理。现改为正式迁移入口：先写完整快照备份（可审计回滚），
+  // 再按"精确演示签名"只剔除已知的演示对话行，用户真实数据一律保留。
+  const MIGRATION_MARKER = 'deepseek.chat.migration.v2.done';
+  const MIGRATION_BACKUP = 'deepseek.chat.migration.v2.backup';
+  const MIGRATION_KEYS = [
+    STORAGE_KEY,
+    PROJECTS_STORAGE_KEY,
+    'deepseek.chat.conversations.v2',
+    'deepseek.chat.projects.v1',
+    'dsh.group.conversations.v1',
+    'deepseek.chat.group.settings.v1',
+  ];
+  // 仅当某条对话与历史演示种子完全一致（两三条、逐字匹配）时才视为演示数据。
+  const DEMO_SEED_TEXTS = ['帮我整理一下今天的想法', '好的，我先把你的想法整理成几个清晰的方向。'];
+  const isSeedDemoConversation = (row) => Array.isArray(row?.messages)
+    && row.messages.length === 2
+    && row.messages.every((message, index) => String(message?.text || '') === DEMO_SEED_TEXTS[index] && !message?.attachment);
+  const migrateLegacyState = () => {
     try {
-      if (localStorage.getItem(FRESH_STATE_MARKER) === '1') return;
-      [
-        // Both the current and legacy conversation stores may contain the
-        // old preview/demo rows. Start this build with one empty conversation.
-        STORAGE_KEY,
-        PROJECTS_STORAGE_KEY,
-        'deepseek.chat.conversations.v2',
-        'deepseek.chat.projects.v1',
-        'dsh.group.conversations.v1',
-        'deepseek.chat.group.settings.v1',
-      ].forEach((key) => localStorage.removeItem(key));
-      localStorage.setItem(FRESH_STATE_MARKER, '1');
+      if (localStorage.getItem(MIGRATION_MARKER) === '1') return;
+      const snapshot = {};
+      MIGRATION_KEYS.forEach((key) => {
+        const raw = localStorage.getItem(key);
+        if (raw != null) snapshot[key] = raw;
+      });
+      try { localStorage.setItem(MIGRATION_BACKUP, JSON.stringify(snapshot)); } catch (_) {}
+      [STORAGE_KEY, 'deepseek.chat.conversations.v2'].forEach((key) => {
+        const raw = localStorage.getItem(key);
+        if (raw == null) return;
+        let rows;
+        try { rows = JSON.parse(raw); } catch (_) { return; }
+        if (!Array.isArray(rows)) return;
+        const filtered = rows.filter((row) => !isSeedDemoConversation(row));
+        if (filtered.length !== rows.length) {
+          try { localStorage.setItem(key, JSON.stringify(filtered)); } catch (_) {}
+        }
+      });
+      localStorage.setItem(MIGRATION_MARKER, '1');
     } catch (_) {}
   };
   const loadConversations = () => {
@@ -1083,7 +1107,7 @@
     return false;
   };
 
-  clearLegacyDemoState();
+  migrateLegacyState();
   loadConversations(); loadProjects(); loadApiConfig(); loadGroupSettings(); renderMessages();
   // 开屏：仅本次应用启动播一次（sessionStorage 标记；预览模式跳过）。
   // 播放期间 chatPage 保持 hidden（开屏盖在其上），结束后移除遮罩并触发 view-in 入场。

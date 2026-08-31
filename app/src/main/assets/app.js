@@ -776,7 +776,7 @@
       .filter((item) => !archived.has(String(item.id || ''))));
     text('projectTitle', selected.name, '项目');
     text('projectDevice', snapshot.device?.name || 'DSH Desktop', 'DSH Desktop');
-    text('projectConnection', state.connected ? '已连接' : (state.connectionState === 'retrying' ? '正在重试' : '未连接'));
+    text('projectConnection', state.connected ? dshReadyText() : (state.connectionState === 'retrying' ? '正在重试' : '未连接'));
     const root = $('projectChats');
     root.replaceChildren();
     chats.filter(({ item, role }) => {
@@ -924,7 +924,7 @@
     const device = snapshot.device || snapshot.machine || {};
     const deviceName = device.name || snapshot.deviceName || 'MagicBook';
     text('settingsDesktopName', deviceName);
-    text('settingsDesktopStatus', state.connected ? '已连接' : '未连接');
+    text('settingsDesktopStatus', state.connected ? dshReadyText() : '未连接');
     text('settingsVersionNumber', 'v1.12.15');
     text('settingsVersionState', '已是最新版');
     text('settingsVersionNote', '当前已安装最新版本');
@@ -1520,11 +1520,20 @@
     element.setAttribute('aria-label', connectionState === 'online' ? '已连接' : connectionState === 'retrying' ? '正在重试' : '未连接');
   }
 
+  // P0 BUG-001 配套：Bridge 传输在线 ≠ DSH 就绪。快照 online=false 表示
+  // 电脑端 DSH 未运行/未就绪，此时所有"已连接"文案必须变为"DSH 未就绪"。
+  function dshSnapshotReady() {
+    return state.snapshot ? state.snapshot.online !== false : true;
+  }
+  function dshReadyText() {
+    return dshSnapshotReady() ? '已连接' : 'DSH 未就绪';
+  }
+
   function renderConnection() {
     const online = state.connected;
     const connectionState = online ? 'online' : (state.connectionState || 'retrying');
     $('drawerDot')?.classList.toggle('online', online);
-    if ($('drawerState')) $('drawerState').textContent = online ? '已连接' : '未连接';
+    if ($('drawerState')) $('drawerState').textContent = online ? dshReadyText() : '未连接';
     updateConnectionDot($('homeDeviceDot'), connectionState);
     const deviceDot = $('chatDeviceDot');
     updateConnectionDot(deviceDot, connectionState);
@@ -3058,11 +3067,12 @@
   window.addEventListener('resize', () => { syncWebKeyboardInset(); syncComposerViewport(); refreshCommandMarquees(); updateScrollIndicators(); });
 
   settings = safeJson(native?.getSettings?.(), {});
-  // Built-in Bridge endpoint/token for the single-user setup. When nothing is
-  // stored yet (fresh install / cleared data), use these instead of making the
-  // user type them in the settings panel every time.
-  const BUILTIN_ENDPOINT = 'ws://192.168.1.4:8788/ws';
-  const BUILTIN_TOKEN = 'CsRAoEQIuWeLxbPBVb_VJKufHGAcHrdB';
+  // P0 BUG-004: 内置配对端点/token 由构建期注入原生层（未跟踪的 local.properties
+  // → BuildConfig），JS 运行时经 getBuiltinCredentials() 获取；资产源码不含真实值，
+  // 空值时回退手动配置路径。
+  const builtinCredentials = safeJson(native?.getBuiltinCredentials?.(), {});
+  const BUILTIN_ENDPOINT = String(builtinCredentials?.endpoint || '');
+  const BUILTIN_TOKEN = String(builtinCredentials?.token || '');;
   if (!settings || !settings.endpoint) {
     settings = { endpoint: BUILTIN_ENDPOINT, token: BUILTIN_TOKEN };
   }

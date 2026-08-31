@@ -13,3 +13,4 @@ gradle-publish*.log
 *.log
 # 交付物/发行包
 dist/
+signing.properties

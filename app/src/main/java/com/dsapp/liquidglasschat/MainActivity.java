@@ -1257,6 +1257,18 @@ public final class MainActivity extends Activity {
                     .getString("api_config", "{}");
         }
 
+        /** P0 BUG-004: 内置配对凭据由构建期注入，JS 运行时获取，资产文件不再含真实值。 */
+        @JavascriptInterface
+        public String getBuiltinCredentials() {
+            JSONObject payload = new JSONObject();
+            try {
+                payload.put("endpoint", BuildConfig.DSH_BUILTIN_ENDPOINT);
+                payload.put("token", BuildConfig.DSH_BUILTIN_TOKEN);
+            } catch (Exception ignored) {
+            }
+            return payload.toString();
+        }
+
         @JavascriptInterface
         public void saveApiConfig(String json) {
             if (json == null) return;

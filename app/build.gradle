@@ -5,6 +5,29 @@ plugins {
     id 'com.android.application'
 }
 
+// P0 BUG-004: 签名口令不再硬编码。优先读未跟踪的 signing.properties，
+// 其次环境变量；两者都没有时 release 签名会给出明确报错。
+def signingProps = new Properties()
+def signingPropsFile = rootProject.file('signing.properties')
+if (signingPropsFile.exists()) {
+    signingPropsFile.withInputStream { signingProps.load(it) }
+}
+def resolveSigningSecret = { String propKey, String envKey ->
+    String value = signingProps.getProperty(propKey)
+    if (value == null || value.trim().isEmpty()) value = System.getenv(envKey)
+    return value == null ? '' : value.trim()
+}
+
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) {
+    localPropsFile.withInputStream { localProps.load(it) }
+}
+def builtinEndpoint = (localProps.getProperty('DSH_BUILTIN_ENDPOINT') ?: System.getenv('DSH_BUILTIN_ENDPOINT') ?: '')
+        .replace('\\', '\\\\').replace('"', '\\"')
+def builtinToken = (localProps.getProperty('DSH_BUILTIN_TOKEN') ?: System.getenv('DSH_BUILTIN_TOKEN') ?: '')
+        .replace('\\', '\\\\').replace('"', '\\"')
+
 android {
     namespace 'com.dsapp.liquidglasschat'
     compileSdk 35
@@ -16,14 +39,23 @@ android {
         targetSdk 35
         versionCode 223
         versionName "1.12.15"
+
+        // P0 BUG-004: 内置配对端点/token 从未跟踪的 local.properties 注入
+        //（仓库内不再出现真实值）；缺省为空串，空值时 App 走手动配置路径。
+        buildConfigField 'String', 'DSH_BUILTIN_ENDPOINT', "\"${builtinEndpoint}\""
+        buildConfigField 'String', 'DSH_BUILTIN_TOKEN', "\"${builtinToken}\""
+    }
+
+    buildFeatures {
+        buildConfig true
     }
 
     signingConfigs {
         release {
             storeFile file('release.keystore')
-            storePassword 'liquidglass2026'
+            storePassword resolveSigningSecret('DSH_STORE_PASSWORD', 'DSH_STORE_PASSWORD')
             keyAlias 'liquidglass'
-            keyPassword 'liquidglass2026'
+            keyPassword resolveSigningSecret('DSH_KEY_PASSWORD', 'DSH_KEY_PASSWORD')
         }
     }
 
@@ -47,6 +79,7 @@ android {
 
 dependencies {
     implementation 'androidx.core:core:1.13.1'
+    testImplementation 'junit:junit:4.13.2'
 }
 
 tasks.register('publishRelease') {
@@ -69,10 +102,21 @@ tasks.register('publishRelease') {
             into outputDir
             rename { 'DSH-Remote.apk' }
         }
+        // P0 BUG-013 前置：更新清单必须携带 SHA-256 与字节数，手机端强校验。
+        def publishedApk = new File(outputDir, 'DSH-Remote.apk')
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        publishedApk.withInputStream { stream ->
+            def buffer = new byte[16 * 1024]
+            int read
+            while ((read = stream.read(buffer)) != -1) { digest.update(buffer, 0, read) }
+        }
+        def sha256 = digest.digest().collect { String.format('%02x', it) }.join()
         def metadata = [
             versionCode: android.defaultConfig.versionCode,
             versionName: android.defaultConfig.versionName,
             apk: 'DSH-Remote.apk',
+            byteSize: publishedApk.length(),
+            sha256: sha256,
         ]
         metadataFile.text = JsonOutput.prettyPrint(JsonOutput.toJson(metadata)) + System.lineSeparator()
     }
