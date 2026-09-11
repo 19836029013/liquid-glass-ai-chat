@@ -133,6 +133,12 @@ public final class RemoteService extends Service {
     private static final int NOTIFICATION_ID = 4201;
     private static final int UPDATE_NOTIFICATION_ID = 4202;
     private static final long MAX_UPDATE_BYTES = 256L * 1024L * 1024L;
+    /**
+     * Mirrors prepended to the canonical release URL. When GitHub is blocked or slow the app
+     * retries through one of these; only the origin changes, so the manifest and the APK stay
+     * byte-identical and the recorded SHA-256 still verifies.
+     */
+    private static final String[] UPDATE_MIRROR_PREFIXES = {"https://gh-proxy.com/"};
     private static final int MAX_QUEUED_CONTROLS = 128;
     /** The deployed Bridge rejects client WebSocket frames above 1 MiB. */
     static final int MAX_CONTROL_FRAME_BYTES = 960 * 1024;
@@ -3464,32 +3470,95 @@ public final class RemoteService extends Service {
         private boolean downloading;
         // P0 BUG-013 前置：check() 阶段从 /update/info 取得的期望 SHA-256。
         private volatile String expectedUpdateSha256 = "";
+        /** APK origin belonging to the manifest that check() accepted; empty before a check. */
+        private volatile String pendingApkUrl = "";
+
+        /** One release origin: the manifest that describes an update and the APK it points at. */
+        private final class UpdateSource {
+            private final String manifestUrl;
+            private final String apkUrl;
+
+            UpdateSource(String manifestUrl, String apkUrl) {
+                this.manifestUrl = manifestUrl;
+                this.apkUrl = apkUrl;
+            }
+        }
+
+        /**
+         * Release origins in priority order: the GitHub release CDN, its mirrors, then the
+         * Bridge. The Bridge is last so a phone away from the desktop can still update through
+         * the tunnel, and it is the only origin that needs a live connection.
+         * @param settings current Bridge endpoint, used for the last origin.
+         * @returns origins to try in order; never empty unless no Bridge endpoint is configured.
+         */
+        private List<UpdateSource> updateSources(SettingsValue settings) {
+            List<UpdateSource> sources = new ArrayList<>();
+            String base = trim(BuildConfig.DSH_UPDATE_BASE_URL);
+            while (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+            if (!base.isEmpty()) {
+                sources.add(new UpdateSource(base + "/update.json", base + "/DSH-Remote.apk"));
+                for (String prefix : UPDATE_MIRROR_PREFIXES) {
+                    sources.add(new UpdateSource(prefix + base + "/update.json",
+                            prefix + base + "/DSH-Remote.apk"));
+                }
+            }
+            try {
+                sources.add(new UpdateSource(buildBridgeHttpUrl(settings, "/update/info"),
+                        buildBridgeHttpUrl(settings, "/download/apk")));
+            } catch (Throwable unusableEndpoint) {
+                // The CDN origins above still work without a Bridge endpoint.
+            }
+            return sources;
+        }
+
+        private JSONObject fetchManifest(String manifestUrl) throws Exception {
+            HttpURLConnection connection = null;
+            try {
+                connection = (HttpURLConnection) new URL(manifestUrl).openConnection();
+                connection.setConnectTimeout(8_000);
+                connection.setReadTimeout(8_000);
+                connection.setUseCaches(false);
+                connection.setRequestProperty("Accept", "application/json");
+                int code = connection.getResponseCode();
+                String body = readStream(code >= 200 && code < 300
+                        ? connection.getInputStream() : connection.getErrorStream(), 1_048_576L);
+                if (code < 200 || code >= 300) {
+                    throw new IOException("更新源返回 HTTP " + code
+                            + (body.isEmpty() ? "" : "：" + compact(body, 160)));
+                }
+                JSONObject info = new JSONObject(body);
+                if (info.optInt("versionCode", -1) < 0
+                        || trim(info.optString("versionName", "")).isEmpty()) {
+                    throw new IOException("更新源没有返回有效版本信息");
+                }
+                return info;
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        }
 
         void check() {
             emitStatus("update-checking", "正在检查更新");
             executor.execute(() -> {
-                HttpURLConnection connection = null;
                 try {
-                    SettingsValue settings = configStore.current();
-                    URL url = new URL(buildBridgeHttpUrl(settings, "/update/info"));
-                    connection = (HttpURLConnection) url.openConnection();
-                    connection.setConnectTimeout(8_000);
-                    connection.setReadTimeout(8_000);
-                    connection.setUseCaches(false);
-                    connection.setRequestProperty("Accept", "application/json");
-                    int code = connection.getResponseCode();
-                    String body = readStream(code >= 200 && code < 300
-                            ? connection.getInputStream() : connection.getErrorStream(), 1_048_576L);
-                    if (code < 200 || code >= 300) {
-                        throw new IOException("Bridge 返回 HTTP " + code
-                                + (body.isEmpty() ? "" : "：" + compact(body, 160)));
+                    JSONObject info = null;
+                    String chosenApkUrl = "";
+                    String lastError = "";
+                    for (UpdateSource source : updateSources(configStore.current())) {
+                        try {
+                            info = fetchManifest(source.manifestUrl);
+                            chosenApkUrl = source.apkUrl;
+                            break;
+                        } catch (Throwable error) {
+                            lastError = errorLabel(error);
+                        }
                     }
-                    JSONObject info = new JSONObject(body);
+                    if (info == null) {
+                        throw new IOException(lastError.isEmpty() ? "没有可用的更新源" : lastError);
+                    }
+                    pendingApkUrl = chosenApkUrl;
                     int latestCode = info.optInt("versionCode", -1);
                     String latestName = trim(info.optString("versionName", ""));
-                    if (latestCode < 0 || latestName.isEmpty()) {
-                        throw new IOException("Bridge 没有返回有效版本信息");
-                    }
                     PackageInfo packageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
                     long currentCode = Build.VERSION.SDK_INT >= 28
                             ? packageInfo.getLongVersionCode() : packageInfo.versionCode;
@@ -3507,8 +3576,6 @@ public final class RemoteService extends Service {
                     }
                 } catch (Throwable error) {
                     emitStatus("update-error", errorLabel(error));
-                } finally {
-                    if (connection != null) connection.disconnect();
                 }
             });
         }
@@ -3527,9 +3594,11 @@ public final class RemoteService extends Service {
             HttpURLConnection connection = null;
             File target = null;
             try {
-                SettingsValue settings = configStore.current();
-                connection = (HttpURLConnection) new URL(
-                        buildBridgeHttpUrl(settings, "/download/apk")).openConnection();
+                String apkUrl = trim(pendingApkUrl);
+                if (apkUrl.isEmpty()) {
+                    apkUrl = buildBridgeHttpUrl(configStore.current(), "/download/apk");
+                }
+                connection = (HttpURLConnection) new URL(apkUrl).openConnection();
                 connection.setConnectTimeout(10_000);
                 connection.setReadTimeout(30_000);
                 connection.setUseCaches(false);
@@ -3537,7 +3606,7 @@ public final class RemoteService extends Service {
                 int code = connection.getResponseCode();
                 if (code < 200 || code >= 300) {
                     String body = readStream(connection.getErrorStream(), 1_048_576L);
-                    throw new IOException("Bridge 返回 HTTP " + code
+                    throw new IOException("更新源返回 HTTP " + code
                             + (body.isEmpty() ? "" : "：" + compact(body, 160)));
                 }
 
@@ -3570,8 +3639,8 @@ public final class RemoteService extends Service {
                             if (total > 0) details.put("progress",
                                     (int) Math.min(100L, downloaded * 100L / total));
                             emitStatus("update-progress", total > 0
-                                    ? "正在从电脑下载更新（" + details.optInt("progress") + "%）"
-                                    : "正在从电脑下载更新……", details);
+                                    ? "正在下载更新（" + details.optInt("progress") + "%）"
+                                    : "正在下载更新……", details);
                             lastReport = now;
                         }
                     }

@@ -27,6 +27,12 @@ def builtinEndpoint = (localProps.getProperty('DSH_BUILTIN_ENDPOINT') ?: System.
         .replace('\\', '\\\\').replace('"', '\\"')
 def builtinToken = (localProps.getProperty('DSH_BUILTIN_TOKEN') ?: System.getenv('DSH_BUILTIN_TOKEN') ?: '')
         .replace('\\', '\\\\').replace('"', '\\"')
+// Release CDN holding update.json and the APK. The app appends /update.json and
+// /DSH-Remote.apk, falls back to the mirrors in RemoteService, and only then to the Bridge.
+def updateBaseUrl = (localProps.getProperty('DSH_UPDATE_BASE_URL')
+        ?: System.getenv('DSH_UPDATE_BASE_URL')
+        ?: 'https://github.com/19836029013/liquid-glass-ai-chat/releases/latest/download')
+        .replace('\\', '\\\\').replace('"', '\\"')
 
 android {
     namespace 'com.dsapp.liquidglasschat'
@@ -37,13 +43,14 @@ android {
         applicationId "com.dsapp.dshremote"
         minSdk 26
         targetSdk 35
-        versionCode 229
-        versionName "1.12.21"
+        versionCode 230
+        versionName "1.12.22"
 
         // P0 BUG-004: 内置配对端点/token 从未跟踪的 local.properties 注入
         //（仓库内不再出现真实值）；缺省为空串，空值时 App 走手动配置路径。
         buildConfigField 'String', 'DSH_BUILTIN_ENDPOINT', "\"${builtinEndpoint}\""
         buildConfigField 'String', 'DSH_BUILTIN_TOKEN', "\"${builtinToken}\""
+        buildConfigField 'String', 'DSH_UPDATE_BASE_URL', "\"${updateBaseUrl}\""
     }
 
     buildFeatures {
