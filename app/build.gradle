@@ -43,8 +43,8 @@ android {
         applicationId "com.dsapp.dshremote"
         minSdk 26
         targetSdk 35
-        versionCode 233
-        versionName "1.12.25"
+        versionCode 235
+        versionName "1.12.27"
 
         // P0 BUG-004: 内置配对端点/token 从未跟踪的 local.properties 注入
         //（仓库内不再出现真实值）；缺省为空串，空值时 App 走手动配置路径。
