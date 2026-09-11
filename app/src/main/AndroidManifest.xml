@@ -19,12 +19,18 @@
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="true">
 
+        <!-- adjustResize, not adjustNothing. With setDecorFitsSystemWindows(false) the window is
+             not resized either way, but adjustNothing also stops the system from delivering IME
+             insets. MainActivity publishes the keyboard height from those insets as the CSS
+             variable native-keyboard-bottom, so under adjustNothing both the native and the
+             visualViewport signal stayed 0 and the composer collapsed (dropping focus and closing
+             the IME) right after it was opened. -->
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="adjustNothing">
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

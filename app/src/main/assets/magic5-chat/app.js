@@ -104,8 +104,15 @@
     const frameRoot = remoteFrame?.contentDocument?.documentElement;
     if (!frameRoot) return;
     const root = document.documentElement;
+    const styles = getComputedStyle(root);
+    const nativeInset = Number.parseInt(styles.getPropertyValue('--native-keyboard-bottom'), 10) || 0;
+    const webInset = Number.parseInt(styles.getPropertyValue('--web-keyboard-bottom'), 10) || 0;
     frameRoot.style.setProperty('--native-safe-top', '0px');
-    ['--native-safe-bottom', '--native-keyboard-bottom'].forEach((name) => { const value = getComputedStyle(root).getPropertyValue(name).trim(); if (value) frameRoot.style.setProperty(name, value); });
+    frameRoot.style.setProperty('--native-safe-bottom', styles.getPropertyValue('--native-safe-bottom').trim() || '0px');
+    // MainActivity publishes the window's IME insets into --native-keyboard-bottom; the
+    // visualViewport value is only a fallback for renderers that report no insets. The
+    // remote view reads a zero inset as "keyboard closed" and drops composer focus.
+    frameRoot.style.setProperty('--native-keyboard-bottom', `${Math.max(nativeInset, webInset)}px`);
   };
   const requestRemoteRoute = (route) => {
     const value = route === 'projects' ? 'projects' : 'remote';
@@ -135,12 +142,22 @@
   const syncKeyboardInset = () => {
     const viewport = window.visualViewport;
     const inset = viewport ? Math.max(0, Math.round(window.innerHeight - viewport.height - viewport.offsetTop)) : 0;
-    document.documentElement.style.setProperty('--native-keyboard-bottom', `${inset}px`);
+    // Never write --native-keyboard-bottom from here: doing so overwrote the native IME
+    // inset with 0 whenever the window itself did not resize, which is what made the
+    // remote view believe the keyboard had closed and drop the composer right after focus.
+    document.documentElement.style.setProperty('--web-keyboard-bottom', `${inset}px`);
+    syncRemoteFrameInsets();
   };
   window.visualViewport?.addEventListener('resize', syncKeyboardInset);
   window.visualViewport?.addEventListener('scroll', syncKeyboardInset);
   window.addEventListener('resize', syncKeyboardInset);
   syncKeyboardInset();
+  // 版本号来自原生 BuildConfig（资产里写死会随发版过期）。
+  const shellVersionNode = document.getElementById('shellVersionNumber');
+  if (shellVersionNode) {
+    const installedVersion = String(native?.getAppVersion?.() || '').trim();
+    shellVersionNode.textContent = installedVersion ? `v${installedVersion}` : 'v—';
+  }
 
   const defaultConversation = () => ({ id: 'today', title: '今天的灵感', projectName: '', updatedAt: Date.now(), messages: [] });
   // P0 BUG-005: 旧版 clearLegacyDemoState 会在升级后整键删除全部会话/项目/群聊

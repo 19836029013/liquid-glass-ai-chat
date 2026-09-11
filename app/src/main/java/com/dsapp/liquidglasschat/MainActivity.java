@@ -1269,6 +1269,12 @@ public final class MainActivity extends Activity {
             return payload.toString();
         }
 
+        /** 设置页显示已安装版本；资产里写死的版本号会随发版过期。 */
+        @JavascriptInterface
+        public String getAppVersion() {
+            return BuildConfig.VERSION_NAME;
+        }
+
         @JavascriptInterface
         public void saveApiConfig(String json) {
             if (json == null) return;

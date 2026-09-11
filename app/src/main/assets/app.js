@@ -925,7 +925,8 @@
     const deviceName = device.name || snapshot.deviceName || 'MagicBook';
     text('settingsDesktopName', deviceName);
     text('settingsDesktopStatus', state.connected ? dshReadyText() : '未连接');
-    text('settingsVersionNumber', 'v1.12.15');
+    const nativeVersion = String(native?.getAppVersion?.() || '').trim();
+    text('settingsVersionNumber', nativeVersion ? `v${nativeVersion}` : 'v—');
     text('settingsVersionState', '已是最新版');
     text('settingsVersionNote', '当前已安装最新版本');
   }
