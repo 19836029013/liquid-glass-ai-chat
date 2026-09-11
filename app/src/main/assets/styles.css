@@ -508,6 +508,12 @@ input, textarea, [contenteditable="true"] { -webkit-user-select: text; user-sele
 .chat-plus-button img { width: 28px; height: 28px; display: block; }
 .chat-composer-option { min-width: 0; height: 44px; gap: 5px; color: #72777d; white-space: nowrap; font-family: inherit; font-size: 17px; line-height: 22px; font-weight: 600; letter-spacing: -.1px; display: flex; align-items: center; justify-content: center; opacity: 1; visibility: visible; transition: opacity .22s ease, visibility 0s linear 0s; }
 .chat-composer:not(.is-expanded) .chat-composer-option { opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .22s ease, visibility 0s linear .22s; }
+/* 折叠态下控制层与输入层共用同一段高度（controls-inner 绝对定位在 top:-46px），
+   整行连同心里的弹性占位一起压在 textarea 之上，点输入框命中的其实是它们，
+   于是输入框永远拿不到焦点、IME 不会弹出。容器与占位不参与命中测试，只保留真实按钮可点。 */
+.chat-composer:not(.is-expanded) .chat-composer-controls-inner,
+.chat-composer:not(.is-expanded) .chat-composer-spacer { pointer-events: none; }
+.chat-composer:not(.is-expanded) .chat-composer-controls-inner > button { pointer-events: auto; }
 .chat-composer-option:disabled { opacity: .42; }
 .chat-permission-button { width: 34px; max-width: 34px; min-width: 34px; flex: 0 0 34px; justify-content: center; margin-left: 0; gap: 0; }
 .chat-permission-icon { width: 25px; height: 25px; display: block; flex: 0 0 25px; object-fit: contain; align-self: center; opacity: .72; }

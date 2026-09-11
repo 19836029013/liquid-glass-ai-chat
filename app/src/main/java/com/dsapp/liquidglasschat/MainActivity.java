@@ -620,13 +620,15 @@ public final class MainActivity extends Activity {
 
     private void applySafeAreaToWebView() {
         if (webView == null || !webPageReady) return;
+        // 顶部 inset 只写给 shell：shell 已经把嵌入帧放到状态栏下方，并主动把帧内的
+        // --native-safe-top 钉成 0。这里再往帧里写一次会与它抢同一个变量，谁后执行谁生效，
+        // 表现为标题胶囊到状态栏之间时有时无地多出一截空白。
         String script = "(function(){var r=document.documentElement;if(!r)return;"
                 + "r.style.setProperty('--native-safe-top','" + safeTopInset + "px');"
                 + "r.style.setProperty('--native-safe-bottom','" + safeBottomInset + "px');"
                 + "r.style.setProperty('--native-keyboard-bottom','" + keyboardBottomInset + "px');"
                 + "var f=document.getElementById('remoteApp'),d=f&&f.contentDocument&&f.contentDocument.documentElement;"
-                + "if(d){d.style.setProperty('--native-safe-top','" + safeTopInset + "px');"
-                + "d.style.setProperty('--native-safe-bottom','" + safeBottomInset + "px');"
+                + "if(d){d.style.setProperty('--native-safe-bottom','" + safeBottomInset + "px');"
                 + "d.style.setProperty('--native-keyboard-bottom','" + keyboardBottomInset + "px');}"
                 + "})()";
         webView.evaluateJavascript(script, null);
