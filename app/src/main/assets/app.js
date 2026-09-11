@@ -5,7 +5,7 @@
   const previewQuery = new URLSearchParams(window.location.search);
   const browserPreview = previewQuery.get('preview') === 'magic5pro';
   const embeddedRemote = previewQuery.get('embedded') === '1';
-  const state = { snapshot: {}, connected: false, connectionState: 'retrying', replying: false, composerExpanded: false, composerFocusGuardUntil: 0, selectorKind: '', selectedPermission: 'workspace-write', selectedModel: { provider: 'opengo', model: 'hy3', reasoningEffort: '' }, selectedEffort: '', modelSelectionTouched: false, permissionSelectionTouched: false, events: [], eventHistory: {}, chatLocalItems: [], sessionHistory: {}, sessionAliases: {}, sessionContextUsage: {}, historyWarmInFlight: false, historyWarmSessionId: '', openingChatSessionId: '', creatingChatProject: null, pendingDraftPrompt: null, renderedChat: { sessionId: '', keys: [] }, expandedThinkingIds: {}, lastEventAt: 0, selectedChat: null, selectedProject: null, projectOrigin: 'home', chatOrigin: 'home', pinnedIds: [], archivedIds: [], renamedTitles: {}, expandedSessionGroups: {}, localProjects: [], autoFollowChat: true, followResumeTimer: null, programmaticScrollUntil: 0, pendingImages: [] };
+  const state = { snapshot: {}, connected: false, connectionState: 'retrying', replying: false, composerExpanded: false, composerFocusGuardUntil: 0, selectorKind: '', selectedPermission: 'workspace-write', selectedModel: { provider: '', model: '', reasoningEffort: '' }, selectedEffort: '', modelSelectionTouched: false, permissionSelectionTouched: false, events: [], eventHistory: {}, chatLocalItems: [], sessionHistory: {}, sessionAliases: {}, sessionContextUsage: {}, historyWarmInFlight: false, historyWarmSessionId: '', openingChatSessionId: '', creatingChatProject: null, pendingDraftPrompt: null, renderedChat: { sessionId: '', keys: [] }, expandedThinkingIds: {}, lastEventAt: 0, selectedChat: null, selectedProject: null, projectOrigin: 'home', chatOrigin: 'home', pinnedIds: [], archivedIds: [], renamedTitles: {}, expandedSessionGroups: {}, localProjects: [], autoFollowChat: true, followResumeTimer: null, programmaticScrollUntil: 0, pendingImages: [] };
   let settings = { endpoint: '', token: '' };
   let toastTimer = null;
   let liveSocket = null;
@@ -1675,7 +1675,22 @@
     if (Array.isArray(raw)) groups = raw.some((group) => Array.isArray(group?.models)) ? raw : [{ provider: 'opengo', providerName: 'open-go', models: raw }];
     else if (Array.isArray(raw?.groups)) groups = raw.groups;
     else if (Array.isArray(raw?.routable)) groups = [{ provider: 'opengo', providerName: 'open-go', models: raw.routable }];
-    if (!groups.length) groups = DSH_MODEL_CATALOG;
+    // DSH_MODEL_CATALOG 只是浏览器模拟器的替身。已连接真实 DSH 却没拿到目录时不能拿它
+    // 顶替：那样会列出 DSH 根本没有的模型（hy3、gpt-5.6-luna……），看起来像实时映射。
+    if (!groups.length) {
+      const selection = state.snapshot?.modelSelection || state.snapshot?.currentModel || {};
+      const selectedId = String(selection.model || selection.id || '');
+      if (native) {
+        if (!selectedId) return [];
+        groups = [{
+          provider: String(selection.provider || ''),
+          providerName: '',
+          models: [{ id: selectedId }],
+        }];
+      } else {
+        groups = DSH_MODEL_CATALOG;
+      }
+    }
     return groups.map((group) => ({
       provider: String(group.provider || group.providerId || group.id || 'opengo'),
       providerName: String(group.providerName || group.displayName || group.name || group.provider || 'open-go'),
@@ -1706,7 +1721,7 @@
       const model = group.models.find((item) => item.id === selection.model);
       if (model) return { ...model, provider: group.provider, providerName: group.providerName };
     }
-    return { id: selection.model || 'hy3', name: selection.model || 'hy3', reasoningEfforts: [], provider: selection.provider || 'opengo', providerName: 'open-go' };
+    return { id: selection.model || '', name: selection.model || '默认模型', reasoningEfforts: [], provider: selection.provider || '', providerName: '' };
   }
 
   function modelSupportsImage(model) {
@@ -1852,7 +1867,7 @@
     const selectedModel = currentModelSelection();
     const model = currentModelInfo();
     const effort = selectedModel.reasoningEffort || state.selectedEffort || '';
-    text('modelLabel', effort ? `${model.name} ${effortDisplayName(effort)}` : model.name, 'hy3');
+    text('modelLabel', effort ? `${model.name} ${effortDisplayName(effort)}` : model.name, '默认模型');
     $('permissionButton')?.setAttribute('aria-expanded', String(state.selectorKind === 'permission'));
     $('modelButton')?.setAttribute('aria-expanded', String(state.selectorKind === 'model-root' || state.selectorKind === 'model' || state.selectorKind === 'effort'));
     $('effortButton')?.setAttribute('aria-expanded', String(state.selectorKind === 'effort'));
@@ -1993,7 +2008,7 @@
       return;
     }
     if (payload.kind === 'model') {
-      state.selectedModel = { provider: String(payload.provider || 'opengo'), model: String(payload.model || 'hy3'), reasoningEffort: '' };
+      state.selectedModel = { provider: String(payload.provider || ''), model: String(payload.model || ''), reasoningEffort: '' };
       state.selectedEffort = '';
       state.modelSelectionTouched = true;
       const model = currentModelInfo();
@@ -2988,6 +3003,10 @@
   });
   $('promptInput').addEventListener('focus', () => {
     state.composerExpanded = true;
+    // 焦点到达时 IME 的 insets 还没下发（通常 300~500ms 后才到）。若此时
+    // collapseComposerIfKeyboardClosed 已排队，它会在 inset 仍为 0 时把刚展开的输入栏
+    // 收回去，焦点一并丢失，表现为"键盘刚弹出就收"。给这次聚焦一段保护期，等真实高度到达。
+    state.composerFocusGuardUntil = Date.now() + 900;
     syncComposerState();
     syncWebKeyboardInset();
     setTimeout(keepComposerVisible, 180);

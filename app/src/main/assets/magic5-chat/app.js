@@ -780,7 +780,7 @@
   const openContextCard = () => { closeOverlays(); if (!contextLayer) return; renderContextCard(); contextLayer.hidden = false; $('contextButton')?.setAttribute('aria-expanded', 'true'); restoreComposerFocus(); };
   const loadApiConfig = () => {
     let stored = null; try { stored = native?.getApiConfig?.() || localStorage.getItem(CONFIG_KEY); } catch (_) {}
-    const config = safeJson(stored, {}); state.api = { ...DEFAULT_CONFIG, ...(config && typeof config === 'object' ? config : {}) }; if (!state.api.base_url) state.api.base_url = DEFAULT_CONFIG.base_url; state.selectedEffort = String(config?.effort || 'auto'); const remembered = safeJson(localStorage.getItem(API_MODELS_KEY), []); if (Array.isArray(remembered)) state.apiModels = [...new Set([...state.apiModels, ...remembered.map((item) => String(item || '').trim()).filter(Boolean)])]; if (state.api.model) state.apiModels = [...new Set([...state.apiModels, String(state.api.model)])]; renderApiModels();
+    const config = safeJson(stored, {}); state.api = { ...DEFAULT_CONFIG, ...(config && typeof config === 'object' ? config : {}) }; if (!state.api.base_url) state.api.base_url = DEFAULT_CONFIG.base_url; state.selectedEffort = String(config?.effort || 'auto'); const remembered = safeJson(localStorage.getItem(API_MODELS_KEY), []).map((item) => String(item || '').trim()).filter(Boolean); if (remembered.length) state.apiModels = [...new Set(remembered)]; if (state.api.model) state.apiModels = [...new Set([...state.apiModels, String(state.api.model)])]; renderApiModels();
   };
   const loadGroupSettings = () => {
     const stored = safeJson(localStorage.getItem(GROUP_SETTINGS_KEY), {});
@@ -814,7 +814,10 @@
     if (promptWrap) promptWrap.hidden = setting !== 'prompt';
     if (prompt) prompt.value = setting === 'prompt' ? String(state.groupSettings[member].prompt || '') : '';
     if (setting !== 'prompt' && options) {
-      const values = setting === 'model' ? [...new Set([...state.apiModels, 'deepseek-chat', 'deepseek-reasoner'])] : ['auto', 'high', 'max'];
+      // 只用真实探测到的列表：硬塞 deepseek-chat/reasoner 会让选择器出现当前 API 没有的模型。
+      const values = setting === 'model'
+        ? [...new Set([...state.apiModels, String(state.groupSettings[member].model || '')].filter(Boolean))]
+        : ['auto', 'high', 'max'];
       values.forEach((value) => {
         const row = document.createElement('button'); row.type = 'button'; row.className = 'group-editor-option'; row.dataset.value = value;
         const label = document.createElement('span'); label.textContent = setting === 'effort' ? effortLabel(value) : value;
