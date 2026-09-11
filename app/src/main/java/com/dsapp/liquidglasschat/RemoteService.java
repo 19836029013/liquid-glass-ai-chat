@@ -122,6 +122,12 @@ public final class RemoteService extends Service {
     // 注入；仓库源码不含真实值，缺省空串时 App 走手动配置路径。
     static final String BUILTIN_ENDPOINT = BuildConfig.DSH_BUILTIN_ENDPOINT;
     static final String BUILTIN_TOKEN = BuildConfig.DSH_BUILTIN_TOKEN;
+    /**
+     * The adb reverse tunnel endpoint. It is derived on every connect attempt
+     * instead of being stored, because it only answers while the USB cable is
+     * attached and any saved copy would pin the app to a dead address.
+     */
+    private static final String USB_LOOPBACK_ENDPOINT = "ws://127.0.0.1:8788/ws";
 
     private static final String CHANNEL_ID = "dsh_remote_live";
     private static final int NOTIFICATION_ID = 4201;
@@ -139,6 +145,11 @@ public final class RemoteService extends Service {
     private static final int BRIDGE_TCP_PROBE_TIMEOUT_MS = 220;
     private static final int BRIDGE_TCP_PROBE_WINDOW_MS = 2_500;
     private static final long BRIDGE_DISCOVERY_INTERVAL_MS = 15_000L;
+    /**
+     * A connect to the phone's own loopback port is answered or refused immediately, so this
+     * bound only covers a stalled adb reverse daemon.
+     */
+    private static final int USB_LOOPBACK_PROBE_TIMEOUT_MS = 400;
     private static final byte[] BRIDGE_DISCOVERY_REQUEST =
             "DSH_BRIDGE_DISCOVER v1".getBytes(StandardCharsets.UTF_8);
     private static final long HEARTBEAT_MS = 10_000L;
@@ -851,6 +862,21 @@ public final class RemoteService extends Service {
                     if (failureIndex > 0) {
                         emitStatus("connecting", "正在重新连接 Bridge");
                     }
+                    // The built-in USB tunnel outranks any saved or discovered LAN address:
+                    // campus and guest WLANs isolate clients, so a reachable cable is the only
+                    // transport that works there. Only this connection run switches: desiredUrl
+                    // keeps naming the configured endpoint, because start() reads any mismatch
+                    // against it as an endpoint change and would relaunch this loop on every
+                    // call. discoveredEndpoint is cleared because this iteration no longer
+                    // connects to the address discovery had chosen.
+                    String usbEndpoint = reachableUsbLoopbackEndpoint(url);
+                    if (!usbEndpoint.isEmpty()) {
+                        // The tunnel answers on the same Bridge, so it keeps the token the
+                        // configured address carries instead of the bare constant.
+                        url = appendToken(usbEndpoint, tokenFromEndpoint(url));
+                        discoveredEndpoint = false;
+                        Log.i(TAG, "USB Bridge tunnel is reachable; using the built-in endpoint");
+                    }
                     socket = new WsConnection(url);
                     socket.connect();
                     if (!install(socket, runGeneration)) break;
@@ -1073,9 +1099,10 @@ public final class RemoteService extends Service {
         static String find(String currentWebSocketUrl) {
             try {
                 URI current = URI.create(trim(currentWebSocketUrl));
-                String host = trim(current.getHost());
-                if (host.isEmpty() || "localhost".equalsIgnoreCase(host)
-                        || "127.0.0.1".equals(host) || "::1".equals(host)) return "";
+                // A loopback endpoint also reaches this path: with the USB cable unplugged the
+                // tunnel refuses instantly, and the phone must still find a Bridge on the local
+                // network. A reachable cable keeps winning because the connection loop prefers
+                // the built-in loopback endpoint before every attempt.
                 String token = tokenFromEndpoint(currentWebSocketUrl);
                 String discovered = findOverUdp(current, token);
                 if (!discovered.isEmpty()) return discovered;
@@ -3035,6 +3062,10 @@ public final class RemoteService extends Service {
         synchronized SettingsValue current() {
             String endpoint = trim(preferences.getString(KEY_ENDPOINT, ""));
             String token = trim(preferences.getString(KEY_TOKEN, ""));
+            // The USB tunnel endpoint is derived per attempt, so a saved loopback
+            // address must not win: it would strand the app on a tunnel that only
+            // exists while the cable is attached.
+            if (isLoopbackEndpoint(endpoint)) endpoint = "";
             if (endpoint.isEmpty()) endpoint = BUILTIN_ENDPOINT;
             try {
                 String embedded = tokenFromEndpoint(endpoint);
@@ -4422,6 +4453,36 @@ public final class RemoteService extends Service {
         } catch (Throwable ignored) {
         }
         return "";
+    }
+
+    /**
+     * Returns the built-in endpoint when it is a loopback URL that currently answers, so a
+     * plugged-in USB cable wins over a saved LAN address that the current network may block.
+     * Returns "" when the current target already is loopback, when the build carries no
+     * loopback built-in endpoint, or when nothing is listening on the phone's loopback port.
+     */
+    private static String reachableUsbLoopbackEndpoint(String currentUrl) {
+        if (isLoopbackEndpoint(currentUrl)) return "";
+        int port = URI.create(USB_LOOPBACK_ENDPOINT).getPort();
+        if (port <= 0) port = 8788;
+        try (Socket probe = new Socket()) {
+            probe.connect(new InetSocketAddress(InetAddress.getLoopbackAddress(), port),
+                    USB_LOOPBACK_PROBE_TIMEOUT_MS);
+            return USB_LOOPBACK_ENDPOINT;
+        } catch (Throwable unreachable) {
+            // No adb reverse tunnel, or a refused local port: keep the current target.
+            return "";
+        }
+    }
+
+    private static boolean isLoopbackEndpoint(String url) {
+        try {
+            String host = trim(URI.create(trim(url)).getHost());
+            return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host)
+                    || "::1".equals(host);
+        } catch (Throwable malformed) {
+            return false;
+        }
     }
 
     private static String withoutQueryParameter(String query, String excludedName) {
