@@ -1678,17 +1678,20 @@
     // DSH_MODEL_CATALOG 只是浏览器模拟器的替身。已连接真实 DSH 却没拿到目录时不能拿它
     // 顶替：那样会列出 DSH 根本没有的模型（hy3、gpt-5.6-luna……），看起来像实时映射。
     if (!groups.length) {
-      const selection = state.snapshot?.modelSelection || state.snapshot?.currentModel || {};
-      const selectedId = String(selection.model || selection.id || '');
-      if (native) {
+      if (!native) {
+        groups = DSH_MODEL_CATALOG;
+      } else {
+        // 目录拿不到时只呈现当前选择，并把它正在用的思考等级一并带上，否则弹层里
+        // 模型为空、"智力"列表也为空。
+        const selection = currentModelSelection();
+        const selectedId = String(selection.model || '');
         if (!selectedId) return [];
+        const effort = String(selection.reasoningEffort || '');
         groups = [{
           provider: String(selection.provider || ''),
           providerName: '',
-          models: [{ id: selectedId }],
+          models: [{ id: selectedId, reasoningEfforts: effort ? [effort] : [] }],
         }];
-      } else {
-        groups = DSH_MODEL_CATALOG;
       }
     }
     return groups.map((group) => ({

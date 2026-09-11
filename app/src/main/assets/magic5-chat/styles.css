@@ -34,7 +34,7 @@
 }
 
 * { box-sizing: border-box; }
-html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: var(--surface); color: var(--ink); }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; background: var(--surface); color: var(--ink); }
 body { font-synthesis: none; text-rendering: optimizeLegibility; }
 button, textarea { font: inherit; }
 button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
@@ -57,7 +57,7 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 /* 与 Remote 页同一套做法：顶栏固定悬浮，消息在其下方整屏滚动，靠一条由实到透的渐变
    被"吃掉"，顶栏本身不再是一块压住内容的不透明白板。 */
 .chat-header { position: fixed; z-index: 40; top: var(--safe-top); left: 0; right: 0; height: 74px; padding: 0; pointer-events: none; isolation: isolate; }
-.chat-header::before { content: ""; position: absolute; z-index: 0; left: 0; right: 0; top: calc(-1 * var(--safe-top)); height: calc(var(--safe-top) + 96px); pointer-events: none; background: linear-gradient(to bottom, rgba(255,255,255,.99) 0%, rgba(255,255,255,.96) 22%, rgba(255,255,255,.82) 46%, rgba(255,255,255,.38) 72%, rgba(255,255,255,0) 100%); }
+.chat-header::before { content: ""; position: absolute; z-index: 0; left: 0; right: 0; top: calc(-1 * var(--safe-top)); height: calc(var(--safe-top) + 86px); pointer-events: none; background: linear-gradient(to bottom, rgba(255,255,255,.99) 0%, rgba(255,255,255,.96) 22%, rgba(255,255,255,.82) 46%, rgba(255,255,255,.38) 72%, rgba(255,255,255,0) 100%); }
 .chat-header > * { position: relative; z-index: 1; pointer-events: auto; }
 .header-button, .context-button { width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; display: grid; place-items: center; background: #fff; box-shadow: 0 6px 22px rgba(29, 36, 40, .10); color: var(--ink); }
 .header-button img { width: 22px; height: 22px; display: block; }
@@ -83,7 +83,7 @@ button { cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .context-button-dot { --context-percent: 0%; position: relative; width: 21px; height: 21px; display: block; border-radius: 50%; background: conic-gradient(#6e98eb var(--context-percent), #e2e6e8 0); transition: --context-percent .28s ease; }
 .context-button-dot::after { content: ""; position: absolute; inset: 3px; border-radius: 50%; background: #fff; }
 
-.message-scroll { height: calc(100dvh - var(--keyboard-bottom)); overflow-y: auto; overscroll-behavior: contain; padding: calc(var(--safe-top) + 96px) 17px calc(116px + var(--safe-bottom) + var(--keyboard-bottom)); scroll-padding-top: calc(var(--safe-top) + 96px); }
+.message-scroll { height: calc(100dvh - var(--keyboard-bottom)); overflow-y: auto; overscroll-behavior: none; padding: calc(var(--safe-top) + 86px) 17px calc(116px + var(--safe-bottom) + var(--keyboard-bottom)); scroll-padding-top: calc(var(--safe-top) + 86px); }
 .conversation-content { width: min(100%, 590px); margin: 0 auto; }
 .user-message { max-width: 80%; margin: 20px 0 0 auto; padding: 14px 18px 16px; border-radius: 0 28px 28px 28px; background: var(--blue-bubble); color: var(--blue-ink); font-size: 17px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; }
 .assistant-message { margin: 46px 0 0; color: #111; font-size: 16px; line-height: 1.55; font-weight: 400; letter-spacing: -.010em; white-space: pre-wrap; overflow-wrap: anywhere; }
